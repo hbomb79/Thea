@@ -14,10 +14,11 @@ type TPAConfig struct {
 }
 
 type formatterConfig struct {
-	ImportPath   string `yaml:"import_path"`
-	OutputPath   string `yaml:"output_path"`
-	CacheFile    string `yaml:"cache_file"`
-	TargetFormat string `yaml:"target_format"`
+	ImportPath         string `yaml:"import_path"`
+	OutputPath         string `yaml:"output_path"`
+	CacheFile          string `yaml:"cache_file"`
+	TargetFormat       string `yaml:"target_format"`
+	ImportDirTickDelay int    `yaml:"import_polling_delay"`
 }
 
 type databaseConfig struct {

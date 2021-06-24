@@ -4,6 +4,8 @@ import (
 	"io/fs"
 	"log"
 	"path/filepath"
+
+	"gitlab.com/hbomb79/TPA/worker"
 )
 
 type Processor struct {
@@ -11,10 +13,8 @@ type Processor struct {
 	Queue  ProcessorQueue
 }
 
-/**
- * Instantiates a new processor by creating the
- * bare struct, and loading in the configuration
- */
+// Instantiates a new processor by creating the
+// bare struct, and loading in the configuration
 func New() (proc Processor) {
 	proc = Processor{Queue: make(ProcessorQueue, 0)}
 	proc.Config.LoadConfig()

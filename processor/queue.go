@@ -36,6 +36,8 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) {
 	}
 }
 
+// isInQueue will return true if the queue contains a QueueItem
+// with a path field matching the path provided to this method
 func (queue *ProcessorQueue) isInQueue(path string) bool {
 	for _, v := range *queue {
 		if v.Path == path {

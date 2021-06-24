@@ -8,9 +8,6 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
-// Skeleton processor configuration struct that
-// is filled in via the YAML config file provided
-// by the USER
 type TPAConfig struct {
 	Format   formatterConfig `yaml:"formatter"`
 	Database databaseConfig  `yaml:"database"`

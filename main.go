@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 
 	"gitlab.com/hbomb79/TPA/processor"
 )
@@ -12,7 +12,15 @@ import (
  * merging the configuration with the default config
  */
 func main() {
+	// Creates a new Processor struct, filling in the configuration
 	t := processor.New()
+	log.Printf("Test: %#v (%T)\n", t, t)
 
-	fmt.Printf("Test: %v (%T)\n", t, t)
+	// Start the program
+	err := t.Begin()
+	if err != nil {
+		log.Fatalf("Failed to initialise Processer - %v\n", err.Error())
+	}
+
+	log.Printf("Test: %#v (%T)\n", t, t)
 }

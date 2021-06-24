@@ -38,7 +38,7 @@ func (config *ProcessorConfig) LoadConfig() {
 	}
 
 	configPath := fmt.Sprintf("%v/.config/tpa/config.yaml", homeDir)
-	err = cleanenv.ReadConfig(configPath, &config)
+	err = cleanenv.ReadConfig(configPath, config)
 	if err != nil {
 		log.Fatalf("Cannot load configuration for ProcessorConfig -  %v\n", err.Error())
 	}

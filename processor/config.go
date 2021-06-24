@@ -11,19 +11,19 @@ import (
 // Skeleton processor configuration struct that
 // is filled in via the YAML config file provided
 // by the USER
-type ProcessorConfig struct {
-	Format   FormatConfig   `yaml:"formatter"`
-	Database DatabaseConfig `yaml:"database"`
+type TPAConfig struct {
+	Format   formatterConfig `yaml:"formatter"`
+	Database databaseConfig  `yaml:"database"`
 }
 
-type FormatConfig struct {
+type formatterConfig struct {
 	ImportPath   string `yaml:"import_path"`
 	OutputPath   string `yaml:"output_path"`
 	CacheFile    string `yaml:"cache_file"`
 	TargetFormat string `yaml:"target_format"`
 }
 
-type DatabaseConfig struct {
+type databaseConfig struct {
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
 	Name     string `yaml:"name"`
@@ -31,7 +31,7 @@ type DatabaseConfig struct {
 	Port     string `yaml:"port"`
 }
 
-func (config *ProcessorConfig) LoadConfig() {
+func (config *TPAConfig) LoadConfig() {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		log.Fatalf("Cannot determine user's home directory - %v\n", err.Error())

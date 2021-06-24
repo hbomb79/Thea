@@ -1,7 +1,7 @@
 package processor
 
 type Processor struct {
-	Config ProcessorConfig
+	Config TPAConfig
 }
 
 /**

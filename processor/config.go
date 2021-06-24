@@ -31,12 +31,12 @@ type databaseConfig struct {
 func (config *TPAConfig) LoadConfig() {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		log.Fatalf("Cannot determine user's home directory - %v\n", err.Error())
+		log.Panicf("Cannot determine user's home directory - %v\n", err.Error())
 	}
 
 	configPath := fmt.Sprintf("%v/.config/tpa/config.yaml", homeDir)
 	err = cleanenv.ReadConfig(configPath, config)
 	if err != nil {
-		log.Fatalf("Cannot load configuration for ProcessorConfig -  %v\n", err.Error())
+		log.Panicf("Cannot load configuration for ProcessorConfig -  %v\n", err.Error())
 	}
 }

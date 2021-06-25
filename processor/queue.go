@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"io/fs"
 	"sync"
+
+	"gitlab.com/hbomb79/TPA/enum"
 )
 
 type QueuePickError struct {
-	pickStage  QueueItemStage
-	pickStatus QueueItemStatus
+	pickStage  enum.PipelineStage
+	pickStatus enum.QueueItemStatus
 }
 
 func (e *QueuePickError) Error() string {
@@ -17,47 +19,13 @@ func (e *QueuePickError) Error() string {
 
 type QueueAssignError struct {
 	itemName      string
-	currentStage  QueueItemStage
-	currentStatus QueueItemStatus
+	currentStage  enum.PipelineStage
+	currentStatus enum.QueueItemStatus
 }
 
 func (e *QueueAssignError) Error() string {
-	return fmt.Sprintf("cannot assign item to worker - item (%v) already assigned! Stage: %v and status %v\n", e.itemName, e.currentStage, e.currentStatus)
+	return fmt.Sprintf("cannot assign item to worker - item (%v) already assigned! Stage: %vneovim and status %v\n", e.itemName, e.currentStage, e.currentStatus)
 }
-
-// Each stage represents where the queue item is in the
-// pipeline.
-type QueueItemStage int
-
-// When a QueueItem is initially added, it should be of stage Import,
-// each time a worker works on the task it should increment it's
-// Stage (Import->Title->OMDB->etc..) and set it's Status to 'Pending'
-// to allow a worker to pick the item from the Queue
-const (
-	Import QueueItemStage = iota
-	Title
-	OMDB
-	Format
-	Finish
-)
-
-// QueueItemStatus represents whether or not the
-// QueueItem is currently being worked on, or if
-// it's waiting for a worker to pick it up
-// and begin working on the task
-type QueueItemStatus int
-
-// If a task is Pending, it's waiting for a worker
-// ... if processing, it's currently being worked on.
-// When a stage in the pipeline is finished with the task,
-// it should set the Stage to the next stage, and set the
-// Status to pending - except for Format stage, which should
-// mark it as completed
-const (
-	Pending QueueItemStatus = iota
-	Processing
-	Completed
-)
 
 type ProcessorQueue struct {
 	Items []QueueItem
@@ -67,8 +35,8 @@ type ProcessorQueue struct {
 type QueueItem struct {
 	Path   string
 	Name   string
-	Status QueueItemStatus
-	Stage  QueueItemStage
+	Status enum.QueueItemStatus
+	Stage  enum.PipelineStage
 }
 
 // HandleFile will take the provided file and if it's not
@@ -76,7 +44,7 @@ type QueueItem struct {
 // If it is in the queue, the entry is skipped - this is because
 // this method is usually called as a result of polling the
 // input directory many times a day for new files.
-func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) {
+func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -84,9 +52,14 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) {
 		queue.Items = append(queue.Items, QueueItem{
 			Name:   fileInfo.Name(),
 			Path:   path,
-			Status: Pending,
+			Status: enum.Pending,
+			Stage:  enum.Title,
 		})
+
+		return true
 	}
+
+	return false
 }
 
 // isInQueue will return true if the queue contains a QueueItem
@@ -109,7 +82,7 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *ProcessorQueue) Pick(stage QueueItemStage, status QueueItemStatus) (*QueueItem, error) {
+func (queue *ProcessorQueue) Pick(stage enum.PipelineStage, status enum.QueueItemStatus) (*QueueItem, error) {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -132,11 +105,11 @@ func (queue *ProcessorQueue) AssignItem(item *QueueItem) error {
 	queue.Lock()
 	defer queue.Unlock()
 
-	if item.Status == Processing {
+	if item.Status == enum.Processing {
 		return &QueueAssignError{item.Name, item.Stage, item.Status}
 	}
 
-	item.Status = Processing
+	item.Status = enum.Processing
 	return nil
 }
 

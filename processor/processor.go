@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"gitlab.com/hbomb79/TPA/enum"
 	"gitlab.com/hbomb79/TPA/worker"
 )
 
@@ -17,8 +18,8 @@ type Processor struct {
 
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
-func New() (proc Processor) {
-	proc = Processor{
+func New() *Processor {
+	proc := &Processor{
 		Queue: ProcessorQueue{
 			Items: make([]QueueItem, 0),
 		},
@@ -27,7 +28,7 @@ func New() (proc Processor) {
 	proc.Config.LoadConfig()
 	proc.WorkerPool = worker.NewWorkerPool()
 
-	return
+	return proc
 }
 
 // Begin will start the workers inside the WorkerPool
@@ -37,31 +38,27 @@ func New() (proc Processor) {
 // and the FFMPEG formatting (NYI)
 // This method will wait on the WaitGroup attached to the WorkerPool
 func (p *Processor) Begin() error {
+	importWakeupChan := make(chan int)
+	titleWakeupChan := make(chan int)
+	//omdbWakeupChan := make(chan int)
+	//formatWakupChan := make(chan int)
+
 	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
 	if tickInterval <= 0 {
 		log.Panic("Failed to start PollingWorker - TickInterval is non-positive (make sure 'import_polling_delay' is set in your config)")
 	}
-
-	// Normally workers would finish once all the
-	// tasks in the worker pool are finished
-	// However we don't want that - instead we'll
-	// use notification channels to allow a worker
-	// to broadcast to all other relevant workers
-	// that it's done with a task. This allows
-	// workers involved in the next stage of the pipeline
-	// to check for new tasks if they're currently waiting
-	importChan := make(worker.WorkerNotifyChan)
-	//titleChan := make(chan int)
-	//omdbChan := make(chan int)
-	//formatChan := make(chan int)
+	go func(source <-chan time.Time, target chan int) {
+		for {
+			<-source
+			target <- 1
+		}
+	}(time.NewTicker(tickInterval).C, importWakeupChan)
 
 	// Start some workers in the pool to handle
 	// the import directory polling
 	log.Printf("Config: %#v\n", p.Config.Concurrent)
-	worker.NewPollingWorkers(p.WorkerPool, p.Config.Concurrent.Import, func(_ *worker.PollingWorker) error {
-		p.PollInputSource()
-		return nil
-	}, time.NewTicker(tickInterval).C, importChan)
+	worker.NewPollingWorkers(p.WorkerPool, p.Config.Concurrent.Import, p.pollingWorkerTask, importWakeupChan)
+	worker.NewTitleWorkers(p.WorkerPool, p.Config.Concurrent.Title, p.titleWorkerTask, titleWakeupChan)
 
 	// Wait for all the workers to finish
 	// TODO: A special worker responsible for user
@@ -74,8 +71,9 @@ func (p *Processor) Begin() error {
 
 // PollInputSource will check the source input directory (from p.Config)
 // pass along the files it finds to the p.Queue to be inserted if not present.
-func (p *Processor) PollInputSource() error {
+func (p *Processor) PollInputSource() (bool, error) {
 	log.Printf("Polling input source for new files")
+	newItemsFound := false
 	walkFunc := func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
 			log.Panicf("PollInputSource failed - %v\n", err.Error())
@@ -87,12 +85,22 @@ func (p *Processor) PollInputSource() error {
 				log.Panicf("Failed to get FileInfo for path %v - %v\n", path, err.Error())
 			}
 
-			p.Queue.HandleFile(path, v)
+			if new := p.Queue.HandleFile(path, v); new {
+				newItemsFound = true
+			}
 		}
 
 		return nil
 	}
 
 	filepath.WalkDir(p.Config.Format.ImportPath, walkFunc)
-	return nil
+	return newItemsFound, nil
+}
+
+func (p *Processor) FormatTitle(title string) string {
+	return title
+}
+
+func (p *Processor) NotifyWorkers(stage enum.PipelineStage) {
+
 }

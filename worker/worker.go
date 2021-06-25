@@ -3,14 +3,15 @@ package worker
 import (
 	"log"
 	"sync"
-)
 
-type WorkerWakeupChan chan interface{}
-type WorkerNotifyChan chan int
+	"gitlab.com/hbomb79/TPA/enum"
+)
 
 type Worker interface {
 	Start() error
 	Close() error
+	Status() enum.WorkerStatus
+	Stage() enum.PipelineStage
 }
 
 type WorkerPool struct {

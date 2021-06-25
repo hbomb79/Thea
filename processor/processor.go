@@ -4,13 +4,15 @@ import (
 	"io/fs"
 	"log"
 	"path/filepath"
+	"time"
 
 	"gitlab.com/hbomb79/TPA/worker"
 )
 
 type Processor struct {
-	Config TPAConfig
-	Queue  ProcessorQueue
+	Config     TPAConfig
+	Queue      ProcessorQueue
+	WorkerPool *worker.WorkerPool
 }
 
 // Instantiates a new processor by creating the
@@ -19,23 +21,48 @@ func New() (proc Processor) {
 	proc = Processor{Queue: make(ProcessorQueue, 0)}
 	proc.Config.LoadConfig()
 
+	proc.WorkerPool = worker.NewWorkerPool()
+
 	return
 }
 
-// Begin will start the processor by installing a file system watcher on the
-// input directory, and fills the queue with the files inside the directory
-// currently
+// Begin will start the workers inside the WorkerPool
+// responsible for the various tasks inside the program
+// This includes: HTTP RESTful API (NYI), user interaction (NYI),
+// import directory polling, title formatting (NYI), OMDB querying (NYI),
+// and the FFMPEG formatting (NYI)
+// This method will wait on the WaitGroup attached to the WorkerPool
 func (p *Processor) Begin() error {
-	pollInboundChan := make(chan interface{})
-	pollOutboundChan := make(chan interface{})
-	pollingWorker := worker.PollingWorker{
-		TickInterval: p.Config.Format.ImportDirTickDelay,
-		TaskFn:       p.PollInputSource,
+	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
+	if tickInterval <= 0 {
+		log.Panic("Failed to start PollingWorker - TickInterval is non-positive (make sure 'import_polling_delay' is set in your config)")
 	}
 
-	pollingWorker.TaskFn()
-	worker.StartWorkers(1, &pollingWorker, pollInboundChan, pollOutboundChan)
+	// Normally workers would finish once all the
+	// tasks in the worker pool are finished
+	// However we don't want that - instead we'll
+	// use notification channels to allow a worker
+	// to broadcast to all other relevant workers
+	// that it's done with a task. This allows
+	// workers involved in the next stage of the pipeline
+	// to check for new tasks if they're currently waiting
+	importChan := make(worker.WorkerNotifyChan)
+	//titleChan := make(chan int)
+	//omdbChan := make(chan int)
+	//formatChan := make(chan int)
 
+	// Start some workers in the pool to handle
+	// the import directory polling
+	worker.NewPollingWorkers(p.WorkerPool, p.Config.Concurrent.Import, func(_ *worker.PollingWorker) error {
+		p.PollInputSource()
+		return nil
+	}, time.NewTicker(tickInterval).C, importChan)
+
+	// Wait for all the workers to finish
+	// TODO: A special worker responsible for user
+	// interaction might close all the Workers (pool.Close())
+	// to allow the program to quit.
+	p.WorkerPool.Wg.Wait()
 	return nil
 }
 

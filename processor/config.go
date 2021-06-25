@@ -9,8 +9,16 @@ import (
 )
 
 type TPAConfig struct {
-	Format   formatterConfig `yaml:"formatter"`
-	Database databaseConfig  `yaml:"database"`
+	Concurrent concurrentConfig `yaml:"concurrent"`
+	Format     formatterConfig  `yaml:"formatter"`
+	Database   databaseConfig   `yaml:"database"`
+}
+
+type concurrentConfig struct {
+	Import int `yaml:"import_threads"`
+	Title  int `yaml:"title_threads"`
+	OMBD   int `yaml:"omdb_threads"`
+	Format int `yaml:"ffmpeg_threads"`
 }
 
 type formatterConfig struct {

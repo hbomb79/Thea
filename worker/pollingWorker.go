@@ -26,6 +26,7 @@ func NewPollingWorkers(pool *WorkerPool, amount int, taskFn func(*PollingWorker)
 				wakupChan,
 				enum.Idle,
 				enum.Import,
+				nil,
 			},
 		}
 
@@ -43,7 +44,7 @@ func (poller *PollingWorker) Start() error {
 
 workLoop:
 	for {
-		_, ok := <-poller.WakeupChan
+		_, ok := <-poller.WakeupChan()
 		// Hm, we're the only one that should be broadcasting
 		// on this channel - check that it hasn't been closed.
 		// If it's still open, just ignore the message - if it's

@@ -26,6 +26,7 @@ func NewTitleWorkers(pool *WorkerPool, amount int, taskFn func(*TitleWorker) err
 				wakupChan,
 				enum.Idle,
 				enum.Title,
+				nil,
 			},
 		}
 
@@ -43,10 +44,13 @@ func NewTitleWorkers(pool *WorkerPool, amount int, taskFn func(*TitleWorker) err
 // rather than just time.Sleeping for an arbritrary amount of time
 func (titleWorker *TitleWorker) Start() error {
 	log.Printf("Started a TitleWorker!")
+	// Attempt to pick a new task from the workpool.
+	// If no task found, wait on our wakeup channel.
+	// If a task is found, run
 
 workLoop:
 	for {
-		_, ok := <-titleWorker.WakeupChan
+		_, ok := <-titleWorker.WakeupChan()
 		if !ok {
 			log.Printf("Wakeup channel has closed - TitleWorker is quitting\n")
 			break workLoop

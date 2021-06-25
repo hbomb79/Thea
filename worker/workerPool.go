@@ -3,6 +3,8 @@ package worker
 import (
 	"log"
 	"sync"
+
+	"gitlab.com/hbomb79/TPA/enum"
 )
 
 // WorkerPool struct embeds the sync.Mutex struct, and
@@ -63,6 +65,18 @@ func (pool *WorkerPool) IterWorkers(callback func(w Worker)) {
 
 	for _, w := range pool.workers {
 		callback(w)
+	}
+}
+
+func (pool *WorkerPool) NotifyWorkers(stage enum.PipelineStage) {
+	pool.Lock()
+	defer pool.Unlock()
+
+	for _, w := range pool.workers {
+		if w.Stage() == stage {
+			// Wakup the worker
+			w.WakeupChan() <- 1
+		}
 	}
 }
 

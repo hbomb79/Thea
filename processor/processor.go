@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"log"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"gitlab.com/hbomb79/TPA/enum"
@@ -21,7 +22,7 @@ type Processor struct {
 func New() *Processor {
 	proc := &Processor{
 		Queue: ProcessorQueue{
-			Items: make([]QueueItem, 0),
+			Items: make([]enum.QueueItem, 0),
 		},
 	}
 
@@ -54,26 +55,24 @@ func (p *Processor) Begin() error {
 		}
 	}(time.NewTicker(tickInterval).C, importWakeupChan)
 
-	// Start some workers in the pool to handle
-	// the import directory polling
-	log.Printf("Config: %#v\n", p.Config.Concurrent)
+	// Start some workers in the pool to handle various tasks
 	worker.NewPollingWorkers(p.WorkerPool, p.Config.Concurrent.Import, p.pollingWorkerTask, importWakeupChan)
 	worker.NewTitleWorkers(p.WorkerPool, p.Config.Concurrent.Title, p.titleWorkerTask, titleWakeupChan)
-
-	// Wait for all the workers to finish
-	// TODO: A special worker responsible for user
-	// interaction might close all the Workers (pool.Close())
-	// to allow the program to quit.
 	p.WorkerPool.StartWorkers()
+
+	// Kickstart the pipeline
+	importWakeupChan <- 1
+
+	// Wait for all to finish
 	p.WorkerPool.Wg.Wait()
 	return nil
 }
 
 // PollInputSource will check the source input directory (from p.Config)
 // pass along the files it finds to the p.Queue to be inserted if not present.
-func (p *Processor) PollInputSource() (bool, error) {
+func (p *Processor) PollInputSource() (newItemsFound int, err error) {
 	log.Printf("Polling input source for new files")
-	newItemsFound := false
+	newItemsFound = 0
 	walkFunc := func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
 			log.Panicf("PollInputSource failed - %v\n", err.Error())
@@ -85,22 +84,27 @@ func (p *Processor) PollInputSource() (bool, error) {
 				log.Panicf("Failed to get FileInfo for path %v - %v\n", path, err.Error())
 			}
 
-			if new := p.Queue.HandleFile(path, v); new {
-				newItemsFound = true
+			if isNew := p.Queue.HandleFile(path, v); isNew {
+				log.Printf("Found new file %v\n", path)
+				newItemsFound++
 			}
 		}
 
 		return nil
 	}
 
-	filepath.WalkDir(p.Config.Format.ImportPath, walkFunc)
-	return newItemsFound, nil
+	err = filepath.WalkDir(p.Config.Format.ImportPath, walkFunc)
+	return
 }
 
+// FormatTitle accepts a string (title) and reformats it
+// based on text-filtering configuration provided by
+// the user
 func (p *Processor) FormatTitle(title string) string {
+	matcher := regexp.MustCompile(`([\w.]+)(([SsEe]\d+){2})|(20|19)\d{2}`)
+	groups := matcher.FindStringSubmatch(title)
+
+	log.Printf("Regex matches for string %v\nOutput:%#v\n", title, groups)
+
 	return title
-}
-
-func (p *Processor) NotifyWorkers(stage enum.PipelineStage) {
-
 }

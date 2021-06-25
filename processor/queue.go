@@ -28,15 +28,8 @@ func (e *QueueAssignError) Error() string {
 }
 
 type ProcessorQueue struct {
-	Items []QueueItem
+	Items []enum.QueueItem
 	sync.Mutex
-}
-
-type QueueItem struct {
-	Path   string
-	Name   string
-	Status enum.QueueItemStatus
-	Stage  enum.PipelineStage
 }
 
 // HandleFile will take the provided file and if it's not
@@ -49,7 +42,7 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 	defer queue.Unlock()
 
 	if !queue.isInQueue(path) {
-		queue.Items = append(queue.Items, QueueItem{
+		queue.Items = append(queue.Items, enum.QueueItem{
 			Name:   fileInfo.Name(),
 			Path:   path,
 			Status: enum.Pending,
@@ -82,7 +75,7 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *ProcessorQueue) Pick(stage enum.PipelineStage, status enum.QueueItemStatus) (*QueueItem, error) {
+func (queue *ProcessorQueue) Pick(stage enum.PipelineStage, status enum.QueueItemStatus) (*enum.QueueItem, error) {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -101,7 +94,7 @@ func (queue *ProcessorQueue) Pick(stage enum.PipelineStage, status enum.QueueIte
 // It is the workers responsiblity to perform the work and then
 // advance the stage (see queue.AdvanceStage) - freeing the QueueItem
 // for work by another worker
-func (queue *ProcessorQueue) AssignItem(item *QueueItem) error {
+func (queue *ProcessorQueue) AssignItem(item *enum.QueueItem) error {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -117,7 +110,7 @@ func (queue *ProcessorQueue) AssignItem(item *QueueItem) error {
 // and set it's stage to the next stage and reset it's status to Pending
 // Note: this method will lock the mutex for protected access to the
 // shared queue.
-func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
+func (queue *ProcessorQueue) AdvanceStage(item *enum.QueueItem) {
 	queue.Lock()
 	defer queue.Unlock()
 

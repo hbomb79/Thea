@@ -40,3 +40,10 @@ const (
 	Idle WorkerStatus = iota
 	Working
 )
+
+type QueueItem struct {
+	Path   string
+	Name   string
+	Status QueueItemStatus
+	Stage  PipelineStage
+}

@@ -2,21 +2,18 @@ package processor
 
 import (
 	"errors"
+	"log"
 
+	"gitlab.com/hbomb79/TPA/enum"
 	"gitlab.com/hbomb79/TPA/worker"
 )
 
 func (p *Processor) pollingWorkerTask(_ *worker.PollingWorker) error {
 	if notify, err := p.PollInputSource(); err != nil {
 		return errors.New("cannot PollImportSource inside of PollingWorker: " + err.Error())
-	} else if notify {
-		p.WorkerPool.IterWorkers(func(w worker.Worker) {
-			if v, ok := w.(*worker.TitleWorker); ok {
-				// For each worker that is reponsible for the next stage,
-				// send an int on their wakeup channel
-				v.WakeupChan <- 1
-			}
-		})
+	} else if notify > 0 {
+		log.Printf("Notiying Title workers of new items in queue! (New items: %v)\n", notify)
+		p.WorkerPool.NotifyWorkers(enum.Title)
 	}
 	return nil
 }

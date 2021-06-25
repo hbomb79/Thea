@@ -18,9 +18,13 @@ type Processor struct {
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
 func New() (proc Processor) {
-	proc = Processor{Queue: make(ProcessorQueue, 0)}
-	proc.Config.LoadConfig()
+	proc = Processor{
+		Queue: ProcessorQueue{
+			Items: make([]QueueItem, 0),
+		},
+	}
 
+	proc.Config.LoadConfig()
 	proc.WorkerPool = worker.NewWorkerPool()
 
 	return

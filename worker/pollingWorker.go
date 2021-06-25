@@ -7,10 +7,8 @@ import (
 )
 
 type PollingWorker struct {
-	TaskFn        func(*PollingWorker) error
-	WakeupChan    chan int
-	workerStage   enum.PipelineStage
-	currentStatus enum.WorkerStatus
+	TaskFn func(*PollingWorker) error
+	baseWorker
 }
 
 // NewPollingWorkers will create a certain 'amount' of PollingWorkers inside the WorkerPool provided
@@ -24,9 +22,11 @@ func NewPollingWorkers(pool *WorkerPool, amount int, taskFn func(*PollingWorker)
 		log.Printf("Creating new PollingWorker")
 		p := &PollingWorker{
 			taskFn,
-			wakupChan,
-			enum.Import,
-			enum.Idle,
+			baseWorker{
+				wakupChan,
+				enum.Idle,
+				enum.Import,
+			},
 		}
 
 		pool.PushWorker(p)
@@ -58,23 +58,5 @@ workLoop:
 		poller.TaskFn(poller)
 	}
 
-	return nil
-}
-
-func (pollingWorker *PollingWorker) Status() enum.WorkerStatus {
-	return pollingWorker.currentStatus
-}
-
-func (pollingWorker *PollingWorker) Stage() enum.PipelineStage {
-	return pollingWorker.workerStage
-}
-
-// Closes the PollingWorker by closing the NotifyChan,
-// as we're the sender for this channel - closing it
-// means we can no longer notify other workers
-// that we've completed work - thus the worker
-// will exit
-func (poller *PollingWorker) Close() error {
-	close(poller.WakeupChan)
 	return nil
 }

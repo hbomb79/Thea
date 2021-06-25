@@ -7,10 +7,8 @@ import (
 )
 
 type TitleWorker struct {
-	TaskFn        func(*TitleWorker) error
-	WakeupChan    chan int
-	workerStage   enum.PipelineStage
-	currentStatus enum.WorkerStatus
+	TaskFn func(*TitleWorker) error
+	baseWorker
 }
 
 // NewTitleWorkers will create a certain 'amount' of TitleWorkers inside the WorkerPool provided
@@ -24,9 +22,11 @@ func NewTitleWorkers(pool *WorkerPool, amount int, taskFn func(*TitleWorker) err
 		log.Printf("Creating new TitleWorker")
 		p := &TitleWorker{
 			taskFn,
-			wakupChan,
-			enum.Title,
-			enum.Idle,
+			baseWorker{
+				wakupChan,
+				enum.Idle,
+				enum.Title,
+			},
 		}
 
 		pool.PushWorker(p)
@@ -57,20 +57,5 @@ workLoop:
 		titleWorker.TaskFn(titleWorker)
 	}
 
-	return nil
-}
-
-func (titleWorker *TitleWorker) Status() enum.WorkerStatus {
-	return titleWorker.currentStatus
-}
-
-func (titleWorker *TitleWorker) Stage() enum.PipelineStage {
-	return titleWorker.workerStage
-}
-
-// Closes the TitleWorker by closing the WakeupChan we're
-// infinitely listening to
-func (titleWorker *TitleWorker) Close() error {
-	close(titleWorker.WakeupChan)
 	return nil
 }

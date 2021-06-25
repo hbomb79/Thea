@@ -3,16 +3,7 @@ package worker
 import (
 	"log"
 	"sync"
-
-	"gitlab.com/hbomb79/TPA/enum"
 )
-
-type Worker interface {
-	Start() error
-	Close() error
-	Status() enum.WorkerStatus
-	Stage() enum.PipelineStage
-}
 
 type WorkerPool struct {
 	workers []Worker
@@ -71,10 +62,10 @@ func (pool *WorkerPool) IterWorkers(callback func(w Worker)) {
 	}
 }
 
-// Close will cycle through all the workers inside this
+// CloseWorkers will cycle through all the workers inside this
 // worker pool and close all the channels (notify and wait)
 // While doing this, the WorkerPool's mutex is locked.
-func (pool *WorkerPool) Close() {
+func (pool *WorkerPool) CloseWorkers() {
 	pool.Lock()
 	defer pool.Unlock()
 

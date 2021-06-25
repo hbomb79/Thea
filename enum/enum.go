@@ -2,6 +2,7 @@ package enum
 
 // Each stage represents a certain stage in the pipeline
 type PipelineStage int
+type WorkerWakeupChan chan int
 
 // When a QueueItem is initially added, it should be of stage Import,
 // each time a worker works on the task it should increment it's

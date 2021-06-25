@@ -60,3 +60,14 @@ workLoop:
 
 	return nil
 }
+
+func (poller *PollingWorker) StatusInfo() string {
+	switch poller.Status() {
+	case enum.Idle:
+		return "Idle"
+	case enum.Working:
+		return "Polling directory"
+	default:
+		return "Unknown Status"
+	}
+}

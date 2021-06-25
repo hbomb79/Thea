@@ -59,3 +59,14 @@ workLoop:
 
 	return nil
 }
+
+func (titleWorker *TitleWorker) StatusInfo() string {
+	switch titleWorker.Status() {
+	case enum.Idle:
+		return "Idle"
+	case enum.Working:
+		return "Renaming"
+	default:
+		return "Unknown Status"
+	}
+}

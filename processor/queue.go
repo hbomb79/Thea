@@ -121,7 +121,6 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 	queue.Lock()
 	defer queue.Unlock()
 
-	// TODO Advance stage
 	if item.Stage == enum.Finish {
 		return
 	}

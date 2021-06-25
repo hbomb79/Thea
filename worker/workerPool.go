@@ -5,12 +5,19 @@ import (
 	"sync"
 )
 
+// WorkerPool struct embeds the sync.Mutex struct, and
+// also contains a sync.WaitGroup as 'wg'. The WaitGroup is
+// automatically controlled by the WorkerPool. The 'workers'
+// field is a slice that contains all the workers
+// attached to this WorkerPool
 type WorkerPool struct {
 	workers []Worker
 	sync.Mutex
 	Wg sync.WaitGroup
 }
 
+// NewWorkerPool creates a new WorkerPool struct
+// and initialises the 'workers' slice
 func NewWorkerPool() *WorkerPool {
 	return &WorkerPool{workers: make([]Worker, 0)}
 }
@@ -19,9 +26,6 @@ func NewWorkerPool() *WorkerPool {
 // currently inside the WorkerPool and creates
 // a goroutine for each. The 'Start' method of
 // each worker is executed concurrently.
-// Additionally, this method will also add one to the
-// WaitGroup inside the WorkerPool - allowing the caller
-// to wait on this group until all the goroutines finish
 func (pool *WorkerPool) StartWorkers() error {
 	log.Printf("Starting workers in pool, amount=%v\n", len(pool.workers))
 	pool.Lock()

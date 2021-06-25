@@ -6,6 +6,7 @@ type Worker interface {
 	Start() error
 	Close() error
 	Status() enum.WorkerStatus
+	StatusInfo() string
 	Stage() enum.PipelineStage
 }
 

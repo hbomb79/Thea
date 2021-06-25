@@ -20,6 +20,4 @@ func main() {
 	if err != nil {
 		log.Panicf("Failed to initialise Processer - %v\n", err.Error())
 	}
-
-	log.Printf("Test: %#v (%T)\n", t, t)
 }

@@ -31,14 +31,18 @@ func NewWorkerPool() *WorkerPool {
 // WaitGroup inside the WorkerPool - allowing the caller
 // to wait on this group until all the goroutines finish
 func (pool *WorkerPool) StartWorkers() error {
+	log.Printf("Starting workers in pool, amount=%v\n", len(pool.workers))
 	pool.Lock()
 	defer pool.Unlock()
+
 	for _, worker := range pool.workers {
+		log.Printf("Starting a worker\n")
 		pool.Wg.Add(1)
-		go func(pool *WorkerPool, w *Worker) {
+		go func(pool *WorkerPool, w Worker) {
+			w.Start()
+			log.Printf("A worker has finished\n")
 			pool.Wg.Done()
-			(*w).Start()
-		}(pool, &worker)
+		}(pool, worker)
 	}
 
 	return nil

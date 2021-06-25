@@ -9,7 +9,7 @@ import (
 )
 
 type TPAConfig struct {
-	Concurrent concurrentConfig `yaml:"concurrent"`
+	Concurrent concurrentConfig `yaml:"concurrency"`
 	Format     formatterConfig  `yaml:"formatter"`
 	Database   databaseConfig   `yaml:"database"`
 }

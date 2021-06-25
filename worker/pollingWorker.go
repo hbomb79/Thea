@@ -17,8 +17,9 @@ type PollingWorker struct {
 // The taskFn given should not use a goroutine - the worker will
 // automatically take care of this inside it's Start() method
 func NewPollingWorkers(pool *WorkerPool, amount int, taskFn func(*PollingWorker) error, wakupChan <-chan time.Time, notifyChan WorkerNotifyChan) {
+	log.Printf("Creating %v PollingWorkers\n", amount)
 	for i := 0; i < amount; i++ {
-		log.Printf("Constructing new PollingWorker")
+		log.Printf("Creating new PollingWorker")
 		p := &PollingWorker{
 			taskFn,
 			notifyChan,
@@ -50,10 +51,12 @@ workLoop:
 			// If it's still open, just ignore the message - if it's
 			// closed, then break the loop and exit the worker
 			if !ok {
+				log.Printf("Notify channel has closed - PollingWorker is quitting\n")
 				break workLoop
 			}
 		case <-poller.WakeupChan:
 			// Tick...
+			log.Printf("PollingWorker tick.. running\n")
 			poller.TaskFn(poller)
 		}
 	}

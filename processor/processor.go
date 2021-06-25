@@ -53,6 +53,7 @@ func (p *Processor) Begin() error {
 
 	// Start some workers in the pool to handle
 	// the import directory polling
+	log.Printf("Config: %#v\n", p.Config.Concurrent)
 	worker.NewPollingWorkers(p.WorkerPool, p.Config.Concurrent.Import, func(_ *worker.PollingWorker) error {
 		p.PollInputSource()
 		return nil
@@ -62,6 +63,7 @@ func (p *Processor) Begin() error {
 	// TODO: A special worker responsible for user
 	// interaction might close all the Workers (pool.Close())
 	// to allow the program to quit.
+	p.WorkerPool.StartWorkers()
 	p.WorkerPool.Wg.Wait()
 	return nil
 }

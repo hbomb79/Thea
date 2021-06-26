@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"fmt"
 	"log"
 	"sync"
 )
@@ -25,7 +26,7 @@ func NewWorkerPool() *WorkerPool {
 func (pool *WorkerPool) NewWorkers(amount int, workerLabel string, workerTask WorkerTask, wakeupChannel chan int, pipelineStage PipelineStage) {
 	log.Printf("Creating %v workers labelled '%v'\n", amount, workerLabel)
 	for i := 0; i < amount; i++ {
-		pool.PushWorker(NewWorker(workerLabel+":"+string(i), workerTask, wakeupChannel, pipelineStage))
+		pool.PushWorker(NewWorker(fmt.Sprintf("%v:%v", workerLabel, i), workerTask, wakeupChannel, pipelineStage))
 	}
 }
 
@@ -76,7 +77,7 @@ func (pool *WorkerPool) NotifyWorkers(stage PipelineStage) {
 	defer pool.Unlock()
 
 	for _, w := range pool.workers {
-		if w.Stage() == stage {
+		if w.Stage() == stage && w.Status() == Idle {
 			// Wakup the worker
 			w.WakeupChan() <- 1
 		}

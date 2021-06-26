@@ -20,7 +20,6 @@ type Worker struct {
 	wakeupChan    WorkerWakeupChan
 	currentStatus WorkerStatus
 	pipelineStage PipelineStage
-	currentItem   *QueueItem
 }
 
 func NewWorker(label string, task WorkerTask, wakeupChannel WorkerWakeupChan, pipelineStage PipelineStage) *Worker {
@@ -30,13 +29,15 @@ func NewWorker(label string, task WorkerTask, wakeupChannel WorkerWakeupChan, pi
 		wakeupChannel,
 		Idle,
 		pipelineStage,
-		nil,
 	}
 }
 
 func (worker *Worker) Start() {
 	log.Printf("Starting worker for stage %v with label %v\n", worker.pipelineStage, worker.label)
-	worker.task(worker)
+	if err := worker.task(worker); err != nil {
+		log.Printf("[Error] Worker for stage %v with label %v has reported an error: %v\n", worker.pipelineStage, worker.label, err.Error())
+	}
+
 	log.Printf("Worker for stage %v with label %v has stopped\n", worker.pipelineStage, worker.label)
 }
 
@@ -62,12 +63,4 @@ func (worker *Worker) WakeupChan() WorkerWakeupChan {
 func (worker *Worker) Close() error {
 	close(worker.wakeupChan)
 	return nil
-}
-
-func (worker *Worker) CurrentItem() *QueueItem {
-	if worker.Status() != Working {
-		return nil
-	}
-
-	return worker.currentItem
 }

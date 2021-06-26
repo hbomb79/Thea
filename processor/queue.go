@@ -32,22 +32,13 @@ type QueueItem struct {
 	StatusLine string
 }
 
-type QueuePickError struct {
-	pickStage  PipelineStage
-	pickStatus QueueItemStatus
-}
-
-func (e *QueuePickError) Error() string {
-	return fmt.Sprintf("cannot find item with stage %v and status %v\n", e.pickStage, e.pickStatus)
-}
-
 type QueueAssignError struct {
 	itemName      string
 	currentStage  PipelineStage
 	currentStatus QueueItemStatus
 }
 
-func (e *QueueAssignError) Error() string {
+func (e QueueAssignError) Error() string {
 	return fmt.Sprintf("cannot assign item to worker - item (%v) already assigned! Stage: %vneovim and status %v\n", e.itemName, e.currentStage, e.currentStatus)
 }
 
@@ -99,17 +90,17 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *ProcessorQueue) Pick(stage PipelineStage, status QueueItemStatus) (*QueueItem, error) {
+func (queue *ProcessorQueue) Pick(stage PipelineStage, status QueueItemStatus) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 
 	for _, item := range queue.Items {
 		if item.Stage == stage && item.Status == status {
-			return &item, nil
+			return &item
 		}
 	}
 
-	return nil, &QueuePickError{stage, status}
+	return nil
 }
 
 // AssignItem will assign the provided item by setting it's
@@ -122,7 +113,7 @@ func (queue *ProcessorQueue) AssignItem(item *QueueItem) error {
 	queue.Lock()
 	defer queue.Unlock()
 
-	if item.Status == Processing {
+	if item.Status != Pending {
 		return &QueueAssignError{item.Name, item.Stage, item.Status}
 	}
 

@@ -12,6 +12,7 @@ type WorkerStatus int
 const (
 	Idle WorkerStatus = iota
 	Working
+	Finished
 )
 
 type Worker struct {
@@ -63,4 +64,17 @@ func (worker *Worker) WakeupChan() WorkerWakeupChan {
 func (worker *Worker) Close() error {
 	close(worker.wakeupChan)
 	return nil
+}
+
+func (worker *Worker) sleep() (isAlive bool) {
+	worker.currentStatus = Idle
+
+	if _, isAlive = <-worker.wakeupChan; isAlive {
+		worker.currentStatus = Working
+	} else {
+		log.Printf("Wakup channel for worker '%v' has been closed - worker is exiting\n", worker.label)
+		worker.currentStatus = Finished
+	}
+
+	return isAlive
 }

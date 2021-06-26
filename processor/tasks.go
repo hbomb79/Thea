@@ -3,32 +3,27 @@ package processor
 import (
 	"errors"
 	"fmt"
-	"log"
 )
 
 func (p *Processor) pollingWorkerTask(w *Worker) error {
 	for {
 		// Wait for wakeup tick
-		if _, ok := <-w.WakeupChan(); !ok {
-			log.Printf("Worker %v - wakeup channel has been closed. Exiting\n", w.label)
-			break
+		if isAlive := w.sleep(); !isAlive {
+			return nil
 		}
 
-		// Poll directory
+		// Do work
 		if notify, err := p.PollInputSource(); err != nil {
 			return errors.New(fmt.Sprintf("cannot PollImportSource inside of worker '%v' - %v", w.label, err.Error()))
 		} else if notify > 0 {
-			log.Printf("Notiying Title workers of new items in queue! (New items: %v)\n", notify)
 			p.WorkerPool.NotifyWorkers(Title)
 		}
 	}
-
-	return nil
 }
 
 func (p *Processor) titleWorkerTask(w *Worker) error {
-mainLoop:
 	for {
+		w.currentStatus = Working
 	workLoop:
 		for {
 			// Check if work can be done...
@@ -61,11 +56,8 @@ mainLoop:
 		}
 
 		// If no work, wait for wakeup
-		if _, ok := <-w.WakeupChan(); !ok {
-			log.Printf("Worker %v - wakeup channel has been closed. Exiting\n", w.label)
-			break mainLoop
+		if isAlive := w.sleep(); !isAlive {
+			return nil
 		}
 	}
-
-	return nil
 }

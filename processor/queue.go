@@ -43,7 +43,7 @@ func (e QueueAssignError) Error() string {
 }
 
 type ProcessorQueue struct {
-	Items []QueueItem
+	Items []*QueueItem
 	sync.Mutex
 }
 
@@ -57,7 +57,7 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 	defer queue.Unlock()
 
 	if !queue.isInQueue(path) {
-		queue.Items = append(queue.Items, QueueItem{
+		queue.Items = append(queue.Items, &QueueItem{
 			Name:   fileInfo.Name(),
 			Path:   path,
 			Status: Pending,
@@ -96,7 +96,7 @@ func (queue *ProcessorQueue) Pick(stage PipelineStage, status QueueItemStatus) *
 
 	for _, item := range queue.Items {
 		if item.Stage == stage && item.Status == status {
-			return &item
+			return item
 		}
 	}
 

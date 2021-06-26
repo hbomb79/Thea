@@ -34,7 +34,7 @@ type Processor struct {
 func New() *Processor {
 	proc := &Processor{
 		Queue: ProcessorQueue{
-			Items: make([]QueueItem, 0),
+			Items: make([]*QueueItem, 0),
 		},
 	}
 

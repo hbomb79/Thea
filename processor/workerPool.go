@@ -1,10 +1,8 @@
-package worker
+package processor
 
 import (
 	"log"
 	"sync"
-
-	"gitlab.com/hbomb79/TPA/enum"
 )
 
 // WorkerPool struct embeds the sync.Mutex struct, and
@@ -13,7 +11,7 @@ import (
 // field is a slice that contains all the workers
 // attached to this WorkerPool
 type WorkerPool struct {
-	workers []Worker
+	workers []*Worker
 	sync.Mutex
 	Wg sync.WaitGroup
 }
@@ -21,7 +19,14 @@ type WorkerPool struct {
 // NewWorkerPool creates a new WorkerPool struct
 // and initialises the 'workers' slice
 func NewWorkerPool() *WorkerPool {
-	return &WorkerPool{workers: make([]Worker, 0)}
+	return &WorkerPool{workers: make([]*Worker, 0)}
+}
+
+func (pool *WorkerPool) NewWorkers(amount int, workerLabel string, workerTask WorkerTask, wakeupChannel chan int, pipelineStage PipelineStage) {
+	log.Printf("Creating %v workers labelled '%v'\n", amount, workerLabel)
+	for i := 0; i < amount; i++ {
+		pool.PushWorker(NewWorker(workerLabel+":"+string(i), workerTask, wakeupChannel, pipelineStage))
+	}
 }
 
 // StartWorkers cycles through all the workers
@@ -34,11 +39,9 @@ func (pool *WorkerPool) StartWorkers() error {
 	defer pool.Unlock()
 
 	for _, worker := range pool.workers {
-		log.Printf("Starting a worker\n")
 		pool.Wg.Add(1)
-		go func(pool *WorkerPool, w Worker) {
+		go func(pool *WorkerPool, w *Worker) {
 			w.Start()
-			log.Printf("A worker has finished\n")
 			pool.Wg.Done()
 		}(pool, worker)
 	}
@@ -49,7 +52,7 @@ func (pool *WorkerPool) StartWorkers() error {
 // PushWorker inserts the worker provided in to the worker pool,
 // this method will first lock the mutex to ensure mutually exclusive
 // access to the worker pool slice.
-func (pool *WorkerPool) PushWorker(w Worker) {
+func (pool *WorkerPool) PushWorker(w *Worker) {
 	pool.Lock()
 	defer pool.Unlock()
 
@@ -59,7 +62,7 @@ func (pool *WorkerPool) PushWorker(w Worker) {
 // IterWorkers will lock the worker pool's mutex, and cycle through
 // all the workers associatted with this worker pool and execute
 // the provided 'callback', passing the worker as a parameter.
-func (pool *WorkerPool) IterWorkers(callback func(w Worker)) {
+func (pool *WorkerPool) IterWorkers(callback func(w *Worker)) {
 	pool.Lock()
 	defer pool.Unlock()
 
@@ -68,7 +71,7 @@ func (pool *WorkerPool) IterWorkers(callback func(w Worker)) {
 	}
 }
 
-func (pool *WorkerPool) NotifyWorkers(stage enum.PipelineStage) {
+func (pool *WorkerPool) NotifyWorkers(stage PipelineStage) {
 	pool.Lock()
 	defer pool.Unlock()
 

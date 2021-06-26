@@ -6,15 +6,27 @@ import (
 	"path/filepath"
 	"regexp"
 	"time"
+)
 
-	"gitlab.com/hbomb79/TPA/enum"
-	"gitlab.com/hbomb79/TPA/worker"
+// Each stage represents a certain stage in the pipeline
+type PipelineStage int
+
+// When a QueueItem is initially added, it should be of stage Import,
+// each time a worker works on the task it should increment it's
+// Stage (Title->OMDB->etc..) and set it's Status to 'Pending'
+// to allow a worker to pick the item from the Queue
+const (
+	Import PipelineStage = iota
+	Title
+	OMDB
+	Format
+	Finish
 )
 
 type Processor struct {
 	Config     TPAConfig
 	Queue      ProcessorQueue
-	WorkerPool *worker.WorkerPool
+	WorkerPool *WorkerPool
 }
 
 // Instantiates a new processor by creating the
@@ -22,12 +34,12 @@ type Processor struct {
 func New() *Processor {
 	proc := &Processor{
 		Queue: ProcessorQueue{
-			Items: make([]enum.QueueItem, 0),
+			Items: make([]QueueItem, 0),
 		},
 	}
 
 	proc.Config.LoadConfig()
-	proc.WorkerPool = worker.NewWorkerPool()
+	proc.WorkerPool = NewWorkerPool()
 
 	return proc
 }
@@ -56,8 +68,8 @@ func (p *Processor) Begin() error {
 	}(time.NewTicker(tickInterval).C, importWakeupChan)
 
 	// Start some workers in the pool to handle various tasks
-	worker.NewPollingWorkers(p.WorkerPool, p.Config.Concurrent.Import, p.pollingWorkerTask, importWakeupChan)
-	worker.NewTitleWorkers(p.WorkerPool, p.Config.Concurrent.Title, p.titleWorkerTask, titleWakeupChan)
+	p.WorkerPool.NewWorkers(p.Config.Concurrent.Import, "Importer", p.pollingWorkerTask, importWakeupChan, Import)
+	p.WorkerPool.NewWorkers(p.Config.Concurrent.Title, "TitleFormatter", p.titleWorkerTask, titleWakeupChan, Title)
 	p.WorkerPool.StartWorkers()
 
 	// Kickstart the pipeline

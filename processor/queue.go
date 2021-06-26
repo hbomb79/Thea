@@ -4,13 +4,37 @@ import (
 	"fmt"
 	"io/fs"
 	"sync"
-
-	"gitlab.com/hbomb79/TPA/enum"
 )
 
+// QueueItemStatus represents whether or not the
+// QueueItem is currently being worked on, or if
+// it's waiting for a worker to pick it up
+// and begin working on the task
+type QueueItemStatus int
+
+// If a task is Pending, it's waiting for a worker
+// ... if processing, it's currently being worked on.
+// When a stage in the pipeline is finished with the task,
+// it should set the Stage to the next stage, and set the
+// Status to pending - except for Format stage, which should
+// mark it as completed
+const (
+	Pending QueueItemStatus = iota
+	Processing
+	Completed
+)
+
+type QueueItem struct {
+	Path       string
+	Name       string
+	Status     QueueItemStatus
+	Stage      PipelineStage
+	StatusLine string
+}
+
 type QueuePickError struct {
-	pickStage  enum.PipelineStage
-	pickStatus enum.QueueItemStatus
+	pickStage  PipelineStage
+	pickStatus QueueItemStatus
 }
 
 func (e *QueuePickError) Error() string {
@@ -19,8 +43,8 @@ func (e *QueuePickError) Error() string {
 
 type QueueAssignError struct {
 	itemName      string
-	currentStage  enum.PipelineStage
-	currentStatus enum.QueueItemStatus
+	currentStage  PipelineStage
+	currentStatus QueueItemStatus
 }
 
 func (e *QueueAssignError) Error() string {
@@ -28,7 +52,7 @@ func (e *QueueAssignError) Error() string {
 }
 
 type ProcessorQueue struct {
-	Items []enum.QueueItem
+	Items []QueueItem
 	sync.Mutex
 }
 
@@ -42,11 +66,11 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 	defer queue.Unlock()
 
 	if !queue.isInQueue(path) {
-		queue.Items = append(queue.Items, enum.QueueItem{
+		queue.Items = append(queue.Items, QueueItem{
 			Name:   fileInfo.Name(),
 			Path:   path,
-			Status: enum.Pending,
-			Stage:  enum.Title,
+			Status: Pending,
+			Stage:  Title,
 		})
 
 		return true
@@ -75,7 +99,7 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *ProcessorQueue) Pick(stage enum.PipelineStage, status enum.QueueItemStatus) (*enum.QueueItem, error) {
+func (queue *ProcessorQueue) Pick(stage PipelineStage, status QueueItemStatus) (*QueueItem, error) {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -94,15 +118,15 @@ func (queue *ProcessorQueue) Pick(stage enum.PipelineStage, status enum.QueueIte
 // It is the workers responsiblity to perform the work and then
 // advance the stage (see queue.AdvanceStage) - freeing the QueueItem
 // for work by another worker
-func (queue *ProcessorQueue) AssignItem(item *enum.QueueItem) error {
+func (queue *ProcessorQueue) AssignItem(item *QueueItem) error {
 	queue.Lock()
 	defer queue.Unlock()
 
-	if item.Status == enum.Processing {
+	if item.Status == Processing {
 		return &QueueAssignError{item.Name, item.Stage, item.Status}
 	}
 
-	item.Status = enum.Processing
+	item.Status = Processing
 	return nil
 }
 
@@ -110,14 +134,17 @@ func (queue *ProcessorQueue) AssignItem(item *enum.QueueItem) error {
 // and set it's stage to the next stage and reset it's status to Pending
 // Note: this method will lock the mutex for protected access to the
 // shared queue.
-func (queue *ProcessorQueue) AdvanceStage(item *enum.QueueItem) {
+func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 	queue.Lock()
 	defer queue.Unlock()
 
-	if item.Stage == enum.Finish {
-		return
+	if item.Stage == Finish {
+		item.Status = Completed
+	} else if item.Stage == Format {
+		item.Stage = Finish
+		item.Status = Completed
+	} else {
+		item.Stage++
+		item.Status = Pending
 	}
-
-	item.Stage++
-	item.Status = enum.Pending
 }

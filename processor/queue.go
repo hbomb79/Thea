@@ -3,6 +3,7 @@ package processor
 import (
 	"fmt"
 	"io/fs"
+	"log"
 	"sync"
 )
 
@@ -22,6 +23,7 @@ const (
 	Pending QueueItemStatus = iota
 	Processing
 	Completed
+	Troubled
 )
 
 type QueueItem struct {
@@ -30,6 +32,7 @@ type QueueItem struct {
 	Status     QueueItemStatus
 	Stage      PipelineStage
 	StatusLine string
+	Troubles   []*Trouble
 }
 
 type QueueAssignError struct {
@@ -114,7 +117,7 @@ func (queue *ProcessorQueue) AssignItem(item *QueueItem) error {
 	defer queue.Unlock()
 
 	if item.Status != Pending {
-		return &QueueAssignError{item.Name, item.Stage, item.Status}
+		return QueueAssignError{item.Name, item.Stage, item.Status}
 	}
 
 	item.Status = Processing
@@ -138,4 +141,17 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 		item.Stage++
 		item.Status = Pending
 	}
+}
+
+// RaiseTrouble is a method that can be called from
+// tasks that indicates a trouble-state has occured which
+// requires some form of intervention from the user
+func (queue *ProcessorQueue) RaiseTrouble(item *QueueItem, trouble *Trouble) {
+	queue.Lock()
+	defer queue.Unlock()
+
+	log.Printf("[Trouble] Raising trouble (%v) for QueueItem (%v)!\n", trouble.Message, item.Path)
+
+	item.Status = Troubled
+	item.Troubles = append(item.Troubles, trouble)
 }

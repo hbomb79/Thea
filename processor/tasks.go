@@ -5,6 +5,9 @@ import (
 	"fmt"
 )
 
+// pollingWorkerTask is a WorkerTask that is responsible
+// for polling the import directory for new items to
+// add to the Queue
 func (p *Processor) pollingWorkerTask(w *Worker) error {
 	for {
 		// Wait for wakeup tick
@@ -21,9 +24,11 @@ func (p *Processor) pollingWorkerTask(w *Worker) error {
 	}
 }
 
+// titleWorkerTask is a WorkerTask that will
+// pick a new item from the queue that needs it's
+// title formatted to remove superfluous information.
 func (p *Processor) titleWorkerTask(w *Worker) error {
 	for {
-		w.currentStatus = Working
 	workLoop:
 		for {
 			// Check if work can be done...
@@ -46,13 +51,25 @@ func (p *Processor) titleWorkerTask(w *Worker) error {
 			// Bingo, we got the item assigned to us (marked as processing so no other
 			// worker will be able to enter this critical section with the same QueueItem)
 			// Do our work..
-			queueItem.Name = p.FormatTitle(queueItem.Name)
+			if v, err := p.FormatTitle(queueItem); err != nil {
+				if _, ok := err.(TitleFormatError); ok {
+					// We caught an error, but it's a recoverable error - raise a trouble
+					// sitation for this queue item to request user interaction to resolve it
+					p.Queue.RaiseTrouble(queueItem, &Trouble{"Failed to format title", Error, nil})
+					continue
+				} else {
+					// Unknown error
+					return err
+				}
+			} else {
+				// Formatting success
+				queueItem.Name = v
+				// Release the QueueItem by advancing it to the next pipeline stage
+				p.Queue.AdvanceStage(queueItem)
 
-			// Release the QueueItem by advancing it to the next pipeline stage
-			p.Queue.AdvanceStage(queueItem)
-
-			// Wakeup any pipeline workers that are sleeping
-			p.WorkerPool.NotifyWorkers(OMDB)
+				// Wakeup any pipeline workers that are sleeping
+				p.WorkerPool.NotifyWorkers(OMDB)
+			}
 		}
 
 		// If no work, wait for wakeup

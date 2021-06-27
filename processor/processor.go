@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"path/filepath"
@@ -27,6 +28,14 @@ type Processor struct {
 	Config     TPAConfig
 	Queue      ProcessorQueue
 	WorkerPool *WorkerPool
+}
+
+type TitleFormatError struct {
+	item *QueueItem
+}
+
+func (e TitleFormatError) Error() string {
+	return fmt.Sprintf("failed to format title(%v) of QueueItem(%v)", e.item.Name, e.item.Path)
 }
 
 // Instantiates a new processor by creating the
@@ -112,11 +121,15 @@ func (p *Processor) PollInputSource() (newItemsFound int, err error) {
 // FormatTitle accepts a string (title) and reformats it
 // based on text-filtering configuration provided by
 // the user
-func (p *Processor) FormatTitle(title string) string {
+func (p *Processor) FormatTitle(item *QueueItem) (string, error) {
 	matcher := regexp.MustCompile(`([\w.]+)(([SsEe]\d+){2})|(20|19)\d{2}`)
+	title := item.Name
 	groups := matcher.FindStringSubmatch(title)
 
 	log.Printf("Regex matches for string %v\nOutput:%#v\n", title, groups)
+	if len(groups) == 0 {
+		return "", TitleFormatError{item}
+	}
 
-	return title
+	return title, nil
 }

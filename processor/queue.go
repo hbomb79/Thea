@@ -32,17 +32,7 @@ type QueueItem struct {
 	Status     QueueItemStatus
 	Stage      PipelineStage
 	StatusLine string
-	Troubles   []*Trouble
-}
-
-type QueueAssignError struct {
-	itemName      string
-	currentStage  PipelineStage
-	currentStatus QueueItemStatus
-}
-
-func (e QueueAssignError) Error() string {
-	return fmt.Sprintf("cannot assign item to worker - item (%v) already assigned! Stage: %vneovim and status %v\n", e.itemName, e.currentStage, e.currentStatus)
+	Trouble    *Trouble
 }
 
 type ProcessorQueue struct {
@@ -93,34 +83,17 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *ProcessorQueue) Pick(stage PipelineStage, status QueueItemStatus) *QueueItem {
+func (queue *ProcessorQueue) Pick(stage PipelineStage) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 
 	for _, item := range queue.Items {
-		if item.Stage == stage && item.Status == status {
+		if item.Stage == stage && item.Status == Pending {
+			item.Status = Processing
 			return item
 		}
 	}
 
-	return nil
-}
-
-// AssignItem will assign the provided item by setting it's
-// status to Processing - will return an error if the QueueItem
-// already has status of Processing.
-// It is the workers responsiblity to perform the work and then
-// advance the stage (see queue.AdvanceStage) - freeing the QueueItem
-// for work by another worker
-func (queue *ProcessorQueue) AssignItem(item *QueueItem) error {
-	queue.Lock()
-	defer queue.Unlock()
-
-	if item.Status != Pending {
-		return QueueAssignError{item.Name, item.Stage, item.Status}
-	}
-
-	item.Status = Processing
 	return nil
 }
 
@@ -151,7 +124,10 @@ func (queue *ProcessorQueue) RaiseTrouble(item *QueueItem, trouble *Trouble) {
 	defer queue.Unlock()
 
 	log.Printf("[Trouble] Raising trouble (%v) for QueueItem (%v)!\n", trouble.Message, item.Path)
-
-	item.Status = Troubled
-	item.Troubles = append(item.Troubles, trouble)
+	if item.Trouble == nil {
+		item.Status = Troubled
+		item.Trouble = trouble
+	} else {
+		log.Fatalf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble)
+	}
 }

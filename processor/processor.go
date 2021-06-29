@@ -14,12 +14,12 @@ type PipelineStage int
 
 // When a QueueItem is initially added, it should be of stage Import,
 // each time a worker works on the task it should increment it's
-// Stage (Title->OMDB->etc..) and set it's Status to 'Pending'
+// Stage (Title->Omdb->etc..) and set it's Status to 'Pending'
 // to allow a worker to pick the item from the Queue
 const (
 	Import PipelineStage = iota
 	Title
-	OMDB
+	Omdb
 	Format
 	Finish
 )
@@ -31,11 +31,12 @@ type Processor struct {
 }
 
 type TitleFormatError struct {
-	item *QueueItem
+	item    *QueueItem
+	message string
 }
 
 func (e TitleFormatError) Error() string {
-	return fmt.Sprintf("failed to format title(%v) of QueueItem(%v)", e.item.Name, e.item.Path)
+	return fmt.Sprintf("failed to format title(%v) - %v", e.item.Name, e.message)
 }
 
 // Instantiates a new processor by creating the
@@ -122,13 +123,14 @@ func (p *Processor) PollInputSource() (newItemsFound int, err error) {
 // based on text-filtering configuration provided by
 // the user
 func (p *Processor) FormatTitle(item *QueueItem) (string, error) {
-	matcher := regexp.MustCompile(`([\w.]+)(([SsEe]\d+){2})|(20|19)\d{2}`)
 	title := item.Name
+
+	matcher := regexp.MustCompile(`([\w.]+)(([SsEe]\d+){2})|(20|19)\d{2}`)
 	groups := matcher.FindStringSubmatch(title)
 
 	log.Printf("Regex matches for string %v\nOutput:%#v\n", title, groups)
 	if len(groups) == 0 {
-		return "", TitleFormatError{item}
+		return "", TitleFormatError{item, "regex match failed"}
 	}
 
 	return title, nil

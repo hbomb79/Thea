@@ -72,7 +72,7 @@ func (pool *WorkerPool) IterWorkers(callback func(w *Worker)) {
 	}
 }
 
-func (pool *WorkerPool) NotifyWorkers(stage PipelineStage) {
+func (pool *WorkerPool) WakupWorkers(stage PipelineStage) {
 	pool.Lock()
 	defer pool.Unlock()
 
@@ -93,7 +93,7 @@ func (pool *WorkerPool) CloseWorkers() {
 
 	for _, w := range pool.workers {
 		if err := w.Close(); err != nil {
-			log.Panicf("failed to close WorkerPool, a worker(%T) gave an error: %v\n", w, err.Error())
+			log.Panicf("failed to close WorkerPool, a worker(%v) gave an error: %v\n", w.label, err.Error())
 		}
 	}
 }

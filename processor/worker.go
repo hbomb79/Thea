@@ -68,6 +68,10 @@ func (worker *Worker) Close() error {
 	return nil
 }
 
+// sleep puts a worker to sleep until it's wakeupChan is
+// signalled from another goroutine. Returns a boolean that
+// is 'false' if the wakeup channel was closed - indicating
+// the worker should quit.
 func (worker *Worker) sleep() (isAlive bool) {
 	worker.currentStatus = Idle
 

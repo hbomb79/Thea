@@ -6,7 +6,11 @@ import (
 	"log"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
+
+	"golang.org/x/text/number"
 )
 
 // Each stage represents a certain stage in the pipeline
@@ -24,6 +28,10 @@ const (
 	Finish
 )
 
+// The Processor struct contains all the context
+// for the running instance of this program. It stores
+// the queue of items, the pool of workers that are
+// processing the queue, and the users configuration
 type Processor struct {
 	Config     TPAConfig
 	Queue      ProcessorQueue
@@ -63,7 +71,7 @@ func New() *Processor {
 func (p *Processor) Begin() error {
 	importWakeupChan := make(chan int)
 	titleWakeupChan := make(chan int)
-	//omdbWakeupChan := make(chan int)
+	omdbWakeupChan := make(chan int)
 	//formatWakupChan := make(chan int)
 
 	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
@@ -80,6 +88,7 @@ func (p *Processor) Begin() error {
 	// Start some workers in the pool to handle various tasks
 	p.WorkerPool.NewWorkers(p.Config.Concurrent.Import, "Importer", p.pollingWorkerTask, importWakeupChan, Import)
 	p.WorkerPool.NewWorkers(p.Config.Concurrent.Title, "TitleFormatter", p.titleWorkerTask, titleWakeupChan, Title)
+	p.WorkerPool.NewWorkers(p.Config.Concurrent.OMBD, "OMDBQuerant", p.networkWorkerTask, omdbWakeupChan, Omdb)
 	p.WorkerPool.StartWorkers()
 
 	// Kickstart the pipeline
@@ -119,19 +128,39 @@ func (p *Processor) PollInputSource() (newItemsFound int, err error) {
 	return
 }
 
+// mustConvertToInt is a helper method that accepts
+// a string input and will attempt to convert that string
+// to an integer - if it fails, a panic is raised.
+func mustConvertToInt(input string) int {
+	v, err := strconv.Atoi(input)
+	if err != nil {
+		panic(err)
+	}
+
+	return v
+}
+
 // FormatTitle accepts a string (title) and reformats it
 // based on text-filtering configuration provided by
 // the user
+// TODO this method really belongs elsewhere - perhaps on the
+// QueueItem itself - we don't actually tie this to the Processor
+// instance at all so there's no reason for it to be here
 func (p *Processor) FormatTitle(item *QueueItem) (string, error) {
-	title := item.Name
+	title := strings.Replace(item.Name, ".", " ", -1)
 
-	matcher := regexp.MustCompile(`([\w.]+)(([SsEe]\d+){2})|(20|19)\d{2}`)
-	groups := matcher.FindStringSubmatch(title)
+	seasonMatcher := regexp.MustCompile(`/^(.*)\s?s(\d+)\s?e(\d+)\s*((?:20|19)\d{2})?/gi`)
+	if seasonGroups := seasonMatcher.FindStringSubmatch(title); len(seasonGroups) >= 1 {
+		item.TitleInfo.Episodic = true
+		item.TitleInfo.Title = seasonGroups[1]
+		item.TitleInfo.Season = mustConvertToInt(seasonGroups[2])
+		item.TitleInfo.Episode = mustConvertToInt(seasonGroups[3])
+		item.TitleInfo.Year = mustConvertToInt(seasonGroups[4])
 
-	log.Printf("Regex matches for string %v\nOutput:%#v\n", title, groups)
-	if len(groups) == 0 {
-		return "", TitleFormatError{item, "regex match failed"}
+		// TODO fix return values.. don't need them
+		return seasonGroups[1], nil
 	}
 
+	// TODO Handle non-series based titles.
 	return title, nil
 }

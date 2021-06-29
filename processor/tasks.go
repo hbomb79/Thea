@@ -3,6 +3,9 @@ package processor
 import (
 	"errors"
 	"fmt"
+	"log"
+	"net/http"
+	"strings"
 )
 
 // pollingWorkerTask is a WorkerTask that is responsible
@@ -84,7 +87,30 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			}
 
 			// Do our work..
+			baseApi := p.Config.Database.OmdbApiUrl
+			baseApi = strings.Replace(baseApi, "%KEY%", p.Config.Database.OmdbKey, 1)
+			baseApi = strings.Replace(baseApi, "%QUERY%", queueItem.Name, 1)
+			res, err := http.Get(baseApi)
+			if err != nil {
+				// HTTP request error
+				p.Queue.RaiseTrouble(queueItem, &Trouble{
+					"Failed to fetch OMDB information for QueueItem: " + err.Error(),
+					Error,
+					nil,
+				})
 
+				continue
+			}
+
+			log.Printf("OMDB result: %#v\n", res)
+
+			// Store OMDB result in QueueItem
+			// TODO
+			// Advance our item
+			p.Queue.AdvanceStage(queueItem)
+
+			// Wakeup any sleeping workers in next stage
+			p.WorkerPool.WakeupWorkers(Format)
 		}
 
 		// If no work, wait for wakeup

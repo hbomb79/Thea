@@ -32,6 +32,20 @@ type QueueItem struct {
 	Stage      PipelineStage
 	StatusLine string
 	Trouble    *Trouble
+	TitleInfo  TitleInfo
+	OmdbInfo   OmdbInfo
+}
+
+type TitleInfo struct {
+	Title    string
+	Episodic bool
+	Season   int
+	Episode  int
+	Year     int
+}
+
+type OmdbInfo struct {
+	// TODO
 }
 
 type ProcessorQueue struct {

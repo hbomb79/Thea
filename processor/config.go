@@ -30,11 +30,13 @@ type formatterConfig struct {
 }
 
 type databaseConfig struct {
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	Name     string `yaml:"name"`
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
+	User       string `yaml:"user"`
+	Password   string `yaml:"password"`
+	Name       string `yaml:"name"`
+	Host       string `yaml:"host"`
+	Port       string `yaml:"port"`
+	OmdbKey    string `yaml:"omdb_api_key"`
+	OmdbApiUrl string `yaml:"omdb_api_url"`
 }
 
 func (config *TPAConfig) LoadConfig() {

@@ -72,7 +72,7 @@ func (pool *WorkerPool) IterWorkers(callback func(w *Worker)) {
 	}
 }
 
-func (pool *WorkerPool) WakupWorkers(stage PipelineStage) {
+func (pool *WorkerPool) WakeupWorkers(stage PipelineStage) {
 	pool.Lock()
 	defer pool.Unlock()
 

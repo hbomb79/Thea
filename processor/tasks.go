@@ -19,7 +19,7 @@ func (p *Processor) pollingWorkerTask(w *Worker) error {
 		if notify, err := p.PollInputSource(); err != nil {
 			return errors.New(fmt.Sprintf("cannot PollImportSource inside of worker '%v' - %v", w.label, err.Error()))
 		} else if notify > 0 {
-			p.WorkerPool.WakupWorkers(Title)
+			p.WorkerPool.WakeupWorkers(Title)
 		}
 	}
 }
@@ -56,7 +56,7 @@ func (p *Processor) titleWorkerTask(w *Worker) error {
 				p.Queue.AdvanceStage(queueItem)
 
 				// Wakeup any pipeline workers that are sleeping
-				p.WorkerPool.WakupWorkers(Omdb)
+				p.WorkerPool.WakeupWorkers(Omdb)
 			}
 		}
 

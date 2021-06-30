@@ -167,25 +167,32 @@ func (item *QueueItem) FormatTitle() error {
 	title := strings.Replace(item.Name, ".", " ", -1)
 
 	// Search for season info and optional year information
-	seasonMatcher := regexp.MustCompile(`/^(.*)\s?s(\d+)\s?e(\d+)\s*((?:20|19)\d{2})?/gi`)
+	seasonMatcher := regexp.MustCompile(`(?i)^(.*)\s?s(\d+)\s?e(\d+)\s*((?:20|19)\d{2})?`)
 	if seasonGroups := seasonMatcher.FindStringSubmatch(title); len(seasonGroups) >= 1 {
 		item.TitleInfo.Episodic = true
 		item.TitleInfo.Title = seasonGroups[1]
 		item.TitleInfo.Season = convertToInt(seasonGroups[2])
 		item.TitleInfo.Episode = convertToInt(seasonGroups[3])
-		item.TitleInfo.Year = convertToInt(seasonGroups[4])
+		if seasonGroups[4] != "" {
+			item.TitleInfo.Year = convertToInt(seasonGroups[4])
+		} else {
+			item.TitleInfo.Year = -1
+		}
 
 		return nil
 	}
 
 	// Try find if it's a movie instead
-	movieMatcher := regexp.MustCompile(`/^(.+)\s*((?:20|19)\d{2})/gi`)
+	movieMatcher := regexp.MustCompile(`(?i)^(.+)\s*((?:20|19)\d{2})`)
 	if movieGroups := movieMatcher.FindStringSubmatch(title); len(movieGroups) >= 1 {
 		item.TitleInfo.Episodic = false
 		item.TitleInfo.Title = movieGroups[1]
 		item.TitleInfo.Year = convertToInt(movieGroups[2])
+
 		return nil
 	}
 
+	// Didn't match either case; return error so that trouble
+	// can be raised by the worker.
 	return TitleFormatError{item, "Failed to match RegExp!"}
 }

@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/text/number"
 )
 
 // Each stage represents a certain stage in the pipeline

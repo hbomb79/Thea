@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"gitlab.com/hbomb79/TPA/processor"
+	"github.com/hbomb79/TPA/processor"
 )
 
 // main() is the entry point to the program, from here will

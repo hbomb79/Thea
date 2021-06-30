@@ -3,6 +3,9 @@ package processor
 import (
 	"io/fs"
 	"log"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -143,4 +146,46 @@ func (queue *ProcessorQueue) RaiseTrouble(item *QueueItem, trouble *Trouble) {
 	} else {
 		log.Fatalf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble)
 	}
+}
+
+// convertToInt is a helper method that accepts
+// a string input and will attempt to convert that string
+// to an integer - if it fails, -1 is returned
+func convertToInt(input string) int {
+	v, err := strconv.Atoi(input)
+	if err != nil {
+		return -1
+	}
+
+	return v
+}
+
+// FormatTitle accepts a string (title) and reformats it
+// based on text-filtering configuration provided by
+// the user
+func (item *QueueItem) FormatTitle() error {
+	title := strings.Replace(item.Name, ".", " ", -1)
+
+	// Search for season info and optional year information
+	seasonMatcher := regexp.MustCompile(`/^(.*)\s?s(\d+)\s?e(\d+)\s*((?:20|19)\d{2})?/gi`)
+	if seasonGroups := seasonMatcher.FindStringSubmatch(title); len(seasonGroups) >= 1 {
+		item.TitleInfo.Episodic = true
+		item.TitleInfo.Title = seasonGroups[1]
+		item.TitleInfo.Season = convertToInt(seasonGroups[2])
+		item.TitleInfo.Episode = convertToInt(seasonGroups[3])
+		item.TitleInfo.Year = convertToInt(seasonGroups[4])
+
+		return nil
+	}
+
+	// Try find if it's a movie instead
+	movieMatcher := regexp.MustCompile(`/^(.+)\s*((?:20|19)\d{2})/gi`)
+	if movieGroups := movieMatcher.FindStringSubmatch(title); len(movieGroups) >= 1 {
+		item.TitleInfo.Episodic = false
+		item.TitleInfo.Title = movieGroups[1]
+		item.TitleInfo.Year = convertToInt(movieGroups[2])
+		return nil
+	}
+
+	return TitleFormatError{item, "Failed to match RegExp!"}
 }

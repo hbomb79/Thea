@@ -42,7 +42,7 @@ func (p *Processor) titleWorkerTask(w *Worker) error {
 			}
 
 			// Do our work..
-			if v, err := p.FormatTitle(queueItem); err != nil {
+			if err := queueItem.FormatTitle(); err != nil {
 				if _, ok := err.(TitleFormatError); ok {
 					// We caught an error, but it's a recoverable error - raise a trouble
 					// sitation for this queue item to request user interaction to resolve it
@@ -53,8 +53,6 @@ func (p *Processor) titleWorkerTask(w *Worker) error {
 					return err
 				}
 			} else {
-				// Formatting success
-				queueItem.Name = v
 				// Release the QueueItem by advancing it to the next pipeline stage
 				p.Queue.AdvanceStage(queueItem)
 

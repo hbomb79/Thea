@@ -5,7 +5,6 @@ import (
 	"log"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -35,8 +34,8 @@ type QueueItem struct {
 	Stage      PipelineStage
 	StatusLine string
 	Trouble    *Trouble
-	TitleInfo  TitleInfo
-	OmdbInfo   OmdbInfo
+	TitleInfo  *TitleInfo
+	OmdbInfo   *OmdbInfo
 }
 
 type TitleInfo struct {
@@ -48,7 +47,14 @@ type TitleInfo struct {
 }
 
 type OmdbInfo struct {
-	// TODO
+	Genre       string
+	Title       string
+	Plot        string
+	ReleaseYear int
+	Runtime     string
+	ImdbId      string
+	Type        string
+	Poster      string
 }
 
 type ProcessorQueue struct {
@@ -74,21 +80,6 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 		})
 
 		return true
-	}
-
-	return false
-}
-
-// isInQueue will return true if the queue contains a QueueItem
-// with a path field matching the path provided to this method
-// Note: callers responsiblity to ensure the queues Mutex is
-// already locked before use - otherwise the queue contents
-// may mutate while iterating through it
-func (queue *ProcessorQueue) isInQueue(path string) bool {
-	for _, v := range queue.Items {
-		if v.Path == path {
-			return true
-		}
 	}
 
 	return false
@@ -160,35 +151,54 @@ func convertToInt(input string) int {
 	return v
 }
 
+// isInQueue will return true if the queue contains a QueueItem
+// with a path field matching the path provided to this method
+// Note: callers responsiblity to ensure the queues Mutex is
+// already locked before use - otherwise the queue contents
+// may mutate while iterating through it
+func (queue *ProcessorQueue) isInQueue(path string) bool {
+	for _, v := range queue.Items {
+		if v.Path == path {
+			return true
+		}
+	}
+
+	return false
+}
+
 // FormatTitle accepts a string (title) and reformats it
 // based on text-filtering configuration provided by
 // the user
 func (item *QueueItem) FormatTitle() error {
-	title := strings.Replace(item.Name, ".", " ", -1)
+	normaliserMatcher := regexp.MustCompile(`(?i)[\.\s]`)
+	seasonMatcher := regexp.MustCompile(`(?i)^(.*?)\_?s(\d+)\_?e(\d+)\_*((?:20|19)\d{2})?`)
+	movieMatcher := regexp.MustCompile(`(?i)^(.+?)\_*((?:20|19)\d{2})`)
+
+	title := normaliserMatcher.ReplaceAllString(item.Name, "_")
 
 	// Search for season info and optional year information
-	seasonMatcher := regexp.MustCompile(`(?i)^(.*)\s?s(\d+)\s?e(\d+)\s*((?:20|19)\d{2})?`)
 	if seasonGroups := seasonMatcher.FindStringSubmatch(title); len(seasonGroups) >= 1 {
-		item.TitleInfo.Episodic = true
-		item.TitleInfo.Title = seasonGroups[1]
-		item.TitleInfo.Season = convertToInt(seasonGroups[2])
-		item.TitleInfo.Episode = convertToInt(seasonGroups[3])
-		if seasonGroups[4] != "" {
-			item.TitleInfo.Year = convertToInt(seasonGroups[4])
-		} else {
-			item.TitleInfo.Year = -1
+		info := &TitleInfo{
+			Episodic: true,
+			Title:    seasonGroups[1],
+			Season:   convertToInt(seasonGroups[2]),
+			Episode:  convertToInt(seasonGroups[3]),
+			Year:     convertToInt(seasonGroups[4]),
 		}
 
+		item.TitleInfo = info
 		return nil
 	}
 
 	// Try find if it's a movie instead
-	movieMatcher := regexp.MustCompile(`(?i)^(.+)\s*((?:20|19)\d{2})`)
-	if movieGroups := movieMatcher.FindStringSubmatch(title); len(movieGroups) >= 1 {
-		item.TitleInfo.Episodic = false
-		item.TitleInfo.Title = movieGroups[1]
-		item.TitleInfo.Year = convertToInt(movieGroups[2])
+	if movieGroups := movieMatcher.FindStringSubmatch(item.Name); len(movieGroups) >= 1 {
+		info := &TitleInfo{
+			Episodic: false,
+			Title:    movieGroups[1],
+			Year:     convertToInt(movieGroups[2]),
+		}
 
+		item.TitleInfo = info
 		return nil
 	}
 

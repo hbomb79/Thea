@@ -1,9 +1,13 @@
 package processor
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
+	"net/http"
 	"path/filepath"
 	"time"
 )
@@ -67,7 +71,7 @@ func (p *Processor) Begin() error {
 	importWakeupChan := make(chan int)
 	titleWakeupChan := make(chan int)
 	omdbWakeupChan := make(chan int)
-	//formatWakupChan := make(chan int)
+	formatWakupChan := make(chan int)
 
 	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
 	if tickInterval <= 0 {
@@ -84,6 +88,7 @@ func (p *Processor) Begin() error {
 	p.WorkerPool.NewWorkers(p.Config.Concurrent.Import, "Importer", p.pollingWorkerTask, importWakeupChan, Import)
 	p.WorkerPool.NewWorkers(p.Config.Concurrent.Title, "TitleFormatter", p.titleWorkerTask, titleWakeupChan, Title)
 	p.WorkerPool.NewWorkers(p.Config.Concurrent.OMBD, "OMDBQuerant", p.networkWorkerTask, omdbWakeupChan, Omdb)
+	p.WorkerPool.NewWorkers(p.Config.Concurrent.Format, "FFMPEG", p.formatterWorkerTask, formatWakupChan, Format)
 	p.WorkerPool.StartWorkers()
 
 	// Kickstart the pipeline
@@ -121,4 +126,154 @@ func (p *Processor) PollInputSource() (newItemsFound int, err error) {
 
 	err = filepath.WalkDir(p.Config.Format.ImportPath, walkFunc)
 	return
+}
+
+// pollingWorkerTask is a WorkerTask that is responsible
+// for polling the import directory for new items to
+// add to the Queue
+func (p *Processor) pollingWorkerTask(w *Worker) error {
+	for {
+		// Wait for wakeup tick
+		if isAlive := w.sleep(); !isAlive {
+			return nil
+		}
+
+		// Do work
+		if notify, err := p.PollInputSource(); err != nil {
+			return errors.New(fmt.Sprintf("cannot PollImportSource inside of worker '%v' - %v", w.label, err.Error()))
+		} else if notify > 0 {
+			p.WorkerPool.WakeupWorkers(Title)
+		}
+	}
+}
+
+// titleWorkerTask is a WorkerTask that will
+// pick a new item from the queue that needs it's
+// title formatted to remove superfluous information.
+func (p *Processor) titleWorkerTask(w *Worker) error {
+	for {
+	workLoop:
+		for {
+			// Check if work can be done...
+			queueItem := p.Queue.Pick(w.pipelineStage)
+			if queueItem == nil {
+				// No item, break inner loop and sleep
+				break workLoop
+			}
+
+			// Do our work..
+			if err := queueItem.FormatTitle(); err != nil {
+				if _, ok := err.(TitleFormatError); ok {
+					// We caught an error, but it's a recoverable error - raise a trouble
+					// sitation for this queue item to request user interaction to resolve it
+					p.Queue.RaiseTrouble(queueItem, &Trouble{err.Error(), Error, nil})
+					continue
+				} else {
+					// Unknown error
+					return err
+				}
+			} else {
+				log.Printf("Formatted queue item %v to %#v\n", queueItem.Name, queueItem.TitleInfo)
+				// Release the QueueItem by advancing it to the next pipeline stage
+				p.Queue.AdvanceStage(queueItem)
+
+				// Wakeup any pipeline workers that are sleeping
+				p.WorkerPool.WakeupWorkers(Omdb)
+			}
+		}
+
+		// If no work, wait for wakeup
+		if isAlive := w.sleep(); !isAlive {
+			return nil
+		}
+	}
+}
+
+// networkWorkerTask will pick an item from the queue that
+// needs some stats found from OMDB. Stats include the genre,
+// rating, runtime, etc. This worker will attempt to find the
+// item at OMDB, and if it fails it will try to refine the
+// title until it can't anymore - in which case the Queue item
+// will have a trouble state raised.
+func (p *Processor) networkWorkerTask(w *Worker) error {
+	for {
+	workLoop:
+		for {
+			// Check if work can be done...
+			queueItem := p.Queue.Pick(w.pipelineStage)
+			if queueItem == nil {
+				break workLoop
+			}
+
+			// Ensure the previous pipeline actually provided information
+			// in the TitleInfo struct.
+			if queueItem.TitleInfo == nil {
+				p.Queue.RaiseTrouble(queueItem, &Trouble{
+					"Unable to process queue item for OMDB processing as no title information is available. Previous stage of pipelined must have failed unexpectedly.",
+					Error,
+					nil,
+				})
+
+				continue
+			}
+
+			// Form our API request
+			baseApi := fmt.Sprintf(p.Config.Database.OmdbApiUrl, p.Config.Database.OmdbKey, queueItem.TitleInfo.Title)
+			res, err := http.Get(baseApi)
+			if err != nil {
+				// HTTP request error
+				p.Queue.RaiseTrouble(queueItem, &Trouble{
+					"Failed to fetch OMDB information for QueueItem - " + err.Error(),
+					Error,
+					nil,
+				})
+
+				continue
+			}
+			defer res.Body.Close()
+
+			// Read all the bytes from the response
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				p.Queue.RaiseTrouble(queueItem, &Trouble{
+					"Failed to read OMDB information for QueueItem - " + err.Error(),
+					Error,
+					nil,
+				})
+
+				continue
+			}
+
+			// Unmarshal the JSON content in to our OmdbInfo struct
+			var info OmdbInfo
+			if err = json.Unmarshal(body, &info); err != nil {
+				p.Queue.RaiseTrouble(queueItem, &Trouble{
+					"Failed to unmarshal JSON response from OMDB - " + err.Error(),
+					Error,
+					nil,
+				})
+
+				continue
+			}
+
+			// Store OMDB result in QueueItem
+			queueItem.OmdbInfo = &info
+			log.Printf("OMDB result: %#v\n", info)
+
+			// Advance our item to the next stage
+			p.Queue.AdvanceStage(queueItem)
+
+			// Wakeup any sleeping workers in next stage
+			p.WorkerPool.WakeupWorkers(Format)
+		}
+
+		// If no work, wait for wakeup
+		if isAlive := w.sleep(); !isAlive {
+			return nil
+		}
+	}
+}
+
+func (p *Processor) formatterWorkerTask(w *Worker) error {
+	return nil
 }

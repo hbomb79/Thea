@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"bytes"
 	"errors"
 	"io/fs"
 	"log"

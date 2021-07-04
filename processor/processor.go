@@ -161,7 +161,7 @@ func (p *Processor) titleWorkerTask(w *Worker) error {
 				if _, ok := err.(TitleFormatError); ok {
 					// We caught an error, but it's a recoverable error - raise a trouble
 					// sitation for this queue item to request user interaction to resolve it
-					p.Queue.RaiseTrouble(queueItem, &Trouble{err.Error(), Error, nil})
+					queueItem.RaiseTrouble(&Trouble{err.Error(), Error, nil})
 					continue
 				} else {
 					// Unknown error
@@ -203,7 +203,7 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			// Ensure the previous pipeline actually provided information
 			// in the TitleInfo struct.
 			if queueItem.TitleInfo == nil {
-				p.Queue.RaiseTrouble(queueItem, &Trouble{
+				queueItem.RaiseTrouble(&Trouble{
 					"Unable to process queue item for OMDB processing as no title information is available. Previous stage of pipelined must have failed unexpectedly.",
 					Error,
 					nil,
@@ -217,7 +217,7 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			res, err := http.Get(baseApi)
 			if err != nil {
 				// HTTP request error
-				p.Queue.RaiseTrouble(queueItem, &Trouble{
+				queueItem.RaiseTrouble(&Trouble{
 					"Failed to fetch OMDB information for QueueItem - " + err.Error(),
 					Error,
 					nil,
@@ -230,7 +230,7 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			// Read all the bytes from the response
 			body, err := io.ReadAll(res.Body)
 			if err != nil {
-				p.Queue.RaiseTrouble(queueItem, &Trouble{
+				queueItem.RaiseTrouble(&Trouble{
 					"Failed to read OMDB information for QueueItem - " + err.Error(),
 					Error,
 					nil,
@@ -242,7 +242,7 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			// Unmarshal the JSON content in to our OmdbInfo struct
 			var info OmdbInfo
 			if err = json.Unmarshal(body, &info); err != nil {
-				p.Queue.RaiseTrouble(queueItem, &Trouble{
+				queueItem.RaiseTrouble(&Trouble{
 					"Failed to unmarshal JSON response from OMDB - " + err.Error(),
 					Error,
 					nil,
@@ -254,12 +254,20 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			// Store OMDB result in QueueItem
 			queueItem.OmdbInfo = &info
 			log.Printf("OMDB result: %#v\n", info)
+			if queueItem.OmdbInfo.Response {
 
-			// Advance our item to the next stage
-			p.Queue.AdvanceStage(queueItem)
+				// Advance our item to the next stage
+				p.Queue.AdvanceStage(queueItem)
 
-			// Wakeup any sleeping workers in next stage
-			p.WorkerPool.WakeupWorkers(Format)
+				// Wakeup any sleeping workers in next stage
+				p.WorkerPool.WakeupWorkers(Format)
+			} else {
+				queueItem.RaiseTrouble(&Trouble{
+					"OMDB response failed - " + queueItem.OmdbInfo.Error,
+					Error,
+					nil,
+				})
+			}
 		}
 
 		// If no work, wait for wakeup

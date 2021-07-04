@@ -69,6 +69,7 @@ type OmdbInfo struct {
 	Type        OmdbType
 	PosterUrl   string `json:"poster"`
 	Response    OmdbResponseType
+	Error       string
 }
 
 type StringList []string
@@ -132,7 +133,6 @@ func (rt *OmdbResponseType) UnmarshalJSON(data []byte) error {
 	case "False":
 		*rt = false
 	case "True":
-	default:
 		*rt = true
 	}
 
@@ -207,22 +207,6 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 	}
 }
 
-// RaiseTrouble is a method that can be called from
-// tasks that indicates a trouble-state has occured which
-// requires some form of intervention from the user
-func (queue *ProcessorQueue) RaiseTrouble(item *QueueItem, trouble *Trouble) {
-	queue.Lock()
-	defer queue.Unlock()
-
-	log.Printf("[Trouble] Raising trouble (%v) for QueueItem (%v)!\n", trouble.Message, item.Path)
-	if item.Trouble == nil {
-		item.Status = Troubled
-		item.Trouble = trouble
-	} else {
-		log.Fatalf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble)
-	}
-}
-
 // convertToInt is a helper method that accepts
 // a string input and will attempt to convert that string
 // to an integer - if it fails, -1 is returned
@@ -248,6 +232,19 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 	}
 
 	return false
+}
+
+// RaiseTrouble is a method that can be called from
+// tasks that indicates a trouble-state has occured which
+// requires some form of intervention from the user
+func (item *QueueItem) RaiseTrouble(trouble *Trouble) {
+	log.Printf("[Trouble] Raising trouble (%v) for QueueItem (%v)!\n", trouble.Message, item.Path)
+	if item.Trouble == nil {
+		item.Status = Troubled
+		item.Trouble = trouble
+	} else {
+		log.Fatalf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble)
+	}
 }
 
 // FormatTitle accepts a string (title) and reformats it

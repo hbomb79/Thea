@@ -69,10 +69,12 @@ type OmdbInfo struct {
 	ImdbId      string
 	Type        OmdbType
 	PosterUrl   string `json:"poster"`
+	Response    OmdbResponseType
 }
 
 type StringList []string
 type OmdbType int
+type OmdbResponseType bool
 
 const (
 	movie OmdbType = iota
@@ -107,6 +109,19 @@ func (sl *StringList) UnmarshalJSON(data []byte) error {
 
 	list := strings.Split(string(bytes.TrimSpace(data)), ", ")
 	*sl = append(*sl, list...)
+
+	return nil
+}
+
+func (rt *OmdbResponseType) UnmarshalJSON(data []byte) error {
+	t := string(data[1 : len(data)-1])
+	switch t {
+	case "False":
+		*rt = false
+	case "True":
+	default:
+		*rt = true
+	}
 
 	return nil
 }

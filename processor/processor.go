@@ -68,31 +68,26 @@ func New() *Processor {
 // and the FFMPEG formatting (NYI)
 // This method will wait on the WaitGroup attached to the WorkerPool
 func (p *Processor) Begin() error {
-	importWakeupChan := make(chan int)
-	titleWakeupChan := make(chan int)
-	omdbWakeupChan := make(chan int)
-	formatWakupChan := make(chan int)
-
 	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
 	if tickInterval <= 0 {
 		log.Panic("Failed to start PollingWorker - TickInterval is non-positive (make sure 'import_polling_delay' is set in your config)")
 	}
-	go func(source <-chan time.Time, target chan int) {
+
+	importWakeupChan := make(chan int)
+	go func(target chan int) {
+		source := time.NewTicker(tickInterval).C
 		for {
-			<-source
 			target <- 1
+			<-source
 		}
-	}(time.NewTicker(tickInterval).C, importWakeupChan)
+	}(importWakeupChan)
 
 	// Start some workers in the pool to handle various tasks
 	p.WorkerPool.NewWorkers(p.Config.Concurrent.Import, "Importer", p.pollingWorkerTask, importWakeupChan, Import)
-	p.WorkerPool.NewWorkers(p.Config.Concurrent.Title, "TitleFormatter", p.titleWorkerTask, titleWakeupChan, Title)
-	p.WorkerPool.NewWorkers(p.Config.Concurrent.OMBD, "OMDBQuerant", p.networkWorkerTask, omdbWakeupChan, Omdb)
-	p.WorkerPool.NewWorkers(p.Config.Concurrent.Format, "FFMPEG", p.formatterWorkerTask, formatWakupChan, Format)
+	p.WorkerPool.NewWorkers(p.Config.Concurrent.Title, "TitleFormatter", p.titleWorkerTask, make(chan int), Title)
+	p.WorkerPool.NewWorkers(p.Config.Concurrent.OMBD, "OMDBQuerant", p.networkWorkerTask, make(chan int), Omdb)
+	p.WorkerPool.NewWorkers(p.Config.Concurrent.Format, "FFMPEG", p.formatterWorkerTask, make(chan int), Format)
 	p.WorkerPool.StartWorkers()
-
-	// Kickstart the pipeline
-	importWakeupChan <- 1
 
 	// Wait for all to finish
 	p.WorkerPool.Wg.Wait()

@@ -1,11 +1,13 @@
 package processor
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -294,19 +296,52 @@ func (p *Processor) formatterWorkerTask(w *Worker) error {
 			outputFormat := p.Config.Format.TargetFormat
 			outputPath := p.Config.Format.OutputPath
 			if tInfo.Episodic {
-				fName := fmt.Sprintf("%v_%v_%v_%v_%v.%v", tInfo.Episode, tInfo.Season, tInfo.Title, "TODO", tInfo.Year, outputFormat)
+				fName := fmt.Sprintf("%v_%v_%v_%v_%v.%v", tInfo.Episode, tInfo.Season, tInfo.Title, tInfo.Resolution, tInfo.Year, outputFormat)
 				outputPath = filepath.Join(outputPath, queueItem.TitleInfo.Title, fmt.Sprint(queueItem.TitleInfo.Season), fName)
 			} else {
-				fName := fmt.Sprintf("%v_%v_%v.%v", tInfo.Title, "TODO", tInfo.Year, outputFormat)
+				fName := fmt.Sprintf("%v_%v_%v.%v", tInfo.Title, tInfo.Resolution, tInfo.Year, outputFormat)
 				outputPath = filepath.Join(outputPath, fName)
 			}
 
 			// Build our exec.Cmd to run the ffmpeg command
-			_ = fluentffmpeg.NewCommand("").
+			cmdStdOut := &bytes.Buffer{}
+			cmdStdErr := &bytes.Buffer{}
+			done := make(chan error, 1)
+			cmd := fluentffmpeg.NewCommand("").
 				InputPath(queueItem.Path).
 				OutputFormat(outputFormat).
 				OutputPath(outputPath).
 				Build()
+
+			cmd.Stderr = cmdStdErr
+			cmd.Stdout = cmdStdOut
+			cmd.Start()
+
+			go func() {
+				done <- cmd.Wait()
+			}()
+
+		cmdLoop:
+			for {
+				select {
+				case err := <-done:
+					if err != nil {
+						log.Printf("ERROR! %v\n", err.Error())
+						queueItem.RaiseTrouble(&Trouble{
+							"FFMPEG error: " + err.Error(),
+							Error,
+							nil,
+						})
+
+						continue workLoop
+					}
+
+					break cmdLoop
+				case <-time.After(1 * time.Second):
+					out, _ := ioutil.ReadAll(cmdStdOut)
+					log.Printf("FFMPEG out: %v\n", string(out))
+				}
+			}
 
 			// Advance our item to the next stage
 			p.Queue.AdvanceStage(queueItem)

@@ -48,11 +48,12 @@ type QueueItem struct {
 // that is gleamed from the pathname given; such as the title and
 // if the show is an episode or a movie.
 type TitleInfo struct {
-	Title    string
-	Episodic bool
-	Season   int
-	Episode  int
-	Year     int
+	Title      string
+	Episodic   bool
+	Season     int
+	Episode    int
+	Year       int
+	Resolution string
 }
 
 // OmdbInfo is used as an unmarshaller target for JSON. It's embedded

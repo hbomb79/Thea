@@ -1,10 +1,13 @@
 package processor
 
 import (
+	"bytes"
+	"errors"
 	"io/fs"
 	"log"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -27,6 +30,10 @@ const (
 	Troubled
 )
 
+// QueueItem contains all the information needed to fully
+// encapsulate the state of each item in the formatting queue.
+// This includes information found from the file-system, OMDB,
+// and the current processing status/stage
 type QueueItem struct {
 	Path       string
 	Name       string
@@ -38,6 +45,9 @@ type QueueItem struct {
 	OmdbInfo   *OmdbInfo
 }
 
+// TitleInfo contains the information about the import QueueItem
+// that is gleamed from the pathname given; such as the title and
+// if the show is an episode or a movie.
 type TitleInfo struct {
 	Title    string
 	Episodic bool
@@ -46,17 +56,63 @@ type TitleInfo struct {
 	Year     int
 }
 
+// OmdbInfo is used as an unmarshaller target for JSON. It's embedded
+// inside the QueueItem to allow us to use the information to generate
+// a file structure, and also to store the information inside
+// of a cache file or a database.
 type OmdbInfo struct {
-	Genre       string
+	Genre       StringList
 	Title       string
-	Plot        string
+	Description string `json:"plot"`
 	ReleaseYear int
 	Runtime     string
 	ImdbId      string
-	Type        string
-	Poster      string
+	Type        OmdbType
+	PosterUrl   string `json:"poster"`
 }
 
+type StringList []string
+type OmdbType int
+
+const (
+	movie OmdbType = iota
+	series
+)
+
+// UnmarshalJSON on OmdbType will look at the data provided
+// and will set the type to an integer corresponding to the
+// OmdbType const.
+func (omdbType *OmdbType) UnmarshalJSON(data []byte) error {
+	t := string(data[1 : len(data)-1])
+	switch t {
+	case "series":
+		*omdbType = series
+	case "movie":
+		*omdbType = movie
+	default:
+		return errors.New("unable to unmarshal JSON for 'Type' - unknown value " + t)
+	}
+
+	return nil
+}
+
+// UnmarshalJSON on StringList will unmarshal the data provided by
+// removing the surrounding quotes and splitting the provided
+// information in to a slice (comma-separated)
+func (sl *StringList) UnmarshalJSON(data []byte) error {
+	log.Printf("Unmarshalling JSON - data %v\n", string(data))
+	if len(data) >= 2 && data[0] == '"' && data[len(data)-1] == '"' {
+		data = data[1 : len(data)-1]
+	}
+
+	list := strings.Split(string(bytes.TrimSpace(data)), ", ")
+	*sl = append(*sl, list...)
+
+	return nil
+}
+
+// ProcessorQueue is the Queue of items to be processed by this
+// processor
 type ProcessorQueue struct {
 	Items []*QueueItem
 	sync.Mutex
@@ -178,7 +234,7 @@ func (item *QueueItem) FormatTitle() error {
 
 	// Search for season info and optional year information
 	if seasonGroups := seasonMatcher.FindStringSubmatch(title); len(seasonGroups) >= 1 {
-		info := &TitleInfo{
+		item.TitleInfo = &TitleInfo{
 			Episodic: true,
 			Title:    seasonGroups[1],
 			Season:   convertToInt(seasonGroups[2]),
@@ -186,19 +242,17 @@ func (item *QueueItem) FormatTitle() error {
 			Year:     convertToInt(seasonGroups[4]),
 		}
 
-		item.TitleInfo = info
 		return nil
 	}
 
 	// Try find if it's a movie instead
 	if movieGroups := movieMatcher.FindStringSubmatch(item.Name); len(movieGroups) >= 1 {
-		info := &TitleInfo{
+		item.TitleInfo = &TitleInfo{
 			Episodic: false,
 			Title:    movieGroups[1],
 			Year:     convertToInt(movieGroups[2]),
 		}
 
-		item.TitleInfo = info
 		return nil
 	}
 

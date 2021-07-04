@@ -81,11 +81,20 @@ const (
 	series
 )
 
+func trimQuotesFromByteSlice(data []byte) string {
+	strData := string(data)
+	if len(strData) >= 2 && strData[0] == '"' && strData[len(strData)-1] == '"' {
+		strData = strData[1 : len(strData)-1]
+	}
+
+	return strings.TrimSpace(strData)
+}
+
 // UnmarshalJSON on OmdbType will look at the data provided
 // and will set the type to an integer corresponding to the
 // OmdbType const.
 func (omdbType *OmdbType) UnmarshalJSON(data []byte) error {
-	t := string(data[1 : len(data)-1])
+	t := trimQuotesFromByteSlice(data)
 	switch t {
 	case "series":
 		*omdbType = series
@@ -102,19 +111,16 @@ func (omdbType *OmdbType) UnmarshalJSON(data []byte) error {
 // removing the surrounding quotes and splitting the provided
 // information in to a slice (comma-separated)
 func (sl *StringList) UnmarshalJSON(data []byte) error {
-	log.Printf("Unmarshalling JSON - data %v\n", string(data))
-	if len(data) >= 2 && data[0] == '"' && data[len(data)-1] == '"' {
-		data = data[1 : len(data)-1]
-	}
+	t := trimQuotesFromByteSlice(data)
 
-	list := strings.Split(string(bytes.TrimSpace(data)), ", ")
+	list := strings.Split(t, ", ")
 	*sl = append(*sl, list...)
 
 	return nil
 }
 
 func (rt *OmdbResponseType) UnmarshalJSON(data []byte) error {
-	t := string(data[1 : len(data)-1])
+	t := trimQuotesFromByteSlice(data)
 	switch t {
 	case "False":
 		*rt = false

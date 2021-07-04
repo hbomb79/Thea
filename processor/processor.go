@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"path/filepath"
 	"time"
+
+	fluentffmpeg "github.com/modfy/fluent-ffmpeg"
 )
 
 // Each stage represents a certain stage in the pipeline
@@ -254,20 +256,21 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			// Store OMDB result in QueueItem
 			queueItem.OmdbInfo = &info
 			log.Printf("OMDB result: %#v\n", info)
-			if queueItem.OmdbInfo.Response {
-
-				// Advance our item to the next stage
-				p.Queue.AdvanceStage(queueItem)
-
-				// Wakeup any sleeping workers in next stage
-				p.WorkerPool.WakeupWorkers(Format)
-			} else {
+			if !queueItem.OmdbInfo.Response {
 				queueItem.RaiseTrouble(&Trouble{
 					"OMDB response failed - " + queueItem.OmdbInfo.Error,
 					Error,
 					nil,
 				})
+
+				continue
 			}
+
+			// Advance our item to the next stage
+			p.Queue.AdvanceStage(queueItem)
+
+			// Wakeup any sleeping workers in next stage
+			p.WorkerPool.WakeupWorkers(Format)
 		}
 
 		// If no work, wait for wakeup
@@ -278,5 +281,40 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 }
 
 func (p *Processor) formatterWorkerTask(w *Worker) error {
-	return nil
+	for {
+	workLoop:
+		for {
+			// Check if work can be done...
+			queueItem := p.Queue.Pick(w.pipelineStage)
+			if queueItem == nil {
+				break workLoop
+			}
+
+			tInfo := queueItem.TitleInfo
+			outputFormat := p.Config.Format.TargetFormat
+			outputPath := p.Config.Format.OutputPath
+			if tInfo.Episodic {
+				fName := fmt.Sprintf("%v_%v_%v_%v_%v.%v", tInfo.Episode, tInfo.Season, tInfo.Title, "TODO", tInfo.Year, outputFormat)
+				outputPath = filepath.Join(outputPath, queueItem.TitleInfo.Title, fmt.Sprint(queueItem.TitleInfo.Season), fName)
+			} else {
+				fName := fmt.Sprintf("%v_%v_%v.%v", tInfo.Title, "TODO", tInfo.Year, outputFormat)
+				outputPath = filepath.Join(outputPath, fName)
+			}
+
+			// Build our exec.Cmd to run the ffmpeg command
+			_ = fluentffmpeg.NewCommand("").
+				InputPath(queueItem.Path).
+				OutputFormat(outputFormat).
+				OutputPath(outputPath).
+				Build()
+
+			// Advance our item to the next stage
+			p.Queue.AdvanceStage(queueItem)
+		}
+
+		// If no work, wait for wakeup
+		if isAlive := w.sleep(); !isAlive {
+			return nil
+		}
+	}
 }

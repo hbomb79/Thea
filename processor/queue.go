@@ -80,6 +80,10 @@ const (
 	series
 )
 
+// Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
+// used to remove the surrounding quotes from the provided byte slice
+// and any remaining whitespace is trimmed off. The altered string is then
+// returned to the caller
 func trimQuotesFromByteSlice(data []byte) string {
 	strData := string(data)
 	if len(strData) >= 2 && strData[0] == '"' && strData[len(strData)-1] == '"' {

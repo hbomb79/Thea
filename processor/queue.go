@@ -119,6 +119,10 @@ func (sl *StringList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// UnmarshalJSON on OmdbResponseType converts the given string
+// from OMDB in to a golang boolean - this method is required
+// because the response from OMDB is not a JSON-bool as it's
+// capitalised
 func (rt *OmdbResponseType) UnmarshalJSON(data []byte) error {
 	t := trimQuotesFromByteSlice(data)
 	switch t {

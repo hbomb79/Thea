@@ -4,5 +4,6 @@ go 1.16
 
 require (
 	github.com/floostack/transcoder v1.1.1 // indirect
+	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/ilyakaznacheev/cleanenv v1.2.5
 )

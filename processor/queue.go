@@ -80,7 +80,7 @@ func (item *QueueItem) RaiseTrouble(trouble *Trouble) {
 		item.Status = Troubled
 		item.Trouble = trouble
 	} else {
-		log.Fatalf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble)
+		panic(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble))
 	}
 }
 

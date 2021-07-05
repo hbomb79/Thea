@@ -304,8 +304,7 @@ func (p *Processor) formatterWorkerTask(w *Worker) error {
 			}
 
 			// Build our exec.Cmd to run the ffmpeg command
-			cmdStdOut := &bytes.Buffer{}
-			cmdStdErr := &bytes.Buffer{}
+			cmdStdOut, cmdStdErr := &bytes.Buffer{}, &bytes.Buffer{}
 			done := make(chan error, 1)
 			cmd := fluentffmpeg.NewCommand("").
 				InputPath(queueItem.Path).
@@ -313,8 +312,7 @@ func (p *Processor) formatterWorkerTask(w *Worker) error {
 				OutputPath(outputPath).
 				Build()
 
-			cmd.Stderr = cmdStdErr
-			cmd.Stdout = cmdStdOut
+			cmd.Stderr, cmd.Stdout = cmdStdErr, cmdStdOut
 			cmd.Start()
 
 			go func() {

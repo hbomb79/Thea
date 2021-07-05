@@ -27,6 +27,8 @@ type formatterConfig struct {
 	CacheFile          string `yaml:"cache_file"`
 	TargetFormat       string `yaml:"target_format"`
 	ImportDirTickDelay int    `yaml:"import_polling_delay"`
+	FfmpegBinaryPath   string `yaml:"ffmpeg_binary"`
+	FfprobeBinaryPath  string `yaml:"ffprobe_binary"`
 }
 
 type databaseConfig struct {

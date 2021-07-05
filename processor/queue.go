@@ -2,13 +2,40 @@ package processor
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 )
+
+// Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
+// used to remove the surrounding quotes from the provided byte slice
+// and any remaining whitespace is trimmed off. The altered string is then
+// returned to the caller
+func trimQuotesFromByteSlice(data []byte) string {
+	strData := string(data)
+	if len(strData) >= 2 && strData[0] == '"' && strData[len(strData)-1] == '"' {
+		strData = strData[1 : len(strData)-1]
+	}
+
+	return strings.TrimSpace(strData)
+}
+
+// convertToInt is a helper method that accepts
+// a string input and will attempt to convert that string
+// to an integer - if it fails, -1 is returned
+func convertToInt(input string) int {
+	v, err := strconv.Atoi(input)
+	if err != nil {
+		return -1
+	}
+
+	return v
+}
 
 // QueueItemStatus represents whether or not the
 // QueueItem is currently being worked on, or if
@@ -44,6 +71,58 @@ type QueueItem struct {
 	OmdbInfo   *OmdbInfo
 }
 
+// RaiseTrouble is a method that can be called from
+// tasks that indicates a trouble-state has occured which
+// requires some form of intervention from the user
+func (item *QueueItem) RaiseTrouble(trouble *Trouble) {
+	log.Printf("[Trouble] Raising trouble (%v) for QueueItem (%v)!\n", trouble.Message, item.Path)
+	if item.Trouble == nil {
+		item.Status = Troubled
+		item.Trouble = trouble
+	} else {
+		log.Fatalf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble)
+	}
+}
+
+// FormatTitle accepts a string (title) and reformats it
+// based on text-filtering configuration provided by
+// the user
+func (item *QueueItem) FormatTitle() error {
+	normaliserMatcher := regexp.MustCompile(`(?i)[\.\s]`)
+	seasonMatcher := regexp.MustCompile(`(?i)^(.*?)\_?s(\d+)\_?e(\d+)\_*((?:20|19)\d{2})?`)
+	movieMatcher := regexp.MustCompile(`(?i)^(.+?)\_*((?:20|19)\d{2})`)
+
+	title := normaliserMatcher.ReplaceAllString(item.Name, "_")
+
+	// Search for season info and optional year information
+	if seasonGroups := seasonMatcher.FindStringSubmatch(title); len(seasonGroups) >= 1 {
+		item.TitleInfo = &TitleInfo{
+			Episodic: true,
+			Title:    seasonGroups[1],
+			Season:   convertToInt(seasonGroups[2]),
+			Episode:  convertToInt(seasonGroups[3]),
+			Year:     convertToInt(seasonGroups[4]),
+		}
+
+		return nil
+	}
+
+	// Try find if it's a movie instead
+	if movieGroups := movieMatcher.FindStringSubmatch(item.Name); len(movieGroups) >= 1 {
+		item.TitleInfo = &TitleInfo{
+			Episodic: false,
+			Title:    movieGroups[1],
+			Year:     convertToInt(movieGroups[2]),
+		}
+
+		return nil
+	}
+
+	// Didn't match either case; return error so that trouble
+	// can be raised by the worker.
+	return TitleFormatError{item, "Failed to match RegExp!"}
+}
+
 // TitleInfo contains the information about the import QueueItem
 // that is gleamed from the pathname given; such as the title and
 // if the show is an episode or a movie.
@@ -54,6 +133,17 @@ type TitleInfo struct {
 	Episode    int
 	Year       int
 	Resolution string
+}
+
+// OutputPath is a method to calculate the path to which this
+// item should be output to - based on the TitleInformatio
+func (tInfo *TitleInfo) OutputPath() string {
+	if tInfo.Episodic {
+		fName := fmt.Sprintf("%v_%v_%v_%v_%v", tInfo.Episode, tInfo.Season, tInfo.Title, tInfo.Resolution, tInfo.Year)
+		return filepath.Join(tInfo.Title, fmt.Sprint(tInfo.Season), fName)
+	}
+
+	return fmt.Sprintf("%v_%v_%v", tInfo.Title, tInfo.Resolution, tInfo.Year)
 }
 
 // OmdbInfo is used as an unmarshaller target for JSON. It's embedded
@@ -74,26 +164,25 @@ type OmdbInfo struct {
 }
 
 type StringList []string
-type OmdbType int
-type OmdbResponseType bool
+
+// UnmarshalJSON on StringList will unmarshal the data provided by
+// removing the surrounding quotes and splitting the provided
+// information in to a slice (comma-separated)
+func (sl *StringList) UnmarshalJSON(data []byte) error {
+	t := trimQuotesFromByteSlice(data)
+
+	list := strings.Split(t, ", ")
+	*sl = append(*sl, list...)
+
+	return nil
+}
 
 const (
 	movie OmdbType = iota
 	series
 )
 
-// Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
-// used to remove the surrounding quotes from the provided byte slice
-// and any remaining whitespace is trimmed off. The altered string is then
-// returned to the caller
-func trimQuotesFromByteSlice(data []byte) string {
-	strData := string(data)
-	if len(strData) >= 2 && strData[0] == '"' && strData[len(strData)-1] == '"' {
-		strData = strData[1 : len(strData)-1]
-	}
-
-	return strings.TrimSpace(strData)
-}
+type OmdbType int
 
 // UnmarshalJSON on OmdbType will look at the data provided
 // and will set the type to an integer corresponding to the
@@ -112,17 +201,7 @@ func (omdbType *OmdbType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// UnmarshalJSON on StringList will unmarshal the data provided by
-// removing the surrounding quotes and splitting the provided
-// information in to a slice (comma-separated)
-func (sl *StringList) UnmarshalJSON(data []byte) error {
-	t := trimQuotesFromByteSlice(data)
-
-	list := strings.Split(t, ", ")
-	*sl = append(*sl, list...)
-
-	return nil
-}
+type OmdbResponseType bool
 
 // UnmarshalJSON on OmdbResponseType converts the given string
 // from OMDB in to a golang boolean - this method is required
@@ -208,18 +287,6 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 	}
 }
 
-// convertToInt is a helper method that accepts
-// a string input and will attempt to convert that string
-// to an integer - if it fails, -1 is returned
-func convertToInt(input string) int {
-	v, err := strconv.Atoi(input)
-	if err != nil {
-		return -1
-	}
-
-	return v
-}
-
 // isInQueue will return true if the queue contains a QueueItem
 // with a path field matching the path provided to this method
 // Note: callers responsiblity to ensure the queues Mutex is
@@ -233,56 +300,4 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 	}
 
 	return false
-}
-
-// RaiseTrouble is a method that can be called from
-// tasks that indicates a trouble-state has occured which
-// requires some form of intervention from the user
-func (item *QueueItem) RaiseTrouble(trouble *Trouble) {
-	log.Printf("[Trouble] Raising trouble (%v) for QueueItem (%v)!\n", trouble.Message, item.Path)
-	if item.Trouble == nil {
-		item.Status = Troubled
-		item.Trouble = trouble
-	} else {
-		log.Fatalf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble)
-	}
-}
-
-// FormatTitle accepts a string (title) and reformats it
-// based on text-filtering configuration provided by
-// the user
-func (item *QueueItem) FormatTitle() error {
-	normaliserMatcher := regexp.MustCompile(`(?i)[\.\s]`)
-	seasonMatcher := regexp.MustCompile(`(?i)^(.*?)\_?s(\d+)\_?e(\d+)\_*((?:20|19)\d{2})?`)
-	movieMatcher := regexp.MustCompile(`(?i)^(.+?)\_*((?:20|19)\d{2})`)
-
-	title := normaliserMatcher.ReplaceAllString(item.Name, "_")
-
-	// Search for season info and optional year information
-	if seasonGroups := seasonMatcher.FindStringSubmatch(title); len(seasonGroups) >= 1 {
-		item.TitleInfo = &TitleInfo{
-			Episodic: true,
-			Title:    seasonGroups[1],
-			Season:   convertToInt(seasonGroups[2]),
-			Episode:  convertToInt(seasonGroups[3]),
-			Year:     convertToInt(seasonGroups[4]),
-		}
-
-		return nil
-	}
-
-	// Try find if it's a movie instead
-	if movieGroups := movieMatcher.FindStringSubmatch(item.Name); len(movieGroups) >= 1 {
-		item.TitleInfo = &TitleInfo{
-			Episodic: false,
-			Title:    movieGroups[1],
-			Year:     convertToInt(movieGroups[2]),
-		}
-
-		return nil
-	}
-
-	// Didn't match either case; return error so that trouble
-	// can be raised by the worker.
-	return TitleFormatError{item, "Failed to match RegExp!"}
 }

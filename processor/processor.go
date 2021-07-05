@@ -1,19 +1,17 @@
 package processor
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"path/filepath"
 	"time"
 
-	fluentffmpeg "github.com/modfy/fluent-ffmpeg"
+	"github.com/floostack/transcoder/ffmpeg"
 )
 
 // Each stage represents a certain stage in the pipeline
@@ -282,6 +280,11 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 	}
 }
 
+// formatterWorkerTask is a WorkerTask that can be
+// provided to a Worker that will pick a pending item
+// from the queue and will execute FFmpeg to format
+// the file while automatically storing progress
+// on the QueueItem being processed
 func (p *Processor) formatterWorkerTask(w *Worker) error {
 	for {
 	workLoop:
@@ -292,53 +295,33 @@ func (p *Processor) formatterWorkerTask(w *Worker) error {
 				break workLoop
 			}
 
-			tInfo := queueItem.TitleInfo
+			// Construct output path
 			outputFormat := p.Config.Format.TargetFormat
-			outputPath := p.Config.Format.OutputPath
-			if tInfo.Episodic {
-				fName := fmt.Sprintf("%v_%v_%v_%v_%v.%v", tInfo.Episode, tInfo.Season, tInfo.Title, tInfo.Resolution, tInfo.Year, outputFormat)
-				outputPath = filepath.Join(outputPath, queueItem.TitleInfo.Title, fmt.Sprint(queueItem.TitleInfo.Season), fName)
-			} else {
-				fName := fmt.Sprintf("%v_%v_%v.%v", tInfo.Title, tInfo.Resolution, tInfo.Year, outputFormat)
-				outputPath = filepath.Join(outputPath, fName)
+			ffmpegOverwrite := true
+			ffmpegOpts, ffmpegCfg := &ffmpeg.Options{
+				OutputFormat: &outputFormat,
+				Overwrite:    &ffmpegOverwrite,
+			}, &ffmpeg.Config{
+				ProgressEnabled: true,
+				FfmpegBinPath:   p.Config.Format.FfmpegBinaryPath,
+				FfprobeBinPath:  p.Config.Format.FfprobeBinaryPath,
 			}
 
-			// Build our exec.Cmd to run the ffmpeg command
-			cmdStdOut, cmdStdErr := &bytes.Buffer{}, &bytes.Buffer{}
-			done := make(chan error, 1)
-			cmd := fluentffmpeg.NewCommand("").
-				InputPath(queueItem.Path).
-				OutputFormat(outputFormat).
-				OutputPath(outputPath).
-				Build()
+			itemOutputPath := fmt.Sprintf("%s.%s", queueItem.TitleInfo.OutputPath(), outputFormat)
+			itemOutputPath = filepath.Join(p.Config.Format.OutputPath, itemOutputPath)
+			progress, err := ffmpeg.
+				New(ffmpegCfg).
+				Input(queueItem.Path).
+				Output(itemOutputPath).
+				WithOptions(ffmpegOpts).
+				Start(ffmpegOpts)
 
-			cmd.Stderr, cmd.Stdout = cmdStdErr, cmdStdOut
-			cmd.Start()
+			if err != nil {
+				return err
+			}
 
-			go func() {
-				done <- cmd.Wait()
-			}()
-
-		cmdLoop:
-			for {
-				select {
-				case err := <-done:
-					if err != nil {
-						log.Printf("ERROR! %v\n", err.Error())
-						queueItem.RaiseTrouble(&Trouble{
-							"FFMPEG error: " + err.Error(),
-							Error,
-							nil,
-						})
-
-						continue workLoop
-					}
-
-					break cmdLoop
-				case <-time.After(1 * time.Second):
-					out, _ := ioutil.ReadAll(cmdStdOut)
-					log.Printf("FFMPEG out: %v\n", string(out))
-				}
+			for v := range progress {
+				log.Printf("[Progress] %#v\n", v)
 			}
 
 			// Advance our item to the next stage

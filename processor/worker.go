@@ -62,7 +62,10 @@ func (worker *Worker) WakeupChan() WorkerWakeupChan {
 	return worker.wakeupChan
 }
 
-// Closes the Worker by closing the NotifyChan,
+// Close() closes the Worker by closing the WakeChan.
+// Note that this does not interupt currently running
+// goroutines. TODO implement a way to forcefully
+// close goroutines.
 func (worker *Worker) Close() error {
 	close(worker.wakeupChan)
 	return nil

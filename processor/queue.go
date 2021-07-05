@@ -91,28 +91,32 @@ func (item *QueueItem) FormatTitle() error {
 	normaliserMatcher := regexp.MustCompile(`(?i)[\.\s]`)
 	seasonMatcher := regexp.MustCompile(`(?i)^(.*?)\_?s(\d+)\_?e(\d+)\_*((?:20|19)\d{2})?`)
 	movieMatcher := regexp.MustCompile(`(?i)^(.+?)\_*((?:20|19)\d{2})`)
+	resolutionMatcher := regexp.MustCompile(`(?i)(\d{3,4}p)|(\dk)`)
 
 	title := normaliserMatcher.ReplaceAllString(item.Name, "_")
+	resolution := resolutionMatcher.FindString(item.Name)
 
 	// Search for season info and optional year information
 	if seasonGroups := seasonMatcher.FindStringSubmatch(title); len(seasonGroups) >= 1 {
 		item.TitleInfo = &TitleInfo{
-			Episodic: true,
-			Title:    seasonGroups[1],
-			Season:   convertToInt(seasonGroups[2]),
-			Episode:  convertToInt(seasonGroups[3]),
-			Year:     convertToInt(seasonGroups[4]),
+			Episodic:   true,
+			Title:      seasonGroups[1],
+			Season:     convertToInt(seasonGroups[2]),
+			Episode:    convertToInt(seasonGroups[3]),
+			Year:       convertToInt(seasonGroups[4]),
+			Resolution: resolution,
 		}
 
 		return nil
 	}
 
 	// Try find if it's a movie instead
-	if movieGroups := movieMatcher.FindStringSubmatch(item.Name); len(movieGroups) >= 1 {
+	if movieGroups := movieMatcher.FindStringSubmatch(title); len(movieGroups) >= 1 {
 		item.TitleInfo = &TitleInfo{
-			Episodic: false,
-			Title:    movieGroups[1],
-			Year:     convertToInt(movieGroups[2]),
+			Episodic:   false,
+			Title:      movieGroups[1],
+			Year:       convertToInt(movieGroups[2]),
+			Resolution: resolution,
 		}
 
 		return nil

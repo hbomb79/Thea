@@ -295,7 +295,6 @@ func (p *Processor) formatterWorkerTask(w *Worker) error {
 				break workLoop
 			}
 
-			// Construct output path
 			outputFormat := p.Config.Format.TargetFormat
 			ffmpegOverwrite := true
 			ffmpegOpts, ffmpegCfg := &ffmpeg.Options{

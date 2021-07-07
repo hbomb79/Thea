@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"errors"
@@ -56,7 +56,9 @@ func (router *Router) Start(opts *RouterOptions) error {
 	}
 
 	router.buildRoutes(opts)
-	err := http.ListenAndServe(fmt.Sprintf("%v:%v", opts.ApiHost, opts.ApiPort), router.Mux)
+
+	host := fmt.Sprintf("%v:%v", opts.ApiHost, opts.ApiPort)
+	err := http.ListenAndServe(host, trimTrailingSlashesMiddleware(router.Mux))
 	if err != nil {
 		return err
 	}
@@ -74,6 +76,7 @@ func (router *Router) buildRoutes(opts *RouterOptions) {
 		routePath := strings.ReplaceAll(fmt.Sprintf("%s/%s", opts.ApiRoot, route.path), "//", "/")
 		muxRoute := router.Mux.HandleFunc(routePath, route.handler)
 
+		fmt.Printf("Building route %#v... path: %v\n", route, routePath)
 		if len(route.methods) > 0 {
 			muxRoute = muxRoute.Methods(route.methods...)
 		}

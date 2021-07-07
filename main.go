@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/hbomb79/TPA/api"
 	"github.com/hbomb79/TPA/processor"
 )
 
@@ -31,12 +34,12 @@ func main() {
 	redirectLogToFile(filepath.Join(homeDir, "tpa.log"))
 
 	// Creates a new Processor struct, filling in the configuration
-	proc, procCfg, router := processor.New(), &processor.TPAConfig{}, NewRouter()
+	proc, procCfg := processor.New(), new(processor.TPAConfig)
 	procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml"))
 	proc.WithConfig(procCfg)
 
 	// Spawn HTTP API in background
-	go setupApi(router, proc)
+	setupApi(proc)
 
 	// Run processor
 	err = proc.Start()
@@ -45,11 +48,16 @@ func main() {
 	}
 }
 
-func setupApi(router *Router, proc *processor.Processor) {
+func setupApi(proc *processor.Processor) *api.Router {
+	router := api.NewRouter()
+
 	// -- BEGIN API v0 routes -- //
-	router.CreateRoute("v0/queue/", "GET", proc.Queue.ApiQueueIndex)
-	router.CreateRoute("v0/queue/{item_id}", "GET", proc.Queue.ApiQueueGet)
-	router.CreateRoute("v0/queue/{item_id}", "POST", proc.Queue.ApiQueueUpdate)
+	router.CreateRoute("v0", "GET", func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "Test")
+	})
+	router.CreateRoute("v0/queue", "GET", proc.Queue.ApiQueueIndex)
+	router.CreateRoute("v0/queue/{id}", "GET", proc.Queue.ApiQueueGet)
+	router.CreateRoute("v0/queue/{id}", "POST", proc.Queue.ApiQueueUpdate)
 
 	// TODO
 	// router.CreateRoute("v0/troubles/", "GET", apiTroubleIndex)
@@ -57,9 +65,11 @@ func setupApi(router *Router, proc *processor.Processor) {
 	// router.CreateRoute("v0/troubles/{trouble_id}", "PUSH", apiTroubleUpdate)
 	// -- ENDOF API v0 routes -- //
 
-	router.Start(&RouterOptions{
+	go router.Start(&api.RouterOptions{
 		ApiPort: 8080,
 		ApiHost: "localhost",
 		ApiRoot: "/tpa/api/",
 	})
+
+	return router
 }

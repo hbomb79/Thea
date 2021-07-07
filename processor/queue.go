@@ -11,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/gorilla/mux"
+	"github.com/hbomb79/TPA/api"
 )
 
 // Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
@@ -308,10 +311,26 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 }
 
 // apiQueueIndex returns the current processor queue
-func (queue *ProcessorQueue) ApiQueueIndex(w http.ResponseWriter, r *http.Request) {}
+func (queue *ProcessorQueue) ApiQueueIndex(w http.ResponseWriter, r *http.Request) {
+	api.JsonMarshal(w, queue.Items)
+}
 
 // apiQueueGet returns full details for a queue item at the index {item_id} inside the queue
-func (queue *ProcessorQueue) ApiQueueGet(w http.ResponseWriter, r *http.Request) {}
+func (queue *ProcessorQueue) ApiQueueGet(w http.ResponseWriter, r *http.Request) {
+	stringId := mux.Vars(r)["id"]
+	id, err := strconv.Atoi(stringId)
+	if err != nil {
+		api.JsonError(w, "QueueItem ID '"+stringId+"' not acceptable - "+err.Error(), http.StatusNotAcceptable)
+		return
+	}
+
+	if len(queue.Items) <= id {
+		api.JsonError(w, "QueueItem with ID "+fmt.Sprint(id)+" not found", http.StatusNotFound)
+		return
+	}
+
+	api.JsonMarshal(w, queue.Items[id])
+}
 
 // apiQueueUpdate pushes an update to the processor dictating the new
 // positioning of a certain queue item. This allows the user to

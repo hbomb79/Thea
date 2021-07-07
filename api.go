@@ -4,13 +4,13 @@ import "net/http"
 
 func setupApiRoutes(router *Router) {
 	// -- BEGIN API v0 routes -- //
-	router.CreateRoute("v0/queue/", apiQueueIndex).Methods("GET")
-	router.CreateRoute("v0/queue/{item_id}", apiQueueGet).Methods("GET")
-	router.CreateRoute("v0/queue/{item_id}", apiQueueUpdate).Methods("PUSH")
+	router.CreateRoute("v0/queue/", "GET", apiQueueIndex)
+	router.CreateRoute("v0/queue/{item_id}", "GET", apiQueueGet)
+	router.CreateRoute("v0/queue/{item_id}", "POST", apiQueueUpdate)
 
-	router.CreateRoute("v0/troubles/", apiTroubleIndex).Methods("GET")
-	router.CreateRoute("v0/troubles/{trouble_id}", apiTroubleGet).Methods("GET")
-	router.CreateRoute("v0/troubles/{trouble_id}", apiTroubleUpdate).Methods("PUSH")
+	router.CreateRoute("v0/troubles/", "GET", apiTroubleIndex)
+	router.CreateRoute("v0/troubles/{trouble_id}", "GET", apiTroubleGet)
+	router.CreateRoute("v0/troubles/{trouble_id}", "PUSH", apiTroubleUpdate)
 	// -- ENDOF API v0 routes -- //
 }
 

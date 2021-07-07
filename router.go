@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -38,8 +39,12 @@ func NewRouter() *Router {
 // after prepending it with the API root we're using or this particular
 // router - this allows us to change the location of the API without
 // having to adjust every single handler.
-func (router *Router) CreateRoute(path string, handler http.HandlerFunc) *mux.Route {
-	return router.Mux.HandleFunc(path, handler)
+func (router *Router) CreateRoute(path string, methods string, handler http.HandlerFunc) {
+	// Remove any whitespace so we can split on ',' to form
+	// a slice without leading/trailing whitespace
+	methods = strings.ReplaceAll(methods, " ", "")
+
+	router.routes = append(router.routes, &routerListener{path, strings.Split(methods, ","), handler})
 }
 
 // Start accepts a struct of options and will use these options
@@ -50,12 +55,29 @@ func (router *Router) Start(opts *RouterOptions) error {
 		return err
 	}
 
+	router.buildRoutes(opts)
 	err := http.ListenAndServe(fmt.Sprintf("%v:%v", opts.ApiHost, opts.ApiPort), router.Mux)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// buildRoutes is used internally to take the list of routes
+// created by the user (Router.CreateRoute) and adds them to the *mux.Router
+// on this Router - in the process, paths are prepended with the
+// root address of this API (opts.ApiRoot) and duplicate slashes
+// are removed.
+func (router *Router) buildRoutes(opts *RouterOptions) {
+	for _, route := range router.routes {
+		routePath := strings.ReplaceAll(fmt.Sprintf("%s/%s", opts.ApiRoot, route.path), "//", "/")
+		muxRoute := router.Mux.HandleFunc(routePath, route.handler)
+
+		if len(route.methods) > 0 {
+			muxRoute = muxRoute.Methods(route.methods...)
+		}
+	}
 }
 
 // validateOpts checks that the user provided options are valid

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -305,3 +306,15 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 
 	return false
 }
+
+// apiQueueIndex returns the current processor queue
+func (queue *ProcessorQueue) ApiQueueIndex(w http.ResponseWriter, r *http.Request) {}
+
+// apiQueueGet returns full details for a queue item at the index {item_id} inside the queue
+func (queue *ProcessorQueue) ApiQueueGet(w http.ResponseWriter, r *http.Request) {}
+
+// apiQueueUpdate pushes an update to the processor dictating the new
+// positioning of a certain queue item. This allows the user to
+// reorder the queue by sending an item to the top of the
+// queue, therefore priorisiting it - similar to the Steam library
+func (queue *ProcessorQueue) ApiQueueUpdate(w http.ResponseWriter, r *http.Request) {}

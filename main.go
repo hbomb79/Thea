@@ -36,16 +36,30 @@ func main() {
 	proc.WithConfig(procCfg)
 
 	// Spawn HTTP API in background
-	setupApiRoutes(router)
-	go router.Start(&RouterOptions{
-		ApiPort: 8080,
-		ApiHost: "localhost",
-		ApiRoot: "/tpa/api/",
-	})
+	go setupApi(router, proc)
 
 	// Run processor
 	err = proc.Start()
 	if err != nil {
 		log.Panicf(fmt.Sprintf("Failed to initialise Processer - %v\n", err.Error()))
 	}
+}
+
+func setupApi(router *Router, proc *processor.Processor) {
+	// -- BEGIN API v0 routes -- //
+	router.CreateRoute("v0/queue/", "GET", proc.Queue.ApiQueueIndex)
+	router.CreateRoute("v0/queue/{item_id}", "GET", proc.Queue.ApiQueueGet)
+	router.CreateRoute("v0/queue/{item_id}", "POST", proc.Queue.ApiQueueUpdate)
+
+	// TODO
+	// router.CreateRoute("v0/troubles/", "GET", apiTroubleIndex)
+	// router.CreateRoute("v0/troubles/{trouble_id}", "GET", apiTroubleGet)
+	// router.CreateRoute("v0/troubles/{trouble_id}", "PUSH", apiTroubleUpdate)
+	// -- ENDOF API v0 routes -- //
+
+	router.Start(&RouterOptions{
+		ApiPort: 8080,
+		ApiHost: "localhost",
+		ApiRoot: "/tpa/api/",
+	})
 }

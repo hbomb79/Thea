@@ -309,16 +309,22 @@ func (queue *ProcessorQueue) PromoteItem(item *QueueItem) error {
 	// after the index given, and appending them together
 	// before appending the result to a new slice containing
 	// only the item referenced by the index given.
-	promote := func(source []*QueueItem, index int) {
-		out := append([]*QueueItem{source[index]}, source[:index]...)
+	promote := func(source []*QueueItem, index int) []*QueueItem {
+		if index == 0 {
+			return source
+		} else if index == len(source)-1 {
+			fmt.Println("Taking shortcut")
+			return append([]*QueueItem{source[index]}, source[:len(source)-1]...)
+		}
 
-		source = append(out, source[index+1:]...)
+		out := append([]*QueueItem{source[index]}, source[:index]...)
+		return append(out, source[index+1:]...)
 	}
 
 	// Search for the item and promote it if/when found
 	for position := 0; position <= len(queue.Items); position++ {
 		if queue.Items[position] == item {
-			promote(queue.Items, position)
+			queue.Items = promote(queue.Items, position)
 
 			return nil
 		}
@@ -353,12 +359,12 @@ func (queue *ProcessorQueue) ApiQueueGet(w http.ResponseWriter, r *http.Request)
 	stringId := mux.Vars(r)["id"]
 	id, err := strconv.Atoi(stringId)
 	if err != nil {
-		api.JsonError(w, "QueueItem ID '"+stringId+"' not acceptable - "+err.Error(), http.StatusNotAcceptable)
+		api.JsonMessage(w, "QueueItem ID '"+stringId+"' not acceptable - "+err.Error(), http.StatusNotAcceptable)
 		return
 	}
 
 	if len(queue.Items) <= id {
-		api.JsonError(w, "QueueItem with ID "+fmt.Sprint(id)+" not found", http.StatusNotFound)
+		api.JsonMessage(w, "QueueItem with ID "+fmt.Sprint(id)+" not found", http.StatusNotFound)
 		return
 	}
 
@@ -370,5 +376,18 @@ func (queue *ProcessorQueue) ApiQueueGet(w http.ResponseWriter, r *http.Request)
 // reorder the queue by sending an item to the top of the
 // queue, therefore priorisiting it - similar to the Steam library
 func (queue *ProcessorQueue) ApiQueueUpdate(w http.ResponseWriter, r *http.Request) {
+	stringId := mux.Vars(r)["id"]
+	id, err := strconv.Atoi(stringId)
+	if err != nil {
+		api.JsonMessage(w, "QueueItem ID '"+stringId+"' not acceptable - "+err.Error(), http.StatusNotAcceptable)
+		return
+	}
 
+	if len(queue.Items) <= id {
+		api.JsonMessage(w, "QueueItem with ID "+fmt.Sprint(id)+" not found", http.StatusNotFound)
+	} else if queue.PromoteItem(queue.Items[id]) != nil {
+		api.JsonMessage(w, "Failed to promote QueueItem #"+stringId+": "+err.Error(), http.StatusInternalServerError)
+	} else {
+		api.JsonMessage(w, "Queue item promoted successfully", http.StatusOK)
+	}
 }

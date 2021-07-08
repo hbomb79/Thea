@@ -22,12 +22,12 @@ func JsonMarshal(w http.ResponseWriter, s interface{}) {
 	w.Write(marshalled)
 }
 
-// JsonError is an API function that is used to write
-// an error state to a given http ResponseWriter (w)
+// JsonMessage is an API function that is used to write
+// an error state or simple message to a given http ResponseWriter (w)
 // in the form {Status: status, Reason: e}. This can
 // be used to display informative error messages to the
 // API caller
-func JsonError(w http.ResponseWriter, e string, status int) {
+func JsonMessage(w http.ResponseWriter, e string, status int) {
 	marshalled, err := json.Marshal(struct {
 		Status int    `json:"status"`
 		Reason string `json:"reason"`

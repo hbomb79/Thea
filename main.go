@@ -68,7 +68,7 @@ func setupApi(proc *processor.Processor) *api.Router {
 	go router.Start(&api.RouterOptions{
 		ApiPort: 8080,
 		ApiHost: "localhost",
-		ApiRoot: "/tpa/api/",
+		ApiRoot: "/api/tpa/",
 	})
 
 	return router

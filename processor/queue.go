@@ -295,6 +295,39 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 	}
 }
 
+// PromoteItem accepts a QueueItem and will restructure the processor
+// queue items to mean that the item provided is the first QueueItem in
+// the slice. Returns an error if the queue item provided is not found
+// inside the queue slice.
+// Note: this method will lock the mutex for protected access to the
+// shared queue.
+func (queue *ProcessorQueue) PromoteItem(item *QueueItem) error {
+	queue.Lock()
+	defer queue.Unlock()
+
+	// Restructures the slice by taking the items before and
+	// after the index given, and appending them together
+	// before appending the result to a new slice containing
+	// only the item referenced by the index given.
+	promote := func(source []*QueueItem, index int) {
+		out := append([]*QueueItem{source[index]}, source[:index]...)
+
+		source = append(out, source[index+1:]...)
+	}
+
+	// Search for the item and promote it if/when found
+	for position := 0; position <= len(queue.Items); position++ {
+		if queue.Items[position] == item {
+			promote(queue.Items, position)
+
+			return nil
+		}
+	}
+
+	// Not found, return error
+	return errors.New("cannot promote: item does not exist inside this queue")
+}
+
 // isInQueue will return true if the queue contains a QueueItem
 // with a path field matching the path provided to this method
 // Note: callers responsiblity to ensure the queues Mutex is
@@ -336,4 +369,6 @@ func (queue *ProcessorQueue) ApiQueueGet(w http.ResponseWriter, r *http.Request)
 // positioning of a certain queue item. This allows the user to
 // reorder the queue by sending an item to the top of the
 // queue, therefore priorisiting it - similar to the Steam library
-func (queue *ProcessorQueue) ApiQueueUpdate(w http.ResponseWriter, r *http.Request) {}
+func (queue *ProcessorQueue) ApiQueueUpdate(w http.ResponseWriter, r *http.Request) {
+
+}

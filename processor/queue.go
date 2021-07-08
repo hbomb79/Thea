@@ -313,7 +313,6 @@ func (queue *ProcessorQueue) PromoteItem(item *QueueItem) error {
 		if index == 0 {
 			return source
 		} else if index == len(source)-1 {
-			fmt.Println("Taking shortcut")
 			return append([]*QueueItem{source[index]}, source[:len(source)-1]...)
 		}
 

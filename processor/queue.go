@@ -14,6 +14,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/hbomb79/TPA/api"
+	"github.com/liip/sheriff"
 )
 
 // Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
@@ -65,11 +66,11 @@ const (
 // This includes information found from the file-system, OMDB,
 // and the current processing status/stage
 type QueueItem struct {
-	Path       string
+	Path       string `groups:"api"`
 	Name       string
-	Status     QueueItemStatus
-	Stage      PipelineStage
-	StatusLine string
+	Status     QueueItemStatus `groups:"api"`
+	Stage      PipelineStage   `groups:"api"`
+	StatusLine string          `groups:"api"`
 	Trouble    *Trouble
 	TitleInfo  *TitleInfo
 	OmdbInfo   *OmdbInfo
@@ -230,7 +231,7 @@ func (rt *OmdbResponseType) UnmarshalJSON(data []byte) error {
 // ProcessorQueue is the Queue of items to be processed by this
 // processor
 type ProcessorQueue struct {
-	Items []*QueueItem
+	Items []*QueueItem `groups:"api"`
 	sync.Mutex
 }
 
@@ -333,6 +334,21 @@ func (queue *ProcessorQueue) PromoteItem(item *QueueItem) error {
 	return errors.New("cannot promote: item does not exist inside this queue")
 }
 
+// SheriffApiMarshal is a method of QueueItem that will marshal
+// the QueueItem that marshals the struct using Sheriff to remove
+// items from the struct that aren't exposed to the API (i.e. removes
+// struct fields that lack the `groups:"api"` tag)
+func (queue *ProcessorQueue) SheriffApiMarshal() (interface{}, error) {
+	o := &sheriff.Options{Groups: []string{"api"}}
+
+	data, err := sheriff.Marshal(o, queue)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
 // isInQueue will return true if the queue contains a QueueItem
 // with a path field matching the path provided to this method
 // Note: callers responsiblity to ensure the queues Mutex is
@@ -350,10 +366,17 @@ func (queue *ProcessorQueue) isInQueue(path string) bool {
 
 // apiQueueIndex returns the current processor queue
 func (queue *ProcessorQueue) ApiQueueIndex(w http.ResponseWriter, r *http.Request) {
-	api.JsonMarshal(w, queue.Items)
+	data, err := queue.SheriffApiMarshal()
+	if err != nil {
+		api.JsonMessage(w, err.Error(), http.StatusInternalServerError)
+
+		return
+	}
+
+	api.JsonMarshal(w, data)
 }
 
-// apiQueueGet returns full details for a queue item at the index {item_id} inside the queue
+// apiQueueGet returns full details for a queue item at the index {id} inside the queue
 func (queue *ProcessorQueue) ApiQueueGet(w http.ResponseWriter, r *http.Request) {
 	stringId := mux.Vars(r)["id"]
 	id, err := strconv.Atoi(stringId)

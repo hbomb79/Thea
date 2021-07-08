@@ -2,9 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 
@@ -52,9 +50,6 @@ func setupApi(proc *processor.Processor) *api.Router {
 	router := api.NewRouter()
 
 	// -- BEGIN API v0 routes -- //
-	router.CreateRoute("v0", "GET", func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "Test")
-	})
 	router.CreateRoute("v0/queue", "GET", proc.Queue.ApiQueueIndex)
 	router.CreateRoute("v0/queue/{id}", "GET", proc.Queue.ApiQueueGet)
 	router.CreateRoute("v0/queue/{id}", "POST", proc.Queue.ApiQueueUpdate)

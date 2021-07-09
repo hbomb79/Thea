@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/ilyakaznacheev/cleanenv"
 )
 
 // Each stage represents a certain stage in the pipeline
@@ -29,12 +30,67 @@ const (
 	Finish
 )
 
+// TPAConfig is the struct used to contain the
+// various user config supplied by file, or
+// manually inside the code.
+type TPAConfig struct {
+	Concurrent ConcurrentConfig `yaml:"concurrency"`
+	Format     FormatterConfig  `yaml:"formatter"`
+	Database   DatabaseConfig   `yaml:"database"`
+}
+
+// ConcurrentConfig is a subset of the configuration that focuses
+// only on the concurrency related configs (number of threads to use
+// for each stage of the pipeline)
+type ConcurrentConfig struct {
+	Import int `yaml:"import_threads"`
+	Title  int `yaml:"title_threads"`
+	OMBD   int `yaml:"omdb_threads"`
+	Format int `yaml:"ffmpeg_threads"`
+}
+
+// FormatterConfig is the 'misc' container of the configuration, encompassing configuration
+// not covered by either 'ConcurrentConfig' or 'DatabaseConfig'. Mainly configuration
+// paramters for the FFmpeg executable.
+type FormatterConfig struct {
+	ImportPath         string `yaml:"import_path"`
+	OutputPath         string `yaml:"output_path"`
+	CacheFile          string `yaml:"cache_file"`
+	TargetFormat       string `yaml:"target_format"`
+	ImportDirTickDelay int    `yaml:"import_polling_delay"`
+	FfmpegBinaryPath   string `yaml:"ffmpeg_binary"`
+	FfprobeBinaryPath  string `yaml:"ffprobe_binary"`
+}
+
+// DatabaseConfig is a subset of the configuration focusing solely
+// on database connection items
+type DatabaseConfig struct {
+	User       string `yaml:"user"`
+	Password   string `yaml:"password"`
+	Name       string `yaml:"name"`
+	Host       string `yaml:"host"`
+	Port       string `yaml:"port"`
+	OmdbKey    string `yaml:"omdb_api_key"`
+	OmdbApiUrl string `yaml:"omdb_api_url"`
+}
+
+// Loads a configuration file formatted in YAML in to a
+// TPAConfig struct ready to be passed to Processor
+func (config *TPAConfig) LoadFromFile(configPath string) error {
+	err := cleanenv.ReadConfig(configPath, config)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Cannot load configuration for ProcessorConfig -  %v\n", err.Error()))
+	}
+
+	return nil
+}
+
 // The Processor struct contains all the context
 // for the running instance of this program. It stores
 // the queue of items, the pool of workers that are
 // processing the queue, and the users configuration
 type Processor struct {
-	Config     TPAConfig
+	Config     *TPAConfig
 	Queue      ProcessorQueue
 	WorkerPool *WorkerPool
 }
@@ -51,25 +107,31 @@ func (e TitleFormatError) Error() string {
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
 func New() *Processor {
-	proc := &Processor{
+	p := &Processor{
 		Queue: ProcessorQueue{
 			Items: make([]*QueueItem, 0),
 		},
 	}
 
-	proc.Config.LoadConfig()
-	proc.WorkerPool = NewWorkerPool()
-
-	return proc
+	p.WorkerPool = NewWorkerPool()
+	return p
 }
 
-// Begin will start the workers inside the WorkerPool
+// Returns the processor provided after setting the Config
+// to the value provided.
+func (p *Processor) WithConfig(cfg *TPAConfig) *Processor {
+	p.Config = cfg
+
+	return p
+}
+
+// Start will start the workers inside the WorkerPool
 // responsible for the various tasks inside the program
 // This includes: HTTP RESTful API (NYI), user interaction (NYI),
 // import directory polling, title formatting (NYI), OMDB querying (NYI),
 // and the FFMPEG formatting (NYI)
 // This method will wait on the WaitGroup attached to the WorkerPool
-func (p *Processor) Begin() error {
+func (p *Processor) Start() error {
 	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
 	if tickInterval <= 0 {
 		log.Panic("Failed to start PollingWorker - TickInterval is non-positive (make sure 'import_polling_delay' is set in your config)")

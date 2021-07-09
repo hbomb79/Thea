@@ -37,7 +37,7 @@ func (worker *Worker) Start() {
 	log.Printf("Starting worker for stage %v with label %v\n", worker.pipelineStage, worker.label)
 	worker.currentStatus = Working
 	if err := worker.task(worker); err != nil {
-		log.Printf("[Error] Worker for stage %v with label %v has reported an error: %v\n", worker.pipelineStage, worker.label, err.Error())
+		log.Panicf("[Error] Worker for stage %v with label %v has reported an error: %v\n", worker.pipelineStage, worker.label, err.Error())
 	}
 
 	worker.currentStatus = Finished

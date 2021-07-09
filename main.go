@@ -8,6 +8,7 @@ import (
 
 	"github.com/hbomb79/TPA/api"
 	"github.com/hbomb79/TPA/processor"
+	"github.com/hbomb79/TPA/ws"
 )
 
 func redirectLogToFile(path string) {
@@ -46,13 +47,19 @@ func main() {
 	}
 }
 
-func setupApi(proc *processor.Processor) *api.Router {
+func setupApi(proc *processor.Processor) {
 	router := api.NewRouter()
+	wsHub := ws.NewSocketHub()
 
 	// -- BEGIN API v0 routes -- //
+
+	// Queue endpoints
 	router.CreateRoute("v0/queue", "GET", proc.Queue.ApiQueueIndex)
 	router.CreateRoute("v0/queue/{id}", "GET", proc.Queue.ApiQueueGet)
 	router.CreateRoute("v0/queue/{id}", "POST", proc.Queue.ApiQueueUpdate)
+
+	// Websocket endpoint
+	router.CreateRoute("v0/ws", "GET", wsHub.UpgradeToSocket)
 
 	// TODO
 	// router.CreateRoute("v0/troubles/", "GET", apiTroubleIndex)
@@ -65,6 +72,4 @@ func setupApi(proc *processor.Processor) *api.Router {
 		ApiHost: "localhost",
 		ApiRoot: "/api/tpa/",
 	})
-
-	return router
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/hbomb79/TPA/ws"
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
@@ -93,6 +94,7 @@ type Processor struct {
 	Config     *TPAConfig
 	Queue      ProcessorQueue
 	WorkerPool *WorkerPool
+	Ws         *ws.SocketHub
 }
 
 type TitleFormatError struct {
@@ -121,6 +123,14 @@ func New() *Processor {
 // to the value provided.
 func (p *Processor) WithConfig(cfg *TPAConfig) *Processor {
 	p.Config = cfg
+
+	return p
+}
+
+// Returns the processor provided after setting the websocket
+// hub that the processor should report changes to
+func (p *Processor) WithWebsocket(ws *ws.SocketHub) *Processor {
+	p.Ws = ws
 
 	return p
 }

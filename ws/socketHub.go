@@ -17,6 +17,7 @@ const (
 	Command
 	Response
 	ErrorResponse
+	Welcome
 )
 
 // SocketMessage is a struct that allows us to define the
@@ -180,6 +181,14 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Register the client and open the read loop
 	hub.registerCh <- client
+
+	// Send welcome message to this client
+	hub.Send(&SocketMessage{
+		Body:      "Connection established",
+		Arguments: []string{fmt.Sprintf("client:%v", id)},
+		Target:    &id,
+		Type:      Welcome,
+	})
 
 	// Ensure the client is deregistered once it's read loop closes
 	// If client.Start finishes, it's either because the client disconnected

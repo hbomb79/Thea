@@ -21,14 +21,14 @@ func (client *socketClient) SendMessage(message *SocketMessage) error {
 // to de-register the client once the connection closes.
 func (client *socketClient) Read(receiveCh chan *SocketMessage) error {
 	for {
-		var recv *SocketMessage
-		if err := client.socket.ReadJSON(recv); err != nil {
+		var recv SocketMessage
+		if err := client.socket.ReadJSON(&recv); err != nil {
 			return err
 		}
 
 		// Set the message origin to point to this clients uuid
 		recv.Origin = client.id
-		receiveCh <- recv
+		receiveCh <- &recv
 	}
 }
 

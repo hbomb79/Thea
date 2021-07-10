@@ -82,6 +82,7 @@ func (hub *SocketHub) Start() {
 	hub.deregisterCh = make(chan *socketClient)
 	hub.doneCh = make(chan int)
 	hub.clients = make([]*socketClient, 0)
+	hub.running = true
 
 	defer hub.Close()
 loop:
@@ -172,7 +173,6 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("[Websocket] (+) Registering new client with the socket hub (%v)\n", id)
 	client := &socketClient{
 		id:     &id,
 		socket: sock,

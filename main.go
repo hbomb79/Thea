@@ -8,6 +8,7 @@ import (
 
 	"github.com/hbomb79/TPA/api"
 	"github.com/hbomb79/TPA/processor"
+	"github.com/hbomb79/TPA/ws"
 )
 
 func redirectLogToFile(path string) {
@@ -32,27 +33,38 @@ func main() {
 	redirectLogToFile(filepath.Join(homeDir, "tpa.log"))
 
 	// Creates a new Processor struct, filling in the configuration
-	proc, procCfg := processor.New(), new(processor.TPAConfig)
+	procCfg := new(processor.TPAConfig)
 	procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml"))
-	proc.WithConfig(procCfg)
 
-	// Spawn HTTP API in background
-	setupApi(proc)
+	router, wsHub := api.NewRouter(), ws.NewSocketHub()
+	proc := processor.New().
+		WithConfig(procCfg).
+		WithWebsocket(wsHub)
 
-	// Run processor
+	// Start websocket, router and processor
+	setupRoutes(proc, router)
+	go wsHub.Start()
+	go router.Start(&api.RouterOptions{
+		ApiPort: 8080,
+		ApiHost: "localhost",
+		ApiRoot: "/api/tpa/",
+	})
+
 	err = proc.Start()
 	if err != nil {
 		log.Panicf(fmt.Sprintf("Failed to initialise Processer - %v\n", err.Error()))
 	}
 }
 
-func setupApi(proc *processor.Processor) *api.Router {
-	router := api.NewRouter()
-
+func setupRoutes(proc *processor.Processor, router *api.Router) {
 	// -- BEGIN API v0 routes -- //
+	// Queue endpoints
 	router.CreateRoute("v0/queue", "GET", proc.Queue.ApiQueueIndex)
 	router.CreateRoute("v0/queue/{id}", "GET", proc.Queue.ApiQueueGet)
 	router.CreateRoute("v0/queue/{id}", "POST", proc.Queue.ApiQueueUpdate)
+
+	// Websocket endpoint
+	router.CreateRoute("v0/ws", "GET", proc.Ws.UpgradeToSocket)
 
 	// TODO
 	// router.CreateRoute("v0/troubles/", "GET", apiTroubleIndex)
@@ -60,11 +72,4 @@ func setupApi(proc *processor.Processor) *api.Router {
 	// router.CreateRoute("v0/troubles/{trouble_id}", "PUSH", apiTroubleUpdate)
 	// -- ENDOF API v0 routes -- //
 
-	go router.Start(&api.RouterOptions{
-		ApiPort: 8080,
-		ApiHost: "localhost",
-		ApiRoot: "/api/tpa/",
-	})
-
-	return router
 }

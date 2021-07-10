@@ -67,6 +67,7 @@ func setupApi(proc *processor.Processor) {
 	// router.CreateRoute("v0/troubles/{trouble_id}", "PUSH", apiTroubleUpdate)
 	// -- ENDOF API v0 routes -- //
 
+	go wsHub.Start()
 	go router.Start(&api.RouterOptions{
 		ApiPort: 8080,
 		ApiHost: "localhost",

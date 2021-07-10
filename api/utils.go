@@ -15,7 +15,7 @@ import (
 func JsonMarshal(w http.ResponseWriter, s interface{}) {
 	marshalled, err := json.Marshal(s)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		JsonMessage(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

@@ -388,7 +388,13 @@ func (p *Processor) formatterWorkerTask(w *Worker) error {
 				Start(ffmpegOpts)
 
 			if err != nil {
-				return err
+				queueItem.RaiseTrouble(&Trouble{
+					err.Error(),
+					Error,
+					nil,
+				})
+
+				continue
 			}
 
 			for v := range progress {

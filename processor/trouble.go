@@ -11,5 +11,5 @@ const (
 type Trouble struct {
 	Message     string
 	Type        TroubleType
-	ResolveFunc func(*Trouble)
+	ResolveFunc func(*Trouble) `json:"-"`
 }

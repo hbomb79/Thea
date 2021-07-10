@@ -47,7 +47,7 @@ func main() {
 	go router.Start(&api.RouterOptions{
 		ApiPort: 8080,
 		ApiHost: "localhost",
-		ApiRoot: "/api/tpa/",
+		ApiRoot: "/api/tpa",
 	})
 
 	err = proc.Start()
@@ -61,7 +61,7 @@ func setupRoutes(proc *processor.Processor, router *api.Router) {
 	// Queue endpoints
 	router.CreateRoute("v0/queue", "GET", proc.Queue.ApiQueueIndex)
 	router.CreateRoute("v0/queue/{id}", "GET", proc.Queue.ApiQueueGet)
-	router.CreateRoute("v0/queue/{id}", "POST", proc.Queue.ApiQueueUpdate)
+	router.CreateRoute("v0/queue/promote/{id}", "POST", proc.Queue.ApiQueueUpdate)
 
 	// Websocket endpoint
 	router.CreateRoute("v0/ws", "GET", proc.Ws.UpgradeToSocket)

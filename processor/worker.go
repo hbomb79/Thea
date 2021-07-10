@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"fmt"
 	"log"
 )
 
@@ -34,14 +35,14 @@ func NewWorker(label string, task WorkerTask, wakeupChannel WorkerWakeupChan, pi
 }
 
 func (worker *Worker) Start() {
-	log.Printf("Starting worker for stage %v with label %v\n", worker.pipelineStage, worker.label)
+	fmt.Printf("[Proc] Starting worker for stage %v with label %v\n", worker.pipelineStage, worker.label)
 	worker.currentStatus = Working
 	if err := worker.task(worker); err != nil {
 		log.Panicf("[Error] Worker for stage %v with label %v has reported an error: %v\n", worker.pipelineStage, worker.label, err.Error())
 	}
 
 	worker.currentStatus = Finished
-	log.Printf("Worker for stage %v with label %v has stopped\n", worker.pipelineStage, worker.label)
+	fmt.Printf("[Proc] Worker for stage %v with label %v has stopped\n", worker.pipelineStage, worker.label)
 }
 
 // Stage method returns the current status of this worker,

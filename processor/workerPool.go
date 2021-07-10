@@ -27,7 +27,6 @@ func NewWorkerPool() *WorkerPool {
 // the worker ID derived from the iterator used to create
 // the workers).
 func (pool *WorkerPool) NewWorkers(amount int, workerLabel string, workerTask WorkerTask, wakeupChannel chan int, pipelineStage PipelineStage) {
-	log.Printf("Creating %v workers labelled '%v'\n", amount, workerLabel)
 	for i := 0; i < amount; i++ {
 		pool.PushWorker(NewWorker(fmt.Sprintf("%v:%v", workerLabel, i), workerTask, wakeupChannel, pipelineStage))
 	}

@@ -30,7 +30,7 @@ func main() {
 	if err != nil {
 		log.Panicf(err.Error())
 	}
-	redirectLogToFile(filepath.Join(homeDir, "tpa.log"))
+	//redirectLogToFile(filepath.Join(homeDir, "tpa.log"))
 
 	// Creates a new Processor struct, filling in the configuration
 	procCfg := new(processor.TPAConfig)

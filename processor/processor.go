@@ -171,7 +171,6 @@ func (p *Processor) Start() error {
 // PollInputSource will check the source input directory (from p.Config)
 // pass along the files it finds to the p.Queue to be inserted if not present.
 func (p *Processor) PollInputSource() (newItemsFound int, err error) {
-	log.Printf("Polling input source for new files")
 	newItemsFound = 0
 	walkFunc := func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
@@ -185,7 +184,6 @@ func (p *Processor) PollInputSource() (newItemsFound int, err error) {
 			}
 
 			if isNew := p.Queue.HandleFile(path, v); isNew {
-				log.Printf("Found new file %v\n", path)
 				newItemsFound++
 			}
 		}
@@ -209,7 +207,7 @@ func (p *Processor) pollingWorkerTask(w *Worker) error {
 
 		// Do work
 		if notify, err := p.PollInputSource(); err != nil {
-			return errors.New(fmt.Sprintf("cannot PollImportSource inside of worker '%v' - %v", w.label, err.Error()))
+			return err
 		} else if notify > 0 {
 			p.WorkerPool.WakeupWorkers(Title)
 		}
@@ -242,7 +240,6 @@ func (p *Processor) titleWorkerTask(w *Worker) error {
 					return err
 				}
 			} else {
-				log.Printf("Formatted queue item %v to %#v\n", queueItem.Name, queueItem.TitleInfo)
 				// Release the QueueItem by advancing it to the next pipeline stage
 				p.Queue.AdvanceStage(queueItem)
 
@@ -327,7 +324,6 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 
 			// Store OMDB result in QueueItem
 			queueItem.OmdbInfo = &info
-			log.Printf("OMDB result: %#v\n", info)
 			if !queueItem.OmdbInfo.Response {
 				queueItem.RaiseTrouble(&Trouble{
 					"OMDB response failed - " + queueItem.OmdbInfo.Error,

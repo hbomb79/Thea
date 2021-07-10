@@ -75,6 +75,7 @@ func (hub *SocketHub) Start() {
 		fmt.Printf("[Websocket] (!) Attempting to start socketHub when already running! Ignoring request.\n")
 		return
 	}
+	fmt.Printf("[Websocket] (O) Opening SocketHub!\n")
 
 	// Open channels and make clients slice
 	hub.sendCh = make(chan *SocketMessage)
@@ -236,6 +237,7 @@ func (hub *SocketHub) Close() {
 	// Reset the clients slice
 	hub.clients = nil
 	hub.running = false
+	fmt.Printf("[Websocket] (X) Socket hub is now closed!\n")
 }
 
 // handleMessage is an internal method that accepts a message

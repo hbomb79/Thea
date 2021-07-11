@@ -223,17 +223,20 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 		return
 	}
 
+	replyWithError := func(err string) {
+		hub.Send(&SocketMessage{
+			Title:     "COMMAND_FAILURE",
+			Id:        command.Id,
+			Target:    command.Origin,
+			Arguments: map[string]interface{}{"command": command, "error": err},
+			Type:      ErrorResponse,
+		})
+	}
+
 	if handler, ok := hub.handlers[command.Title]; ok {
 		if err := handler(hub, command); err != nil {
 			fmt.Printf("[Websocket] (!!) Handler for command '%v' returned error - %v\n", command.Title, err.Error())
-
-			hub.Send(&SocketMessage{
-				Title:     "COMMAND_FAILURE",
-				Id:        command.Id,
-				Target:    command.Origin,
-				Arguments: map[string]interface{}{"command": command, "error": err.Error()},
-				Type:      ErrorResponse,
-			})
+			replyWithError(err.Error())
 		} else {
 			fmt.Printf("[Websocket] Handler for command '%v' executed successfully\n", command.Title)
 		}
@@ -241,6 +244,7 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 		return
 	}
 
+	replyWithError("Unknown command")
 	fmt.Printf("[Websocket] (!) No handler found for command '%v'\n", command.Title)
 }
 

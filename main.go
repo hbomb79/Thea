@@ -74,7 +74,7 @@ func (tpa *TPA) wsQueueIndex(hub *ws.SocketHub, message *ws.SocketMessage) error
 	// so they can pair this reply with the source request.
 	hub.Send(&ws.SocketMessage{
 		Title:     "COMMAND_SUCCESS",
-		Arguments: map[string]interface{}{"queue_index": data},
+		Arguments: map[string]interface{}{"payload": data, "command": message},
 		Type:      ws.Response,
 		Id:        message.Id,
 		Target:    message.Origin,
@@ -100,7 +100,7 @@ func (tpa *TPA) wsQueueDetails(hub *ws.SocketHub, message *ws.SocketMessage) err
 
 	hub.Send(&ws.SocketMessage{
 		Title:     "COMMAND_SUCCESS",
-		Arguments: map[string]interface{}{"queue_detail": queueItem},
+		Arguments: map[string]interface{}{"payload": queueItem, "command": message},
 		Id:        message.Id,
 		Target:    message.Origin,
 		Type:      ws.Response,
@@ -131,6 +131,9 @@ func (tpa *TPA) wsResolveTrouble(hub *ws.SocketHub, message *ws.SocketMessage) e
 			Id:     message.Id,
 			Target: message.Origin,
 			Type:   ws.Response,
+			Arguments: map[string]interface{}{
+				"command": message,
+			},
 		})
 
 		return nil

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/floostack/transcoder/ffmpeg"
-	"github.com/hbomb79/TPA/ws"
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
@@ -92,9 +91,21 @@ func (config *TPAConfig) LoadFromFile(configPath string) error {
 // processing the queue, and the users configuration
 type Processor struct {
 	Config     *TPAConfig
-	Queue      ProcessorQueue
+	Queue      *ProcessorQueue
 	WorkerPool *WorkerPool
-	Ws         *ws.SocketHub
+	Negotiator Negotiator
+}
+
+type Negotiator interface {
+	OnProcessorUpdate(update *ProcessorUpdate)
+}
+
+type ProcessorUpdate struct {
+	Title   string
+	Context struct {
+		QueueItem *QueueItem
+		Trouble   *QueueTrouble
+	}
 }
 
 type TitleFormatError struct {
@@ -110,7 +121,7 @@ func (e TitleFormatError) Error() string {
 // bare struct, and loading in the configuration
 func New() *Processor {
 	p := &Processor{
-		Queue: ProcessorQueue{
+		Queue: &ProcessorQueue{
 			Items: make([]*QueueItem, 0),
 		},
 	}
@@ -127,12 +138,22 @@ func (p *Processor) WithConfig(cfg *TPAConfig) *Processor {
 	return p
 }
 
-// Returns the processor provided after setting the websocket
-// hub that the processor should report changes to
-func (p *Processor) WithWebsocket(ws *ws.SocketHub) *Processor {
-	p.Ws = ws
+// Returns the processor provided after setting the Negotiator
+// to the value provided.
+func (p *Processor) WithNegotiator(n Negotiator) *Processor {
+	p.Negotiator = n
 
 	return p
+}
+
+// Called when something has changed with the processor state,
+// and we want our attached Negotiator to be alerted
+func (p *Processor) PushUpdate(update *ProcessorUpdate) {
+	if p.Negotiator == nil {
+		return
+	}
+
+	p.Negotiator.OnProcessorUpdate(update)
 }
 
 // Start will start the workers inside the WorkerPool
@@ -195,6 +216,23 @@ func (p *Processor) PollInputSource() (newItemsFound int, err error) {
 	return
 }
 
+func (p *Processor) RaiseTrouble(item *QueueItem, trouble *QueueTrouble) error {
+	err := item.RaiseTrouble(trouble)
+	if err != nil {
+		return err
+	}
+
+	// Broadcast notification of new trouble
+	p.PushUpdate(&ProcessorUpdate{
+		Title: "trouble",
+		Context: struct {
+			QueueItem *QueueItem
+			Trouble   *QueueTrouble
+		}{item, trouble},
+	})
+	return nil
+}
+
 // pollingWorkerTask is a WorkerTask that is responsible
 // for polling the import directory for new items to
 // add to the Queue
@@ -233,7 +271,7 @@ func (p *Processor) titleWorkerTask(w *Worker) error {
 				if _, ok := err.(TitleFormatError); ok {
 					// We caught an error, but it's a recoverable error - raise a trouble
 					// sitation for this queue item to request user interaction to resolve it
-					queueItem.RaiseTrouble(&Trouble{err.Error(), Error, nil})
+					// queueItem.RaiseTrouble(&QueueTrouble{err.Error(), Error, nil})
 					continue
 				} else {
 					// Unknown error
@@ -274,11 +312,11 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			// Ensure the previous pipeline actually provided information
 			// in the TitleInfo struct.
 			if queueItem.TitleInfo == nil {
-				queueItem.RaiseTrouble(&Trouble{
-					"Unable to process queue item for OMDB processing as no title information is available. Previous stage of pipelined must have failed unexpectedly.",
-					Error,
-					nil,
-				})
+				// queueItem.RaiseTrouble(&QueueTrouble{
+				// 	"Unable to process queue item for OMDB processing as no title information is available. Previous stage of pipelined must have failed unexpectedly.",
+				// 	Error,
+				// 	nil,
+				// })
 
 				continue
 			}
@@ -288,11 +326,11 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			res, err := http.Get(baseApi)
 			if err != nil {
 				// HTTP request error
-				queueItem.RaiseTrouble(&Trouble{
-					"Failed to fetch OMDB information for QueueItem - " + err.Error(),
-					Error,
-					nil,
-				})
+				// queueItem.RaiseTrouble(&QueueTrouble{
+				// 	"Failed to fetch OMDB information for QueueItem - " + err.Error(),
+				// 	Error,
+				// 	nil,
+				// })
 
 				continue
 			}
@@ -301,11 +339,11 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			// Read all the bytes from the response
 			body, err := io.ReadAll(res.Body)
 			if err != nil {
-				queueItem.RaiseTrouble(&Trouble{
-					"Failed to read OMDB information for QueueItem - " + err.Error(),
-					Error,
-					nil,
-				})
+				// queueItem.RaiseTrouble(&QueueTrouble{
+				// 	"Failed to read OMDB information for QueueItem - " + err.Error(),
+				// 	Error,
+				// 	nil,
+				// })
 
 				continue
 			}
@@ -313,11 +351,11 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			// Unmarshal the JSON content in to our OmdbInfo struct
 			var info OmdbInfo
 			if err = json.Unmarshal(body, &info); err != nil {
-				queueItem.RaiseTrouble(&Trouble{
-					"Failed to unmarshal JSON response from OMDB - " + err.Error(),
-					Error,
-					nil,
-				})
+				// queueItem.RaiseTrouble(&QueueTrouble{
+				// 	"Failed to unmarshal JSON response from OMDB - " + err.Error(),
+				// 	Error,
+				// 	nil,
+				// })
 
 				continue
 			}
@@ -325,11 +363,11 @@ func (p *Processor) networkWorkerTask(w *Worker) error {
 			// Store OMDB result in QueueItem
 			queueItem.OmdbInfo = &info
 			if !queueItem.OmdbInfo.Response {
-				queueItem.RaiseTrouble(&Trouble{
-					"OMDB response failed - " + queueItem.OmdbInfo.Error,
-					Error,
-					nil,
-				})
+				// queueItem.RaiseTrouble(&QueueTrouble{
+				// 	"OMDB response failed - " + queueItem.OmdbInfo.Error,
+				// 	Error,
+				// 	nil,
+				// })
 
 				continue
 			}
@@ -384,11 +422,11 @@ func (p *Processor) formatterWorkerTask(w *Worker) error {
 				Start(ffmpegOpts)
 
 			if err != nil {
-				queueItem.RaiseTrouble(&Trouble{
-					err.Error(),
-					Error,
-					nil,
-				})
+				// queueItem.RaiseTrouble(&QueueTrouble{
+				// 	err.Error(),
+				// 	Error,
+				// 	nil,
+				// })
 
 				continue
 			}

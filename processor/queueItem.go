@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -57,27 +58,30 @@ const (
 // This includes information found from the file-system, OMDB,
 // and the current processing status/stage
 type QueueItem struct {
-	Path       string `groups:"api"`
-	Name       string
-	Status     QueueItemStatus `groups:"api"`
-	Stage      PipelineStage   `groups:"api"`
-	StatusLine string          `groups:"api"`
-	Trouble    *Trouble
-	TitleInfo  *TitleInfo
-	OmdbInfo   *OmdbInfo
+	Id         int             `json:"id" groups:"api"`
+	Path       string          `json:"path" groups:"api"`
+	Name       string          `json:"name" groups:"api"`
+	Status     QueueItemStatus `json:"status" groups:"api"`
+	Stage      PipelineStage   `json:"stage" groups:"api"`
+	StatusLine string          `json:"statusLine" groups:"api"`
+	Trouble    *QueueTrouble   `json:"-"`
+	TitleInfo  *TitleInfo      `json:"-"`
+	OmdbInfo   *OmdbInfo       `json:"-"`
 }
 
 // RaiseTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
-func (item *QueueItem) RaiseTrouble(trouble *Trouble) {
+func (item *QueueItem) RaiseTrouble(trouble *QueueTrouble) error {
 	fmt.Printf("[Trouble] Raising trouble for QueueItem (%v)!\n", item.Path)
 	if item.Trouble == nil {
 		item.Status = Troubled
 		item.Trouble = trouble
-	} else {
-		panic(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble))
+
+		return nil
 	}
+
+	return errors.New(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble))
 }
 
 // FormatTitle accepts a string (title) and reformats it

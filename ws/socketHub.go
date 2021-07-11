@@ -28,12 +28,12 @@ const (
 // send the reply to the websocket attached to the client
 // with the matching UUID
 type SocketMessage struct {
-	Body      string            `json:"body"`
-	Arguments []string          `json:"args"`
-	Id        int               `json:"id"`
-	Type      socketMessageType `json:"type"`
-	Origin    *uuid.UUID        `json:"-"`
-	Target    *uuid.UUID        `json:"-"`
+	Title     string                 `json:"title"`
+	Arguments map[string]interface{} `json:"args"`
+	Id        int                    `json:"id"`
+	Type      socketMessageType      `json:"type"`
+	Origin    *uuid.UUID             `json:"-"`
+	Target    *uuid.UUID             `json:"-"`
 }
 
 // SocketHub is the struct responsible for managing
@@ -185,8 +185,8 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Send welcome message to this client
 	hub.Send(&SocketMessage{
-		Body:      "Connection established",
-		Arguments: []string{fmt.Sprintf("client:%v", id)},
+		Title:     "Connection established",
+		Arguments: map[string]interface{}{"client": id},
 		Target:    &id,
 		Type:      Welcome,
 	})
@@ -249,17 +249,17 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 		return
 	}
 
-	if handler, ok := hub.handlers[command.Body]; ok {
+	if handler, ok := hub.handlers[command.Title]; ok {
 		if err := handler(hub, command); err != nil {
-			fmt.Printf("[Websocket] (!!) Handler for command '%v' returned error - %v\n", command.Body, err.Error())
+			fmt.Printf("[Websocket] (!!) Handler for command '%v' returned error - %v\n", command.Title, err.Error())
 		} else {
-			fmt.Printf("[Websocket] Handler for command '%v' executed successfully\n", command.Body)
+			fmt.Printf("[Websocket] Handler for command '%v' executed successfully\n", command.Title)
 		}
 
 		return
 	}
 
-	fmt.Printf("[Websocket] (!) No handler found for command '%v'\n", command.Body)
+	fmt.Printf("[Websocket] (!) No handler found for command '%v'\n", command.Title)
 }
 
 // findClient returns a socketClient with the matching uuid if

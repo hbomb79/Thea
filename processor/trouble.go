@@ -1,6 +1,7 @@
 package processor
 
 type TroubleType int
+type TroubleResolve func(map[string]interface{}) error
 
 const (
 	Warning TroubleType = iota
@@ -8,8 +9,10 @@ const (
 	Fatal
 )
 
-type Trouble struct {
-	Message     string
-	Type        TroubleType
-	ResolveFunc func(*Trouble) `json:"-"`
+type QueueTrouble struct {
+	Title     string                 `json:"title"`
+	Details   string                 `json:"details"`
+	Arguments map[string]interface{} `json:"arguments"`
+	Type      TroubleType            `json:"type"`
+	Resolve   TroubleResolve         `json:"-"`
 }

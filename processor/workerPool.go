@@ -49,8 +49,8 @@ func (pool *WorkerPool) StartWorkers() {
 // PushWorker inserts the worker provided in to the worker pool,
 // this method will first lock the mutex to ensure mutually exclusive
 // access to the worker pool slice.
-func (pool *WorkerPool) PushWorker(w *Worker) {
-	pool.workers = append(pool.workers, w)
+func (pool *WorkerPool) PushWorker(PushWorkers ...*Worker) {
+	pool.workers = append(pool.workers, PushWorkers...)
 }
 
 // WakeupWorkers will search for workers in the pool

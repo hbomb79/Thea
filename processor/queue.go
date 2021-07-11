@@ -9,7 +9,7 @@ import (
 // ProcessorQueue is the Queue of items to be processed by this
 // processor
 type ProcessorQueue struct {
-	Items  []*QueueItem
+	Items  []*QueueItem `groups:"api"`
 	lastId int
 	sync.Mutex
 }
@@ -34,7 +34,6 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 	}
 
 	if !isInQueue(path) {
-		queue.lastId++
 		queue.Items = append(queue.Items, &QueueItem{
 			Id:     queue.lastId,
 			Name:   fileInfo.Name(),
@@ -42,6 +41,7 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 			Status: Pending,
 			Stage:  Title,
 		})
+		queue.lastId++
 
 		return true
 	}

@@ -91,7 +91,7 @@ func (tpa *TPA) wsResolveTrouble(hub *ws.SocketHub, message *ws.SocketMessage) e
 // HttpQueueIndex returns the current processor queue with some information
 // omitted. Full information for each item can be found via HttpQueueGet
 func (tpa *TPA) HttpQueueIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := sheriffApiMarshal("")
+	data, err := sheriffApiMarshal(tpa.proc.Queue, []string{"api"})
 	if err != nil {
 		api.JsonMessage(w, err.Error(), http.StatusInternalServerError)
 
@@ -117,7 +117,7 @@ func (tpa *TPA) HttpQueueGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.JsonMarshal(w, queue.Items[id])
+	api.JsonMarshal(w, queueItem)
 }
 
 // HttpQueueUpdate pushes an update to the processor dictating the new
@@ -184,8 +184,8 @@ func redirectLogToFile(path string) {
 // the provided argument using Sheriff to remove
 // items from the struct that aren't exposed to the API (i.e. removes
 // struct fields that lack the `groups:"api"` tag)
-func sheriffApiMarshal(target interface{}) (interface{}, error) {
-	o := &sheriff.Options{Groups: []string{"api"}}
+func sheriffApiMarshal(target interface{}, groups []string) (interface{}, error) {
+	o := &sheriff.Options{Groups: groups}
 
 	data, err := sheriff.Marshal(o, target)
 	if err != nil {

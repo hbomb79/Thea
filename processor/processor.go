@@ -100,12 +100,13 @@ type Negotiator interface {
 	OnProcessorUpdate(update *ProcessorUpdate)
 }
 
+type processorUpdateContext struct {
+	QueueItem *QueueItem
+	Trouble   *QueueTrouble
+}
 type ProcessorUpdate struct {
 	Title   string
-	Context struct {
-		QueueItem *QueueItem
-		Trouble   *QueueTrouble
-	}
+	Context processorUpdateContext
 }
 
 type TitleFormatError struct {
@@ -224,11 +225,8 @@ func (p *Processor) RaiseTrouble(item *QueueItem, trouble *QueueTrouble) error {
 
 	// Broadcast notification of new trouble
 	p.PushUpdate(&ProcessorUpdate{
-		Title: "trouble",
-		Context: struct {
-			QueueItem *QueueItem
-			Trouble   *QueueTrouble
-		}{item, trouble},
+		Title:   "trouble",
+		Context: processorUpdateContext{item, trouble},
 	})
 	return nil
 }

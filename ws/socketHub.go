@@ -30,7 +30,7 @@ const (
 // with the matching UUID
 type SocketMessage struct {
 	Title     string                 `json:"title"`
-	Arguments map[string]interface{} `json:"args"`
+	Arguments map[string]interface{} `json:"arguments"`
 	Id        int                    `json:"id"`
 	Type      socketMessageType      `json:"type"`
 	Origin    *uuid.UUID             `json:"-"`
@@ -286,6 +286,14 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 	if handler, ok := hub.handlers[command.Title]; ok {
 		if err := handler(hub, command); err != nil {
 			fmt.Printf("[Websocket] (!!) Handler for command '%v' returned error - %v\n", command.Title, err.Error())
+
+			hub.Send(&SocketMessage{
+				Title:     "COMMAND_FAILURE",
+				Id:        command.Id,
+				Target:    command.Origin,
+				Arguments: map[string]interface{}{"command": command, "error": err.Error()},
+				Type:      ErrorResponse,
+			})
 		} else {
 			fmt.Printf("[Websocket] Handler for command '%v' executed successfully\n", command.Title)
 		}

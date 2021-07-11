@@ -73,8 +73,9 @@ func (tpa *TPA) wsQueueIndex(hub *ws.SocketHub, message *ws.SocketMessage) error
 	// Also set the ID to match any provided by the client
 	// so they can pair this reply with the source request.
 	hub.Send(&ws.SocketMessage{
-		Title:     "QUEUE_INDEX",
+		Title:     "COMMAND_SUCCESS",
 		Arguments: map[string]interface{}{"queue_index": data},
+		Type:      ws.Response,
 		// Id:        message.Id,
 		// Target:    message.Origin,
 	})
@@ -98,10 +99,11 @@ func (tpa *TPA) wsQueueDetails(hub *ws.SocketHub, message *ws.SocketMessage) err
 	}
 
 	hub.Send(&ws.SocketMessage{
-		Title:     "QUEUE_DETAIL",
+		Title:     "COMMAND_SUCCESS",
 		Arguments: map[string]interface{}{"queue_detail": queueItem},
 		Id:        message.Id,
 		Target:    message.Origin,
+		Type:      ws.Response,
 	})
 	return nil
 }
@@ -123,6 +125,13 @@ func (tpa *TPA) wsResolveTrouble(hub *ws.SocketHub, message *ws.SocketMessage) e
 		if err = item.Trouble.Resolve(message.Arguments); err != nil {
 			return errors.New(fmt.Sprintf(ERR_FMT, stringId, err.Error()))
 		}
+
+		hub.Send(&ws.SocketMessage{
+			Title:  "COMMAND_SUCCESS",
+			Id:     message.Id,
+			Target: message.Origin,
+			Type:   ws.Response,
+		})
 
 		return nil
 	}

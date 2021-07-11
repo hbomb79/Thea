@@ -62,8 +62,50 @@ func (tpa *TPA) OnProcessorUpdate(update *processor.ProcessorUpdate) {
 	})
 }
 
-func (tpa *TPA) wsQueueIndex(hub *ws.SocketHub, message *ws.SocketMessage) error   { return nil }
-func (tpa *TPA) wsQueueDetails(hub *ws.SocketHub, message *ws.SocketMessage) error { return nil }
+func (tpa *TPA) wsQueueIndex(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	data, err := sheriffApiMarshal(tpa.proc.Queue, []string{"api"})
+	if err != nil {
+		return err
+	}
+
+	// Queue a reply to this message by setting the target of the
+	// next message to the origin of the current one.
+	// Also set the ID to match any provided by the client
+	// so they can pair this reply with the source request.
+	hub.Send(&ws.SocketMessage{
+		Title:     "QUEUE_INDEX",
+		Arguments: map[string]interface{}{"queue_index": data},
+		// Id:        message.Id,
+		// Target:    message.Origin,
+	})
+
+	return nil
+}
+
+func (tpa *TPA) wsQueueDetails(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"id": "number"}); err != nil {
+		return err
+	}
+
+	v, ok := message.Arguments["id"].(int)
+	if !ok {
+		return errors.New("failed to vaidate arguments - ID provided is not an integer")
+	}
+
+	queueItem := tpa.proc.Queue.FindById(v)
+	if queueItem == nil {
+		return errors.New("failed to get queue details - item with matching ID not found")
+	}
+
+	hub.Send(&ws.SocketMessage{
+		Title:     "QUEUE_DETAIL",
+		Arguments: map[string]interface{}{"queue_detail": queueItem},
+		Id:        message.Id,
+		Target:    message.Origin,
+	})
+	return nil
+}
+
 func (tpa *TPA) wsResolveTrouble(hub *ws.SocketHub, message *ws.SocketMessage) error {
 	const ERR_FMT = "failed to resolve trouble for queue item %v - %v"
 
@@ -151,9 +193,9 @@ func (tpa *TPA) setupRoutes() {
 	tpa.httpRouter.CreateRoute("v0/queue/promote/{id}", "POST", tpa.HttpQueueUpdate)
 	tpa.httpRouter.CreateRoute("v0/ws", "GET", tpa.socketHub.UpgradeToSocket)
 
-	tpa.socketHub.BindCommand("resolveTrouble", tpa.wsResolveTrouble)
-	tpa.socketHub.BindCommand("queueIndex", tpa.wsQueueIndex)
-	tpa.socketHub.BindCommand("queueDetails", tpa.wsQueueDetails)
+	tpa.socketHub.BindCommand("RESOLVE_TROUBLE", tpa.wsResolveTrouble)
+	tpa.socketHub.BindCommand("QUEUE_INDEX", tpa.wsQueueIndex)
+	tpa.socketHub.BindCommand("QUEUE_DETAILS", tpa.wsQueueDetails)
 }
 
 // main() is the entry point to the program, from here will

@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -34,6 +35,38 @@ type SocketMessage struct {
 	Type      socketMessageType      `json:"type"`
 	Origin    *uuid.UUID             `json:"-"`
 	Target    *uuid.UUID             `json:"-"`
+}
+
+func (message *SocketMessage) ValidateArguments(required map[string]string) error {
+	const ERR_FMT = "failed to validate key '%v' with type '%v' - %v"
+
+	for key, value := range required {
+		if v, ok := message.Arguments[key]; ok {
+			// get the string interpretation of the
+			// given value - this method is only used to
+			// test for primitve types currently. Perhaps with go
+			// generics this method could be expanded to test for
+			// interface implementation too
+			givenValue := fmt.Sprintf("%v", v)
+			switch value {
+			case "number":
+				var i int
+				_, err := fmt.Sscanf(givenValue, "%d", &i)
+				if err != nil {
+					return errors.New(fmt.Sprintf(ERR_FMT, key, value, givenValue))
+				}
+			case "string":
+				break
+			default:
+				return errors.New(fmt.Sprint(ERR_FMT, key, value, "unknown type"))
+			}
+		} else {
+			// Error, missing key
+			return errors.New(fmt.Sprintf("failed to validate key '%v' - key is missing", key))
+		}
+	}
+
+	return nil
 }
 
 // SocketHub is the struct responsible for managing
@@ -108,7 +141,7 @@ loop:
 			// No specific target
 			hub.broadcastMessage(message)
 		case message := <-hub.receiveCh:
-			hub.handleMessage(message)
+			go hub.handleMessage(message)
 		case client := <-hub.registerCh:
 			// Register the client by pushing the received client in to the
 			// 'clients' slice
@@ -150,6 +183,7 @@ func (hub *SocketHub) Send(message *SocketMessage) {
 		return
 	}
 
+	fmt.Printf("[Websocket] (.) Queued message for sending: %v\n", message)
 	hub.sendCh <- message
 }
 

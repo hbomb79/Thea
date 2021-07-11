@@ -87,12 +87,12 @@ func (tpa *TPA) wsQueueDetails(hub *ws.SocketHub, message *ws.SocketMessage) err
 		return err
 	}
 
-	v, ok := message.Arguments["id"].(int)
+	v, ok := message.Arguments["id"].(float64)
 	if !ok {
 		return errors.New("failed to vaidate arguments - ID provided is not an integer")
 	}
 
-	queueItem := tpa.proc.Queue.FindById(v)
+	queueItem := tpa.proc.Queue.FindById(int(v))
 	if queueItem == nil {
 		return errors.New("failed to get queue details - item with matching ID not found")
 	}

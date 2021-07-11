@@ -76,8 +76,8 @@ func (tpa *TPA) wsQueueIndex(hub *ws.SocketHub, message *ws.SocketMessage) error
 		Title:     "COMMAND_SUCCESS",
 		Arguments: map[string]interface{}{"queue_index": data},
 		Type:      ws.Response,
-		// Id:        message.Id,
-		// Target:    message.Origin,
+		Id:        message.Id,
+		Target:    message.Origin,
 	})
 
 	return nil

@@ -183,7 +183,6 @@ func (hub *SocketHub) Send(message *SocketMessage) {
 		return
 	}
 
-	fmt.Printf("[Websocket] (.) Queued message for sending: %v\n", message)
 	hub.sendCh <- message
 }
 

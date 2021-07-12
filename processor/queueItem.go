@@ -59,14 +59,14 @@ const (
 // and the current processing status/stage
 type QueueItem struct {
 	Id         int             `json:"id" groups:"api"`
-	Path       string          `json:"path" groups:"api"`
+	Path       string          `json:"path"`
 	Name       string          `json:"name" groups:"api"`
 	Status     QueueItemStatus `json:"status" groups:"api"`
 	Stage      PipelineStage   `json:"stage" groups:"api"`
 	StatusLine string          `json:"statusLine" groups:"api"`
-	Trouble    *QueueTrouble   `json:"-"`
-	TitleInfo  *TitleInfo      `json:"-"`
-	OmdbInfo   *OmdbInfo       `json:"-"`
+	TitleInfo  *TitleInfo      `json:"title_info"`
+	OmdbInfo   *OmdbInfo       `json:"omdb_info"`
+	Trouble    *QueueTrouble   `json:"trouble"`
 }
 
 // RaiseTrouble is a method that can be called from

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/liip/sheriff"
 )
 
 // JsonMarshal is an API function that is used to avoid
@@ -52,4 +54,19 @@ func trimTrailingSlashesMiddleware(next http.Handler) http.Handler {
 		r.URL.Path = strings.TrimSuffix(r.URL.Path, "/")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// sheriffApiMarshal is a method that will marshal
+// the provided argument using Sheriff to remove
+// items from the struct that aren't exposed to the API (i.e. removes
+// struct fields that lack the `groups:"api"` tag)
+func sheriffApiMarshal(target interface{}, groups []string) (interface{}, error) {
+	o := &sheriff.Options{Groups: groups}
+
+	data, err := sheriff.Marshal(o, target)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }

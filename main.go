@@ -9,31 +9,29 @@ import (
 	"github.com/hbomb79/TPA/api"
 	"github.com/hbomb79/TPA/processor"
 	"github.com/hbomb79/TPA/ws"
-	"github.com/liip/sheriff"
 )
 
-type TPA struct {
-	proc       *processor.Processor
-	socketHub  *ws.SocketHub
-	httpRouter *api.Router
-	negotiator *ApiNegotiator
+type Tpa struct {
+	proc        *processor.Processor
+	socketHub   *ws.SocketHub
+	wsGateway   *api.WsGateway
+	httpGateway *api.HttpGateway
+	httpRouter  *api.Router
 }
 
-func (tpa *TPA) Initialise(cfgPath string) *TPA {
-	// Creates a new Processor struct, filling in the configuration
-	procCfg := new(processor.TPAConfig)
-	procCfg.LoadFromFile(cfgPath)
+func NewTpa() *Tpa {
+	proc := processor.New()
 
-	tpa.httpRouter, tpa.socketHub = api.NewRouter(), ws.NewSocketHub()
-	tpa.negotiator = &ApiNegotiator{tpa}
-	tpa.proc = processor.New().
-		WithConfig(procCfg).
-		WithNegotiator(tpa.negotiator)
-
-	return tpa
+	return &Tpa{
+		proc:        proc,
+		httpRouter:  api.NewRouter(),
+		httpGateway: api.NewHttpGateway(proc),
+		socketHub:   ws.NewSocketHub(),
+		wsGateway:   api.NewWsGateway(proc),
+	}
 }
 
-func (tpa *TPA) Start() {
+func (tpa *Tpa) Start() {
 	// Start websocket, router and processor
 	tpa.setupRoutes()
 
@@ -51,18 +49,27 @@ func (tpa *TPA) Start() {
 
 // setupRoutes initialises the routes and commands for the HTTP
 // REST router, and the websocket hub
-func (tpa *TPA) setupRoutes() {
-	negotiator := tpa.negotiator
-	tpa.httpRouter.CreateRoute("v0/queue", "GET", negotiator.HttpQueueIndex)
-	tpa.httpRouter.CreateRoute("v0/queue/{id}", "GET", negotiator.HttpQueueGet)
-	tpa.httpRouter.CreateRoute("v0/queue/promote/{id}", "POST", negotiator.HttpQueueUpdate)
+func (tpa *Tpa) setupRoutes() {
+	tpa.httpRouter.CreateRoute("v0/queue", "GET", tpa.httpGateway.HttpQueueIndex)
+	tpa.httpRouter.CreateRoute("v0/queue/{id}", "GET", tpa.httpGateway.HttpQueueGet)
+	tpa.httpRouter.CreateRoute("v0/queue/promote/{id}", "POST", tpa.httpGateway.HttpQueueUpdate)
 	tpa.httpRouter.CreateRoute("v0/ws", "GET", tpa.socketHub.UpgradeToSocket)
 
-	tpa.socketHub.BindCommand("TROUBLE_RESOLVE", negotiator.wsTroubleResolve)
-	tpa.socketHub.BindCommand("TROUBLE_DETAILS", negotiator.wsTroubleDetails)
-	tpa.socketHub.BindCommand("QUEUE_INDEX", negotiator.wsQueueIndex)
-	tpa.socketHub.BindCommand("QUEUE_DETAILS", negotiator.wsQueueDetails)
-	tpa.socketHub.BindCommand("QUEUE_PROMOTE", negotiator.wsQueuePromote)
+	tpa.socketHub.BindCommand("QUEUE_INDEX", tpa.wsGateway.WsQueueIndex)
+	tpa.socketHub.BindCommand("QUEUE_DETAILS", tpa.wsGateway.WsQueueDetails)
+	tpa.socketHub.BindCommand("QUEUE_PROMOTE", tpa.wsGateway.WsQueuePromote)
+	tpa.socketHub.BindCommand("TROUBLE_RESOLVE", tpa.wsGateway.WsTroubleResolve)
+	tpa.socketHub.BindCommand("TROUBLE_DETAILS", tpa.wsGateway.WsTroubleDetails)
+}
+
+func (tpa *Tpa) OnProcessorUpdate(update *processor.ProcessorUpdate) {
+	tpa.socketHub.Send(&ws.SocketMessage{
+		Title: "UPDATE",
+		Arguments: map[string]interface{}{
+			"context": update.Context,
+		},
+		Type: ws.Update,
+	})
 }
 
 // main() is the entry point to the program, from here will
@@ -74,7 +81,13 @@ func main() {
 		log.Panicf(err.Error())
 	}
 	//redirectLogToFile(filepath.Join(homeDir, "tpa.log"))
-	tpa := new(TPA).Initialise(filepath.Join(homeDir, ".config/tpa/config.yaml"))
+
+	procCfg := new(processor.TPAConfig)
+	procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml"))
+
+	tpa := NewTpa()
+	tpa.proc.WithConfig(procCfg)
+
 	tpa.Start()
 }
 
@@ -87,19 +100,4 @@ func redirectLogToFile(path string) {
 	}
 
 	log.SetOutput(fh)
-}
-
-// sheriffApiMarshal is a method that will marshal
-// the provided argument using Sheriff to remove
-// items from the struct that aren't exposed to the API (i.e. removes
-// struct fields that lack the `groups:"api"` tag)
-func sheriffApiMarshal(target interface{}, groups []string) (interface{}, error) {
-	o := &sheriff.Options{Groups: groups}
-
-	data, err := sheriff.Marshal(o, target)
-	if err != nil {
-		return nil, err
-	}
-
-	return data, nil
 }

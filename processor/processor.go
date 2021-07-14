@@ -167,13 +167,13 @@ func (p *Processor) Start() error {
 	// types are different.
 	threads, workers := p.Config.Concurrent, make([]*worker.Worker, 0)
 	for i := 0; i < threads.Title; i++ {
-		workers = append(workers, worker.NewWorker(fmt.Sprintf("Title:%s", i), &TitleTask{proc: p}, worker.Title, make(chan int)))
+		workers = append(workers, worker.NewWorker(fmt.Sprintf("Title:%v", i), &TitleTask{proc: p}, worker.Title, make(chan int)))
 	}
 	for i := 0; i < threads.OMBD; i++ {
-		workers = append(workers, worker.NewWorker(fmt.Sprintf("Omdb:%s", i), &OmdbTask{proc: p}, worker.Omdb, make(chan int)))
+		workers = append(workers, worker.NewWorker(fmt.Sprintf("Omdb:%v", i), &OmdbTask{proc: p}, worker.Omdb, make(chan int)))
 	}
 	for i := 0; i < threads.Format; i++ {
-		workers = append(workers, worker.NewWorker(fmt.Sprintf("Format:%s", i), &FormatTask{proc: p}, worker.Format, make(chan int)))
+		workers = append(workers, worker.NewWorker(fmt.Sprintf("Format:%v", i), &FormatTask{proc: p}, worker.Format, make(chan int)))
 	}
 
 	p.WorkerPool.PushWorker(workers...)

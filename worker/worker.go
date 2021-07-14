@@ -24,7 +24,6 @@ const (
 	Finish
 )
 
-type WorkerTask func(*Worker) error
 type WorkerWakeupChan chan int
 type WorkerStatus int
 

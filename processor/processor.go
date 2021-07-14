@@ -90,15 +90,6 @@ type ProcessorUpdate struct {
 	Context processorUpdateContext
 }
 
-type TitleFormatError struct {
-	item    *QueueItem
-	message string
-}
-
-func (e TitleFormatError) Error() string {
-	return fmt.Sprintf("failed to format title(%v) - %v", e.item.Name, e.message)
-}
-
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
 func New() *Processor {

@@ -123,7 +123,7 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *ws.SocketHub, message *ws.Sock
 
 	idArg := message.Arguments["id"]
 	if item := wsGateway.proc.Queue.FindById(int(idArg.(float64))); item != nil {
-		if err := item.Trouble.ResolveTrouble(message.Arguments); err != nil {
+		if err := item.Trouble.Resolve(message.Arguments); err != nil {
 			return errors.New(fmt.Sprintf(ERR_FMT, idArg, err.Error()))
 		}
 

@@ -72,9 +72,8 @@ type QueueItem struct {
 }
 
 type QueueTrouble interface {
-	RaiseTrouble(error) error
-	TroubleArgs() map[string]string
-	ResolveTrouble(map[string]interface{}) error
+	Args() map[string]string
+	Resolve(map[string]interface{}) error
 }
 
 // RaiseTrouble is a method that can be called from

@@ -59,7 +59,7 @@ func (worker *Worker) Start() {
 	fmt.Printf("[Worker] Starting worker for stage %v with label %v\n", worker.pipelineStage, worker.label)
 	worker.currentStatus = Working
 	if err := worker.task.Execute(worker); err != nil {
-		log.Panicf("[Error] Worker for stage %v with label %v has reported an error: %v\n", worker.pipelineStage, worker.label, err.Error())
+		log.Panicf("[Error] Worker for stage %v with label %v has reported an error(%T): %v\n", worker.pipelineStage, worker.label, err, err.Error())
 	}
 
 	worker.currentStatus = Finished

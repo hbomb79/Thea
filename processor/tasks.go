@@ -14,17 +14,98 @@ import (
 )
 
 type taskFn func(*worker.Worker, *QueueItem) error
+type troubleResolver func(*Trouble, map[string]interface{}) error
 type taskErrorHandler func(*QueueItem, error) error
+type troubleTag int
 
-func notifyTrouble(proc *Processor, item *QueueItem) {
+const (
+	TitleFailure troubleTag = iota
+	OmdbResponseFailure
+	OmdbMultipleOptions
+	FormatError
+)
+
+// When a processor task encounters an error that requires
+// user intervention to continue - a 'trouble' is raised.
+// This trouble is raised, and resolved, via the 'Trouble'
+// struct. This struct mainly acts as a way for the
+// task to continue working on other items whilst
+// keeping track of the trouble(s) that are pending
+type Trouble struct {
+	item     *QueueItem `json:"-"`
+	args     map[string]string
+	resolver troubleResolver
+	tag      troubleTag
+}
+
+// validate accepts a map of arguments and checks to ensure
+// that all the arguments required by this trouble instance
+// are present. Returns an error if not.
+func (trouble *Trouble) validate(args map[string]interface{}) error {
+	return nil
+}
+
+// Resolve is a method that is used to initiate the resolution of
+// a trouble instance. The args provided are first validated before
+// being passed to the Trouble's 'resolver' for processing.
+func (trouble *Trouble) Resolve(args map[string]interface{}) error {
+	if err := trouble.validate(args); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Args returns the arguments required by this trouble
+// in order to resolve this trouble instance.
+func (trouble *Trouble) Args() map[string]string {
+	return trouble.args
+}
+
+// Tag returns the 'tag' for this trouble, which is used by
+// resolving functions to tell which type of trouble they've received.
+func (trouble *Trouble) Tag() troubleTag {
+	return trouble.tag
+}
+
+// Item returns the QueueItem that this trouble is attached to
+func (trouble *Trouble) Item() *QueueItem {
+	return trouble.item
+}
+
+// baseTask is a struct that implements very little functionality, and is used
+// to facilitate the other task types implemented in this file. This struct
+// mainly just handled some repeated code definitions, such as the basic
+// work/wait worker loop, and raising and notifying troubles
+type baseTask struct {
+	troubles     []*Trouble
+	assignedItem *QueueItem
+}
+
+// raiseTrouble is a helper method used to push a new trouble
+// in to the slice for this task
+func (task *baseTask) raiseTrouble(proc *Processor, trouble *Trouble) {
+	trouble.Item().RaiseTrouble(trouble)
+	task.troubles = append(task.troubles, trouble)
+
+	task.notifyTrouble(proc, trouble)
+}
+
+// notifyTrouble sends a ProcessorUpdate to the processor which
+// is likely then pushed along to any connected clients on
+// the web socket
+func (task *baseTask) notifyTrouble(proc *Processor, trouble *Trouble) {
 	proc.PushUpdate(&ProcessorUpdate{
-		Title: "trouble",
-		//TODO
-		Context: processorUpdateContext{QueueItem: item},
+		Title:   "TROUBLE",
+		Context: processorUpdateContext{Trouble: trouble, QueueItem: trouble.Item()},
 	})
 }
 
-func executeTask(w *worker.Worker, proc *Processor, fn taskFn, errHandler taskErrorHandler) error {
+// executeTask implements the core worker work/wait loop that
+// searches for work to do - and if some work is available, the
+// 'fn' taskFn is executed. If no work is available, the worker
+// sleeps until woken up again.
+func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn, errHandler taskErrorHandler) error {
 	for {
 	inner:
 		for {
@@ -50,29 +131,24 @@ func executeTask(w *worker.Worker, proc *Processor, fn taskFn, errHandler taskEr
 	}
 }
 
-// TODO
-type baseTask struct {
-	troubleArgs  map[string]string
-	assignedItem *QueueItem
-}
-
-func (task *baseTask) TroubleArgs() map[string]string {
-	return task.troubleArgs
-}
-
-// TODO
+// TitleTask is the task responsible for searching through the
+// queue items raw path name and filtering out relevant information
+// such as the title, season/episode information, release year, and resolution.
 type TitleTask struct {
 	proc *Processor
 	baseTask
 }
 
+// Execute will utilise the baseTask.Execute method to run the task repeatedly
+// in a worker work/wait loop
 func (task *TitleTask) Execute(w *worker.Worker) error {
-	return executeTask(w, task.proc, task.ProcessTitle, task.RaiseTrouble)
+	return task.executeTask(w, task.proc, task.ProcessTitle, task.handleError)
 }
 
+// Processes a given queueItem, filtering out irrelevant information
 func (task *TitleTask) ProcessTitle(w *worker.Worker, queueItem *QueueItem) error {
 	if err := queueItem.FormatTitle(); err != nil {
-		return task.RaiseTrouble(queueItem, err)
+		return task.handleError(queueItem, err)
 	}
 
 	// Release the QueueItem by advancing it to the next pipeline stage
@@ -83,27 +159,33 @@ func (task *TitleTask) ProcessTitle(w *worker.Worker, queueItem *QueueItem) erro
 	return nil
 }
 
-func (task *TitleTask) RaiseTrouble(item *QueueItem, err error) error {
-	// TODO Handle
+// TODO
+func (task *TitleTask) handleError(item *QueueItem, err error) error {
 
 	// Not an error we want to raise trouble for.
 	return err
 }
 
-func (task *TitleTask) ResolveTrouble(args map[string]interface{}) error {
+// TODO
+func (task *TitleTask) resolveTrouble(args map[string]interface{}) error {
 	return nil
 }
 
-// TODO
+// OmdbTask is the task responsible for querying to OMDB API for information
+// about the queue item we've processed so far.
 type OmdbTask struct {
 	proc *Processor
 	baseTask
 }
 
+// Execute uses the provided baseTask.executeTask method to run this tasks
+// work function in a work/wait worker loop
 func (task *OmdbTask) Execute(w *worker.Worker) error {
-	return executeTask(w, task.proc, task.Query, task.RaiseTrouble)
+	return task.executeTask(w, task.proc, task.Query, task.RaiseTrouble)
 }
 
+// Query sends an API request to the OMDB api, searching for information
+// about the queue item provided
 func (task *OmdbTask) Query(w *worker.Worker, queueItem *QueueItem) error {
 	// Ensure the previous pipeline actually provided information
 	// in the TitleInfo struct.
@@ -145,27 +227,33 @@ func (task *OmdbTask) Query(w *worker.Worker, queueItem *QueueItem) error {
 	return nil
 }
 
+// TODO
 func (task *OmdbTask) RaiseTrouble(item *QueueItem, err error) error {
-	// TODO Handle
-
 	// Not an error we want to raise trouble for.
 	return err
 }
 
+// TODO
 func (task *OmdbTask) ResolveTrouble(args map[string]interface{}) error {
 	return nil
 }
 
-// TODO
+// FormatTask is a task that is responsible for performing the transcoding of
+// the queue items to MP4 format, to allow for viewing/streaming directly
+// inside of any modern web browsers
 type FormatTask struct {
 	proc *Processor
 	baseTask
 }
 
+// Execute uses the baseTask.executeTask to run this workers
+// task in a worker loop
 func (task *FormatTask) Execute(w *worker.Worker) error {
-	return executeTask(w, task.proc, task.Format, task.RaiseTrouble)
+	return task.executeTask(w, task.proc, task.Format, task.RaiseTrouble)
 }
 
+// Format will take the provided queueItem and format the file in to
+// a new format.
 func (task *FormatTask) Format(w *worker.Worker, queueItem *QueueItem) error {
 	outputFormat := task.proc.Config.Format.TargetFormat
 	ffmpegOverwrite := true
@@ -200,13 +288,13 @@ func (task *FormatTask) Format(w *worker.Worker, queueItem *QueueItem) error {
 	return nil
 }
 
+// TODO
 func (task *FormatTask) RaiseTrouble(item *QueueItem, err error) error {
-	// TODO Handle
-
 	// Not an error we want to raise trouble for.
 	return err
 }
 
+// TODO
 func (task *FormatTask) ResolveTrouble(args map[string]interface{}) error {
 	return nil
 }

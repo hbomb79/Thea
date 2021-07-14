@@ -142,11 +142,11 @@ type TitleTask struct {
 // Execute will utilise the baseTask.Execute method to run the task repeatedly
 // in a worker work/wait loop
 func (task *TitleTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.ProcessTitle, task.handleError)
+	return task.executeTask(w, task.proc, task.processTitle, task.handleError)
 }
 
 // Processes a given queueItem, filtering out irrelevant information
-func (task *TitleTask) ProcessTitle(w *worker.Worker, queueItem *QueueItem) error {
+func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) error {
 	if err := queueItem.FormatTitle(); err != nil {
 		return task.handleError(queueItem, err)
 	}
@@ -181,12 +181,12 @@ type OmdbTask struct {
 // Execute uses the provided baseTask.executeTask method to run this tasks
 // work function in a work/wait worker loop
 func (task *OmdbTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.Query, task.RaiseTrouble)
+	return task.executeTask(w, task.proc, task.query, task.handleError)
 }
 
-// Query sends an API request to the OMDB api, searching for information
+// query sends an API request to the OMDB api, searching for information
 // about the queue item provided
-func (task *OmdbTask) Query(w *worker.Worker, queueItem *QueueItem) error {
+func (task *OmdbTask) query(w *worker.Worker, queueItem *QueueItem) error {
 	// Ensure the previous pipeline actually provided information
 	// in the TitleInfo struct.
 	if queueItem.TitleInfo == nil {
@@ -228,13 +228,13 @@ func (task *OmdbTask) Query(w *worker.Worker, queueItem *QueueItem) error {
 }
 
 // TODO
-func (task *OmdbTask) RaiseTrouble(item *QueueItem, err error) error {
+func (task *OmdbTask) handleError(item *QueueItem, err error) error {
 	// Not an error we want to raise trouble for.
 	return err
 }
 
 // TODO
-func (task *OmdbTask) ResolveTrouble(args map[string]interface{}) error {
+func (task *OmdbTask) resolveTrouble(args map[string]interface{}) error {
 	return nil
 }
 
@@ -249,12 +249,12 @@ type FormatTask struct {
 // Execute uses the baseTask.executeTask to run this workers
 // task in a worker loop
 func (task *FormatTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.Format, task.RaiseTrouble)
+	return task.executeTask(w, task.proc, task.format, task.handleError)
 }
 
-// Format will take the provided queueItem and format the file in to
+// format will take the provided queueItem and format the file in to
 // a new format.
-func (task *FormatTask) Format(w *worker.Worker, queueItem *QueueItem) error {
+func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 	outputFormat := task.proc.Config.Format.TargetFormat
 	ffmpegOverwrite := true
 	ffmpegOpts, ffmpegCfg := &ffmpeg.Options{
@@ -289,13 +289,13 @@ func (task *FormatTask) Format(w *worker.Worker, queueItem *QueueItem) error {
 }
 
 // TODO
-func (task *FormatTask) RaiseTrouble(item *QueueItem, err error) error {
+func (task *FormatTask) handleError(item *QueueItem, err error) error {
 	// Not an error we want to raise trouble for.
 	return err
 }
 
 // TODO
-func (task *FormatTask) ResolveTrouble(args map[string]interface{}) error {
+func (task *FormatTask) resolveTrouble(args map[string]interface{}) error {
 	return nil
 }
 

@@ -25,7 +25,6 @@ type TPAConfig struct {
 // only on the concurrency related configs (number of threads to use
 // for each stage of the pipeline)
 type ConcurrentConfig struct {
-	Import int `yaml:"import_threads"`
 	Title  int `yaml:"title_threads"`
 	OMBD   int `yaml:"omdb_threads"`
 	Format int `yaml:"ffmpeg_threads"`

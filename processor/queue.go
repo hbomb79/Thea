@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io/fs"
 	"sync"
+
+	"github.com/hbomb79/TPA/worker"
 )
 
 // ProcessorQueue is the Queue of items to be processed by this
@@ -39,7 +41,7 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 			Name:   fileInfo.Name(),
 			Path:   path,
 			Status: Pending,
-			Stage:  Title,
+			Stage:  worker.Title,
 		})
 		queue.lastId++
 
@@ -54,7 +56,7 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *ProcessorQueue) Pick(stage PipelineStage) *QueueItem {
+func (queue *ProcessorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -76,10 +78,10 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 	queue.Lock()
 	defer queue.Unlock()
 
-	if item.Stage == Finish {
+	if item.Stage == worker.Finish {
 		item.Status = Completed
-	} else if item.Stage == Format {
-		item.Stage = Finish
+	} else if item.Stage == worker.Format {
+		item.Stage = worker.Finish
 		item.Status = Completed
 	} else {
 		item.Stage++

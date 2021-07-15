@@ -66,7 +66,7 @@ type baseTask struct {
 // raiseTrouble is a helper method used to push a new trouble
 // in to the slice for this task
 func (task *baseTask) raiseTrouble(proc *Processor, trouble *Trouble) {
-	trouble.Item().RaiseTrouble(trouble)
+	trouble.Item.RaiseTrouble(trouble)
 
 	task.notifyTrouble(proc, trouble)
 }
@@ -77,7 +77,7 @@ func (task *baseTask) raiseTrouble(proc *Processor, trouble *Trouble) {
 func (task *baseTask) notifyTrouble(proc *Processor, trouble *Trouble) {
 	proc.PushUpdate(&ProcessorUpdate{
 		Title:   "TROUBLE",
-		Context: processorUpdateContext{Trouble: trouble, QueueItem: trouble.Item()},
+		Context: processorUpdateContext{Trouble: trouble, QueueItem: trouble.Item},
 	})
 }
 
@@ -161,7 +161,7 @@ func (task *TitleTask) handleError(item *QueueItem, err error) error {
 			return tErr
 		}
 
-		task.raiseTrouble(task.proc, &Trouble{"Title Processor Trouble", v, item, tArgs, task.resolveTrouble, TitleFailure})
+		task.raiseTrouble(task.proc, &Trouble{"Title Processor Trouble", v, item, tArgs, TitleFailure, task.resolveTrouble})
 		return nil
 	}
 
@@ -173,20 +173,22 @@ func (task *TitleTask) handleError(item *QueueItem, err error) error {
 // MUST be a TitleFailure trouble (tag). If success, the queueItem has it's TitleInfo
 // set to the resulting struct, and it's advanced to the next stage
 func (task *TitleTask) resolveTrouble(trouble *Trouble, args map[string]interface{}) error {
-	if trouble.tag != TitleFailure {
-		return fmt.Errorf("failed to resolve trouble; unexpected 'tag' %v", trouble.tag)
+	if trouble.Tag != TitleFailure {
+		return fmt.Errorf("failed to resolve trouble; unexpected 'tag' %v", trouble.Tag)
 	}
 
 	// The trouble must be resolved by passing arguments that can be used to
 	// build a TitleInfo struct. We use mapstructure to attempt to build
 	// the struct here - if it succeeds, we can resolve the trouble
 	var result TitleInfo
-	err := mapstructure.Decode(args, &result)
+	err := mapstructure.WeakDecode(args, &result)
 	if err != nil {
 		return err
 	}
 
-	item := trouble.Item()
+	log.Printf("Successfully decoded incoming arguments to struct %T: %#v\n", result, result)
+
+	item := trouble.Item
 	item.TitleInfo = &result
 	task.advance(item)
 

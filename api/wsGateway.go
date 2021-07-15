@@ -101,8 +101,11 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *ws.SocketHub, message *ws.Sock
 	queueItem := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
 	if queueItem == nil {
 		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
+	} else if queueItem.Trouble == nil {
+		return errors.New(fmt.Sprintf(ERR_FMT, "item has no trouble"))
 	}
 
+	fmt.Printf("[Payload] Encoding a payload for %#v\n", queueItem.Trouble)
 	hub.Send(&ws.SocketMessage{
 		Title:     "COMMAND_SUCCESS",
 		Arguments: map[string]interface{}{"payload": queueItem.Trouble, "command": message},

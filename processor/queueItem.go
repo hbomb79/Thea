@@ -68,18 +68,13 @@ type QueueItem struct {
 	StatusLine string               `json:"statusLine" groups:"api"`
 	TitleInfo  *TitleInfo           `json:"title_info"`
 	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
-	Trouble    QueueTrouble         `json:"trouble"`
-}
-
-type QueueTrouble interface {
-	Args() map[string]string
-	Resolve(map[string]interface{}) error
+	Trouble    *Trouble             `json:"trouble"`
 }
 
 // RaiseTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
-func (item *QueueItem) RaiseTrouble(trouble QueueTrouble) error {
+func (item *QueueItem) RaiseTrouble(trouble *Trouble) error {
 	fmt.Printf("[Trouble] Raising trouble for QueueItem (%v)!\n", item.Path)
 	if item.Trouble == nil {
 		item.Status = Troubled

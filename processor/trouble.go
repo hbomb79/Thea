@@ -26,20 +26,9 @@ type Trouble struct {
 	resolver troubleResolver
 }
 
-// validate accepts a map of arguments and checks to ensure
-// that all the arguments required by this trouble instance
-// are present. Returns an error if not.
-func (trouble *Trouble) validate(args map[string]interface{}) error {
-	return nil
-}
-
 // Resolve is a method that is used to initiate the resolution of
 // a trouble instance. The args provided are first validated before
 // being passed to the Trouble's 'resolver' for processing.
 func (trouble *Trouble) Resolve(args map[string]interface{}) error {
-	if err := trouble.validate(args); err != nil {
-		return err
-	}
-
 	return trouble.resolver(trouble, args)
 }

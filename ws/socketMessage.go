@@ -45,7 +45,7 @@ func (message *SocketMessage) ValidateArguments(required map[string]string) erro
 			// interface implementation too
 			givenValue := fmt.Sprintf("%v", v)
 			switch value {
-			case "number":
+			case "number", "int":
 				var i int
 				_, err := fmt.Sscanf(givenValue, "%d", &i)
 				if err != nil {

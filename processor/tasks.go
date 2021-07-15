@@ -8,69 +8,51 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"reflect"
 
 	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/hbomb79/TPA/worker"
+	"github.com/mitchellh/mapstructure"
 )
 
 type taskFn func(*worker.Worker, *QueueItem) error
-type troubleResolver func(*Trouble, map[string]interface{}) error
-type taskErrorHandler func(*QueueItem, error) error
-type troubleTag int
 
-const (
-	TitleFailure troubleTag = iota
-	OmdbResponseFailure
-	OmdbMultipleOptions
-	FormatError
-)
+// toArgsMap takes a given struct and will go through all
+// fields
+func toArgsMap(in interface{}) (map[string]string, error) {
+	out := make(map[string]string)
 
-// When a processor task encounters an error that requires
-// user intervention to continue - a 'trouble' is raised.
-// This trouble is raised, and resolved, via the 'Trouble'
-// struct. This struct mainly acts as a way for the
-// task to continue working on other items whilst
-// keeping track of the trouble(s) that are pending
-type Trouble struct {
-	item     *QueueItem `json:"-"`
-	args     map[string]string
-	resolver troubleResolver
-	tag      troubleTag
-}
-
-// validate accepts a map of arguments and checks to ensure
-// that all the arguments required by this trouble instance
-// are present. Returns an error if not.
-func (trouble *Trouble) validate(args map[string]interface{}) error {
-	return nil
-}
-
-// Resolve is a method that is used to initiate the resolution of
-// a trouble instance. The args provided are first validated before
-// being passed to the Trouble's 'resolver' for processing.
-func (trouble *Trouble) Resolve(args map[string]interface{}) error {
-	if err := trouble.validate(args); err != nil {
-		return err
+	v := reflect.ValueOf(in)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
 	}
 
-	return nil
-}
+	if v.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("toArgsMap only accepts structs - got %T", v)
+	}
 
-// Args returns the arguments required by this trouble
-// in order to resolve this trouble instance.
-func (trouble *Trouble) Args() map[string]string {
-	return trouble.args
-}
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		var typeName string
 
-// Tag returns the 'tag' for this trouble, which is used by
-// resolving functions to tell which type of trouble they've received.
-func (trouble *Trouble) Tag() troubleTag {
-	return trouble.tag
-}
+		fi := typ.Field(i)
+		if v, ok := fi.Tag.Lookup("decode"); ok {
+			if v == "-" {
+				// Field wants to be ignored
+				continue
+			}
 
-// Item returns the QueueItem that this trouble is attached to
-func (trouble *Trouble) Item() *QueueItem {
-	return trouble.item
+			// Field has a tag to specify the decode type. Use that instead
+			typeName = v
+		} else {
+			// Use actual type name
+			typeName = fi.Type.Name()
+		}
+
+		out[fi.Name] = typeName
+	}
+
+	return out, nil
 }
 
 // baseTask is a struct that implements very little functionality, and is used
@@ -78,7 +60,6 @@ func (trouble *Trouble) Item() *QueueItem {
 // mainly just handled some repeated code definitions, such as the basic
 // work/wait worker loop, and raising and notifying troubles
 type baseTask struct {
-	troubles     []*Trouble
 	assignedItem *QueueItem
 }
 
@@ -86,7 +67,6 @@ type baseTask struct {
 // in to the slice for this task
 func (task *baseTask) raiseTrouble(proc *Processor, trouble *Trouble) {
 	trouble.Item().RaiseTrouble(trouble)
-	task.troubles = append(task.troubles, trouble)
 
 	task.notifyTrouble(proc, trouble)
 }
@@ -145,29 +125,71 @@ func (task *TitleTask) Execute(w *worker.Worker) error {
 	return task.executeTask(w, task.proc, task.processTitle, task.handleError)
 }
 
-// Processes a given queueItem, filtering out irrelevant information
+// Processes a given queueItem by filtering out irrelevant information from it's
+// title, and finding relevant information such as the season, episode and resolution
+// TODO: Maybe we should be checking file metadata to get accurate resolution
+// and runtime information - this info could also be found in the FormatTask via
+// ffprobe
 func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) error {
-	if err := queueItem.FormatTitle(); err != nil {
-		return task.handleError(queueItem, err)
+	if true {
+		return TitleFormatError{queueItem, "Help me!"}
 	}
 
-	// Release the QueueItem by advancing it to the next pipeline stage
-	task.proc.Queue.AdvanceStage(queueItem)
+	if err := queueItem.FormatTitle(); err != nil {
+		return err
+	}
 
-	// Wakeup any pipeline workers that are sleeping
-	task.proc.WorkerPool.WakeupWorkers(worker.Omdb)
+	task.advance(queueItem)
 	return nil
 }
 
-// TODO
-func (task *TitleTask) handleError(item *QueueItem, err error) error {
+func (task *TitleTask) advance(item *QueueItem) {
+	// Release the QueueItem by advancing it to the next pipeline stage
+	task.proc.Queue.AdvanceStage(item)
 
-	// Not an error we want to raise trouble for.
+	// Wakeup any pipeline workers that are sleeping
+	task.proc.WorkerPool.WakeupWorkers(worker.Omdb)
+}
+
+// handleError will check the err provided and if it's a TitleFormatError, it will
+// raise a trouble on the queue item provided.
+func (task *TitleTask) handleError(item *QueueItem, err error) error {
+	if v, ok := err.(TitleFormatError); ok {
+		// Raise trouble
+		tArgs, tErr := toArgsMap(TitleInfo{})
+		if tErr != nil {
+			return tErr
+		}
+
+		task.raiseTrouble(task.proc, &Trouble{"Title Processor Trouble", v, item, tArgs, task.resolveTrouble, TitleFailure})
+		return nil
+	}
+
 	return err
 }
 
-// TODO
-func (task *TitleTask) resolveTrouble(args map[string]interface{}) error {
+// resolveTrouble accepts a trouble and a map of arguments, and will attempt
+// to build a TitleInfo struct out of the arguments provided. The trouble provided
+// MUST be a TitleFailure trouble (tag). If success, the queueItem has it's TitleInfo
+// set to the resulting struct, and it's advanced to the next stage
+func (task *TitleTask) resolveTrouble(trouble *Trouble, args map[string]interface{}) error {
+	if trouble.tag != TitleFailure {
+		return fmt.Errorf("failed to resolve trouble; unexpected 'tag' %v", trouble.tag)
+	}
+
+	// The trouble must be resolved by passing arguments that can be used to
+	// build a TitleInfo struct. We use mapstructure to attempt to build
+	// the struct here - if it succeeds, we can resolve the trouble
+	var result TitleInfo
+	err := mapstructure.Decode(args, &result)
+	if err != nil {
+		return err
+	}
+
+	item := trouble.Item()
+	item.TitleInfo = &result
+	task.advance(item)
+
 	return nil
 }
 
@@ -234,7 +256,7 @@ func (task *OmdbTask) handleError(item *QueueItem, err error) error {
 }
 
 // TODO
-func (task *OmdbTask) resolveTrouble(args map[string]interface{}) error {
+func (task *OmdbTask) resolveTrouble(trouble *Trouble, args map[string]interface{}) error {
 	return nil
 }
 
@@ -295,15 +317,6 @@ func (task *FormatTask) handleError(item *QueueItem, err error) error {
 }
 
 // TODO
-func (task *FormatTask) resolveTrouble(args map[string]interface{}) error {
+func (task *FormatTask) resolveTrouble(trouble *Trouble, args map[string]interface{}) error {
 	return nil
-}
-
-type TitleFormatError struct {
-	item    *QueueItem
-	message string
-}
-
-func (e TitleFormatError) Error() string {
-	return fmt.Sprintf("failed to format title(%v) - %v", e.item.Name, e.message)
 }

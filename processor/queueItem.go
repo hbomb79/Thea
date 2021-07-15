@@ -204,3 +204,12 @@ func (rt *OmdbResponseType) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
+
+type TitleFormatError struct {
+	item    *QueueItem
+	message string
+}
+
+func (e TitleFormatError) Error() string {
+	return fmt.Sprintf("failed to format title(%v) - %v", e.item.Name, e.message)
+}

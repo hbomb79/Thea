@@ -2,13 +2,15 @@ package processor
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/hbomb79/TPA/worker"
@@ -16,6 +18,10 @@ import (
 )
 
 type taskFn func(*worker.Worker, *QueueItem) error
+
+const (
+	OMDB_API string = "http://www.omdbapi.com/?%s=%s&apikey=%s"
+)
 
 // toArgsMap takes a given struct and will go through all
 // fields
@@ -131,10 +137,6 @@ func (task *TitleTask) Execute(w *worker.Worker) error {
 // and runtime information - this info could also be found in the FormatTask via
 // ffprobe
 func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) error {
-	if true {
-		return TitleFormatError{queueItem, "Help me!"}
-	}
-
 	if err := queueItem.FormatTitle(); err != nil {
 		return err
 	}
@@ -195,6 +197,24 @@ func (task *TitleTask) resolveTrouble(trouble *Trouble, args map[string]interfac
 	return nil
 }
 
+type OmdbNoResultError struct{ message string }
+
+func (err OmdbNoResultError) Error() string {
+	return err.message
+}
+
+type OmdbMultipleResultError struct{ message string }
+
+func (err OmdbMultipleResultError) Error() string {
+	return err.message
+}
+
+type OmdbRequestError struct{ message string }
+
+func (err OmdbRequestError) Error() string {
+	return err.message
+}
+
 // OmdbTask is the task responsible for querying to OMDB API for information
 // about the queue item we've processed so far.
 type OmdbTask struct {
@@ -202,52 +222,166 @@ type OmdbTask struct {
 	baseTask
 }
 
+// OmdbSearchItem is the struct that encapsulates some of the information from
+// the OMDB api that is nested inside of a search result (OmdbSearchResult)
+type OmdbSearchItem struct {
+	Title     string
+	Year      string
+	ImdbId    string `json:"imdbId"`
+	EntryType string `json:"Type"`
+}
+
+// OmdbSearchResult is the struct used to unmarshal JSON from the OMDB api
+// after a search has been performed. Note that this is not the same as OmdbInfo, which
+// is what the QueueItem stores - this struct is filled via a JSON unmarshal in 'fetch'
+type OmdbSearchResult struct {
+	Results  []*OmdbSearchItem `json:"Search"`
+	Response OmdbResponseType
+	Count    int `json:"totalResults,string"`
+}
+
+func filterSearchItems(items []*OmdbSearchItem, strategy func(*OmdbSearchItem) bool) []*OmdbSearchItem {
+	out := make([]*OmdbSearchItem, 0)
+	for i := 0; i < len(items); i++ {
+		item := items[i]
+		if strategy(item) {
+			out = append(out, item)
+		}
+	}
+
+	return out
+}
+
+func (result *OmdbSearchResult) parse(queueItem *QueueItem) (*OmdbSearchItem, error) {
+	// Check the response by parsing the response, and total results.
+	if !result.Response || result.Count == 0 {
+		// Response from OMDB failed!
+		return nil, OmdbNoResultError{}
+	}
+
+	if result.Count > 1 {
+		// We have multiple results from OMDB.
+		items := result.Results
+		desiredType := "movie"
+		if queueItem.TitleInfo.Episodic {
+			desiredType = "series"
+		}
+
+		// 1. Discard items that are of a different type (i.e movie/series)
+		items = filterSearchItems(items, func(item *OmdbSearchItem) bool {
+			return strings.Compare(item.EntryType, desiredType) == 0
+		})
+
+		// 2. Discard items that are of a different year
+		yearMatcher := regexp.MustCompile(`\d+`)
+		items = filterSearchItems(items, func(item *OmdbSearchItem) bool {
+			yearString := yearMatcher.FindString(item.Year)
+			year, err := strconv.Atoi(yearString)
+			if err != nil {
+				return false
+			}
+
+			return year == queueItem.TitleInfo.Year
+		})
+
+		// If we still have multiple responses then we need help from the user to decide.
+		if len(items) == 0 {
+			return nil, OmdbNoResultError{}
+		} else if len(items) > 1 {
+			return nil, OmdbMultipleResultError{}
+		}
+
+		return items[0], nil
+	} else if result.Count < 1 {
+		return nil, OmdbNoResultError{}
+	}
+
+	return result.Results[0], nil
+}
+
 // Execute uses the provided baseTask.executeTask method to run this tasks
 // work function in a work/wait worker loop
 func (task *OmdbTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.query, task.handleError)
+	return task.executeTask(w, task.proc, task.find, task.handleError)
 }
 
-// query sends an API request to the OMDB api, searching for information
-// about the queue item provided
-func (task *OmdbTask) query(w *worker.Worker, queueItem *QueueItem) error {
-	// Ensure the previous pipeline actually provided information
-	// in the TitleInfo struct.
-	if queueItem.TitleInfo == nil {
-		return errors.New("QueueItem contains no title information")
-	}
-
-	// Form our API request
-	baseApi := fmt.Sprintf(task.proc.Config.Database.OmdbApiUrl, task.proc.Config.Database.OmdbKey, queueItem.TitleInfo.Title)
-	res, err := http.Get(baseApi)
+// search will perform a search query to OMDB and will return the result
+// If multiple results are found a OmdbMultipleResultError is returned; if
+// no results are found then an OmdbNoResultError is returned. If the request
+// fails for another reason, an OmdbRequestError is returned.
+func (task *OmdbTask) search(w *worker.Worker, queueItem *QueueItem) (*OmdbInfo, error) {
+	// Peform the search
+	cfg := task.proc.Config.Database
+	res, err := http.Get(fmt.Sprintf(OMDB_API, "s", queueItem.TitleInfo.Title, cfg.OmdbKey))
 	if err != nil {
-		return err
+		// Request exception
+		return nil, OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error())}
 	}
 	defer res.Body.Close()
 
-	// Read all the bytes from the response
 	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error())}
+	}
+
+	var searchResult OmdbSearchResult
+	if err = json.Unmarshal(body, &searchResult); err != nil {
+		return nil, OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error())}
+	}
+
+	resultItem, err := searchResult.parse(queueItem)
+	if err != nil {
+		return nil, err
+	}
+
+	// We got a result however OMDB search results don't contain all the info we need
+	// so we need to perform a direct query for this item
+	omdbResult, err := task.fetch(w, resultItem.ImdbId)
+	if err != nil {
+		return nil, err
+	}
+
+	return omdbResult, nil
+}
+
+// fetch will perform an Omdb request using the given ID as the API argument.
+// If no match is found a OmdbNoResultError is returned - if the request fails
+// for another reason, an OmdbRequestError is returned.
+func (task *OmdbTask) fetch(w *worker.Worker, imdbId string) (*OmdbInfo, error) {
+	cfg := task.proc.Config.Database
+	res, err := http.Get(fmt.Sprintf(OMDB_API, "i", imdbId, cfg.OmdbKey))
+	if err != nil {
+		// Request exception
+		return nil, OmdbRequestError{err.Error()}
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, OmdbRequestError{err.Error()}
+	}
+
+	var result OmdbInfo
+	if err = json.Unmarshal(body, &result); err != nil {
+		return nil, OmdbRequestError{err.Error()}
+	}
+
+	return &result, nil
+}
+
+// find is used to perform a search to Omdb using the title information stored inside
+// of a QueueItem.
+func (task *OmdbTask) find(w *worker.Worker, queueItem *QueueItem) error {
+	if queueItem.TitleInfo == nil {
+		return fmt.Errorf("cannot find OMDB info for queueItem (id: %v). TitleInfo missing!", queueItem.Id)
+	}
+
+	res, err := task.search(w, queueItem)
 	if err != nil {
 		return err
 	}
 
-	// Unmarshal the JSON content in to our OmdbInfo struct
-	var info OmdbInfo
-	if err = json.Unmarshal(body, &info); err != nil {
-		return err
-	}
-
-	// Store OMDB result in QueueItem
-	queueItem.OmdbInfo = &info
-	if !queueItem.OmdbInfo.Response {
-		return errors.New("Invalid response from OMDB - 'Response' was false")
-	}
-
-	// Advance our item to the next stage
-	task.proc.Queue.AdvanceStage(queueItem)
-
-	// Wakeup any sleeping workers in next stage
-	task.proc.WorkerPool.WakeupWorkers(worker.Format)
+	queueItem.OmdbInfo = res
 	return nil
 }
 
@@ -279,6 +413,10 @@ func (task *FormatTask) Execute(w *worker.Worker) error {
 // format will take the provided queueItem and format the file in to
 // a new format.
 func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
+	if true {
+		return fmt.Errorf("HIT babey. omdbInfo: %#v", queueItem.OmdbInfo)
+	}
+
 	outputFormat := task.proc.Config.Format.TargetFormat
 	ffmpegOverwrite := true
 	ffmpegOpts, ffmpegCfg := &ffmpeg.Options{

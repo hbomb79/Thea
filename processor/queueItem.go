@@ -86,6 +86,18 @@ func (item *QueueItem) RaiseTrouble(trouble Trouble) error {
 	return errors.New(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble))
 }
 
+// ResetTrouble is used to remove the trouble state from
+// this item, and sets the items status to 'Pending', rather than
+// 'Troubled'
+func (item *QueueItem) ResetTrouble() {
+	if item.Status != Troubled {
+		return
+	}
+
+	item.Trouble = nil
+	item.Status = Pending
+}
+
 // FormatTitle accepts a string (title) and reformats it
 // based on text-filtering configuration provided by
 // the user

@@ -1,16 +1,5 @@
 package processor
 
-type troubleResolver func(*Trouble, map[string]interface{}) error
-type taskErrorHandler func(*QueueItem, error) error
-type troubleTag int
-
-const (
-	TitleFailure troubleTag = iota
-	OmdbResponseFailure
-	OmdbMultipleOptions
-	FormatError
-)
-
 // When a processor task encounters an error that requires
 // user intervention to continue - a 'trouble' is raised.
 // This trouble is raised, and resolved, via the 'Trouble'

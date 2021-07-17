@@ -24,7 +24,9 @@ const (
 )
 
 // toArgsMap takes a given struct and will go through all
-// fields
+// fields of the provided input and create an output map where
+// each key is the name of the field, and each value is a string
+// representation of the type of the field (e.g. string, int, bool)
 func toArgsMap(in interface{}) (map[string]string, error) {
 	out := make(map[string]string)
 
@@ -120,16 +122,21 @@ func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn) 
 	}
 }
 
+// TitleTaskError is an error raised during the processing of the
+// title task
 type TitleTaskError struct {
 	Message   string
 	queueItem *QueueItem
 	task      *TitleTask
 }
 
+// Error provided so the struct implements 'error'
 func (ex TitleTaskError) Error() string {
 	return ex.Message
 }
 
+// Args returns the arguments required to resolve this
+// trouble
 func (ex TitleTaskError) Args() map[string]string {
 	v, err := toArgsMap(TitleInfo{})
 	if err != nil {
@@ -139,6 +146,8 @@ func (ex TitleTaskError) Args() map[string]string {
 	return v
 }
 
+// Resolve will attempt to resolve the error by taking the arguments provided
+// to the method, and casting it to a TitleInfo struct if possible.
 func (ex TitleTaskError) Resolve(args map[string]interface{}) error {
 	// The trouble must be resolved by passing arguments that can be used to
 	// build a TitleInfo struct. We use mapstructure to attempt to build
@@ -152,11 +161,13 @@ func (ex TitleTaskError) Resolve(args map[string]interface{}) error {
 	log.Printf("Successfully decoded incoming arguments to struct %T: %#v\n", result, result)
 
 	ex.queueItem.TitleInfo = &result
+	ex.queueItem.ResetTrouble()
 	ex.task.advance(ex.queueItem)
 
 	return nil
 }
 
+// Item returns the QueueItem that is attached to this trouble
 func (ex TitleTaskError) Item() *QueueItem {
 	return ex.queueItem
 }
@@ -189,6 +200,8 @@ func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) erro
 	return nil
 }
 
+// advances the item by advancing the stage of the item, and waking up
+// any sleeping workers in the next stage
 func (task *TitleTask) advance(item *QueueItem) {
 	// Release the QueueItem by advancing it to the next pipeline stage
 	task.proc.Queue.AdvanceStage(item)
@@ -207,16 +220,21 @@ type OmdbNoResultError struct {
 	task      *OmdbTask
 }
 
+// Error returns the task message formatted for use as an error message. Implemented so this
+// struct satisfies the error interface
 func (ex OmdbNoResultError) Error() string {
-	return ex.Message
+	return fmt.Sprintf("Omdb task error: %v", ex.Message)
 }
 
+// Args returns the arguments required by this error to successfully resolve
 func (ex OmdbNoResultError) Args() map[string]string {
 	return map[string]string{
 		"imdbId": "string",
 	}
 }
 
+// Resolve will attempt to resolve this error by fetching an OMDB entry using
+// a specific imdbId provided via the arguments to this method
 func (ex OmdbNoResultError) Resolve(args map[string]interface{}) error {
 	// Attempt to fetch the Imdb item with this ID
 	id, ok := args["imdbId"]
@@ -230,14 +248,19 @@ func (ex OmdbNoResultError) Resolve(args map[string]interface{}) error {
 	}
 
 	ex.queueItem.OmdbInfo = info
+	ex.queueItem.ResetTrouble()
 	ex.task.advance(ex.queueItem)
 	return nil
 }
 
+// Item returns the QueueItem this trouble is attached to
 func (ex OmdbNoResultError) Item() *QueueItem {
 	return ex.queueItem
 }
 
+// OmdbMultipleResultError is an error/trouble raised when a search query
+// to OMDB has many possible results. This trouble allows the user to chose which
+// option they'd like to use
 type OmdbMultipleResultError struct {
 	Message   string `json:"message"`
 	queueItem *QueueItem
@@ -245,16 +268,22 @@ type OmdbMultipleResultError struct {
 	Choices   []*OmdbSearchItem `json:"choices"`
 }
 
+// Error returns the trouble message formatted for use as an error message. Implemented so
+// this struct satisfies the error interface
 func (ex OmdbMultipleResultError) Error() string {
-	return ex.Message
+	return fmt.Sprintf("Omdb task error: %v", ex.Message)
 }
 
+// Args returns the arguments required to resolve this trouble
 func (ex OmdbMultipleResultError) Args() map[string]string {
 	return map[string]string{
 		"choice": "int",
 	}
 }
 
+// Resolve attempts to resolve this error by fetching details from OMDB for the choice the user
+// selected. This selection is provided by use of an 'id' representing an index inside the choice
+// array for this trouble.
 func (ex OmdbMultipleResultError) Resolve(args map[string]interface{}) error {
 	v, ok := args["choice"]
 	if !ok {
@@ -262,12 +291,8 @@ func (ex OmdbMultipleResultError) Resolve(args map[string]interface{}) error {
 	}
 
 	choice, ok := v.(int)
-	if !ok {
+	if !ok || len(ex.Choices)-1 < choice {
 		return fmt.Errorf("Faield to resolve OmdbMultipleResultError - Bad value for choice (int) key in args")
-	}
-
-	if len(ex.Choices)-1 < choice {
-		return fmt.Errorf("Failed to resolve OmdbMultipleResultError - Bad value for choice (int) key in args")
 	}
 
 	// Okay, we have a valid choice from the user. Fetch that choice from OMDB and store
@@ -277,10 +302,12 @@ func (ex OmdbMultipleResultError) Resolve(args map[string]interface{}) error {
 	}
 
 	ex.queueItem.OmdbInfo = info
+	ex.queueItem.ResetTrouble()
 	ex.task.advance(ex.queueItem)
 	return nil
 }
 
+// Item returns the QueueItem attached to this trouble
 func (ex OmdbMultipleResultError) Item() *QueueItem {
 	return ex.queueItem
 }
@@ -292,15 +319,15 @@ type OmdbRequestError struct {
 }
 
 func (err OmdbRequestError) Error() string {
-	return err.Message
+	return fmt.Sprintf("Omdb task error: %v", err.Message)
 }
 
 func (err OmdbRequestError) Args() map[string]string {
 	return map[string]string{}
 }
 
-func (err OmdbRequestError) Resolve() error {
-	err.queueItem.Status = Pending
+func (err OmdbRequestError) Resolve(args map[string]interface{}) error {
+	err.queueItem.ResetTrouble()
 	err.task.proc.WorkerPool.WakeupWorkers(worker.Omdb)
 	return nil
 }
@@ -530,7 +557,7 @@ type FormatTaskError struct {
 }
 
 func (ex FormatTaskError) Error() string {
-	return fmt.Sprintf("Format task has experienced trouble: %v", ex.Message)
+	return fmt.Sprintf("Format task trouble: %v", ex.Message)
 }
 
 func (ex FormatTaskError) Args() map[string]string {
@@ -538,7 +565,7 @@ func (ex FormatTaskError) Args() map[string]string {
 }
 
 func (ex FormatTaskError) Resolve(map[string]interface{}) error {
-	ex.queueItem.Status = Pending
+	ex.queueItem.ResetTrouble()
 	ex.task.proc.WorkerPool.WakeupWorkers(worker.Format)
 	return nil
 }

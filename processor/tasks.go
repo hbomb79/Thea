@@ -362,19 +362,23 @@ type OmdbSearchResult struct {
 	Count    int `json:"totalResults,string"`
 }
 
+// filterSearchItems accepts a slice of OmdbSearchItems and will use the 'strategy' provided
+// to create a new slice containing only items that the strategy returned 'true' for.
 func filterSearchItems(items []*OmdbSearchItem, strategy func(*OmdbSearchItem) bool) []*OmdbSearchItem {
 	out := make([]*OmdbSearchItem, 0)
 	for i := 0; i < len(items); i++ {
 		item := items[i]
 		if strategy(item) {
 			out = append(out, item)
-		} else {
 		}
 	}
 
 	return out
 }
 
+// parse searches through the result from Omdb and tries to find just one search result
+// to use based on filtering the results for their release date, type (movie/series) and
+// title. If this fails, an error is returned (e.g. OmdbNoResultError, OmdbMultipleResultError)
 func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*OmdbSearchItem, error) {
 	// Check the response by parsing the response, and total results.
 	if !result.Response || result.Count == 0 {
@@ -410,14 +414,8 @@ func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*Om
 			}
 
 			switch length {
-			case 0:
-				// No match
-				return false
-			case 1:
-				// Hm, we have only one match group. This *should*
-				// be impossible as FindStringSubmatch always returns
-				// the entire match as index 0, and then the capture groups
-				// as index 1 through to N.
+			case 0, 1:
+				// Invalid/no match
 				return false
 			case 2:
 				// We found a basic year and nothing more. Compare if the dates match

@@ -83,7 +83,7 @@ type Negotiator interface {
 
 type processorUpdateContext struct {
 	QueueItem *QueueItem
-	Trouble   *Trouble
+	Trouble   Trouble
 }
 type ProcessorUpdate struct {
 	Title   string

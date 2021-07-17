@@ -71,8 +71,8 @@ type baseTask struct {
 
 // raiseTrouble is a helper method used to push a new trouble
 // in to the slice for this task
-func (task *baseTask) raiseTrouble(proc *Processor, trouble *Trouble) {
-	trouble.Item.RaiseTrouble(trouble)
+func (task *baseTask) raiseTrouble(proc *Processor, trouble Trouble) {
+	trouble.Item().RaiseTrouble(trouble)
 
 	task.notifyTrouble(proc, trouble)
 }
@@ -80,10 +80,10 @@ func (task *baseTask) raiseTrouble(proc *Processor, trouble *Trouble) {
 // notifyTrouble sends a ProcessorUpdate to the processor which
 // is likely then pushed along to any connected clients on
 // the web socket
-func (task *baseTask) notifyTrouble(proc *Processor, trouble *Trouble) {
+func (task *baseTask) notifyTrouble(proc *Processor, trouble Trouble) {
 	proc.PushUpdate(&ProcessorUpdate{
 		Title:   "TROUBLE",
-		Context: processorUpdateContext{Trouble: trouble, QueueItem: trouble.Item},
+		Context: processorUpdateContext{Trouble: trouble, QueueItem: trouble.Item()},
 	})
 }
 
@@ -91,7 +91,7 @@ func (task *baseTask) notifyTrouble(proc *Processor, trouble *Trouble) {
 // searches for work to do - and if some work is available, the
 // 'fn' taskFn is executed. If no work is available, the worker
 // sleeps until woken up again.
-func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn, errHandler taskErrorHandler) error {
+func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn) error {
 	for {
 	inner:
 		for {
@@ -101,12 +101,15 @@ func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn, 
 			}
 
 			if err := fn(w, item); err != nil {
-				if e := errHandler(item, err); e != nil {
-					return err
+				e, ok := err.(Trouble)
+				if ok {
+					// Error implements the trouble interface so raise a trouble
+					task.raiseTrouble(proc, e)
+					continue
 				}
 
-				// Trouble has been raised, continue to next item
-				continue inner
+				// Unhandled exception!
+				return err
 			}
 		}
 
@@ -115,6 +118,47 @@ func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn, 
 			return nil
 		}
 	}
+}
+
+type TitleTaskError struct {
+	Message   string
+	queueItem *QueueItem
+	task      *TitleTask
+}
+
+func (ex TitleTaskError) Error() string {
+	return ex.Message
+}
+
+func (ex TitleTaskError) Args() map[string]string {
+	v, err := toArgsMap(TitleInfo{})
+	if err != nil {
+		panic(err)
+	}
+
+	return v
+}
+
+func (ex TitleTaskError) Resolve(args map[string]interface{}) error {
+	// The trouble must be resolved by passing arguments that can be used to
+	// build a TitleInfo struct. We use mapstructure to attempt to build
+	// the struct here - if it succeeds, we can resolve the trouble
+	var result TitleInfo
+	err := mapstructure.WeakDecode(args, &result)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Successfully decoded incoming arguments to struct %T: %#v\n", result, result)
+
+	ex.queueItem.TitleInfo = &result
+	ex.task.advance(ex.queueItem)
+
+	return nil
+}
+
+func (ex TitleTaskError) Item() *QueueItem {
+	return ex.queueItem
 }
 
 // TitleTask is the task responsible for searching through the
@@ -128,7 +172,7 @@ type TitleTask struct {
 // Execute will utilise the baseTask.Execute method to run the task repeatedly
 // in a worker work/wait loop
 func (task *TitleTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.processTitle, task.handleError)
+	return task.executeTask(w, task.proc, task.processTitle)
 }
 
 // Processes a given queueItem by filtering out irrelevant information from it's
@@ -153,72 +197,123 @@ func (task *TitleTask) advance(item *QueueItem) {
 	task.proc.WorkerPool.WakeupWorkers(worker.Omdb)
 }
 
-// handleError will check the err provided and if it's a TitleFormatError, it will
-// raise a trouble on the queue item provided.
-func (task *TitleTask) handleError(item *QueueItem, err error) error {
-	if v, ok := err.(TitleFormatError); ok {
-		// Raise trouble
-		tArgs, tErr := toArgsMap(TitleInfo{})
-		if tErr != nil {
-			return tErr
-		}
-
-		task.raiseTrouble(task.proc, &Trouble{"Title Processor Trouble", v, item, tArgs, TitleFailure, task.resolveTrouble})
-		return nil
-	}
-
-	return err
+// An OmdbNoResultError is returned from the OmdbTask when we couldn't find
+// any result that matches the queue item we're trying to find information for
+// Resolving this error (.Resolve) will expect an IMDB ID to fetch the information
+// from in order to populate the queueItem
+type OmdbNoResultError struct {
+	Message   string `json:"message"`
+	queueItem *QueueItem
+	task      *OmdbTask
 }
 
-// resolveTrouble accepts a trouble and a map of arguments, and will attempt
-// to build a TitleInfo struct out of the arguments provided. The trouble provided
-// MUST be a TitleFailure trouble (tag). If success, the queueItem has it's TitleInfo
-// set to the resulting struct, and it's advanced to the next stage
-func (task *TitleTask) resolveTrouble(trouble *Trouble, args map[string]interface{}) error {
-	if trouble.Tag != TitleFailure {
-		return fmt.Errorf("failed to resolve trouble; unexpected 'tag' %v", trouble.Tag)
+func (ex OmdbNoResultError) Error() string {
+	return ex.Message
+}
+
+func (ex OmdbNoResultError) Args() map[string]string {
+	return map[string]string{
+		"imdbId": "string",
+	}
+}
+
+func (ex OmdbNoResultError) Resolve(args map[string]interface{}) error {
+	// Attempt to fetch the Imdb item with this ID
+	id, ok := args["imdbId"]
+	if !ok {
+		return fmt.Errorf("Failed to resolve OmdbNoResultError - Mising imdbId (string) key in args")
 	}
 
-	// The trouble must be resolved by passing arguments that can be used to
-	// build a TitleInfo struct. We use mapstructure to attempt to build
-	// the struct here - if it succeeds, we can resolve the trouble
-	var result TitleInfo
-	err := mapstructure.WeakDecode(args, &result)
+	info, err := ex.task.fetch(id.(string), ex.queueItem)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to resolve OmdbNoResultError - %v", err.Error())
 	}
 
-	log.Printf("Successfully decoded incoming arguments to struct %T: %#v\n", result, result)
-
-	item := trouble.Item
-	item.TitleInfo = &result
-	task.advance(item)
-
+	ex.queueItem.OmdbInfo = info
+	ex.task.advance(ex.queueItem)
 	return nil
 }
 
-type OmdbNoResultError struct{ message string }
-
-func (err OmdbNoResultError) Error() string {
-	return err.message
+func (ex OmdbNoResultError) Item() *QueueItem {
+	return ex.queueItem
 }
 
-type OmdbMultipleResultError struct{ message string }
-
-func (err OmdbMultipleResultError) Error() string {
-	return err.message
+type OmdbMultipleResultError struct {
+	Message   string `json:"message"`
+	queueItem *QueueItem
+	task      *OmdbTask
+	Choices   []*OmdbSearchItem `json:"choices"`
 }
 
-type OmdbRequestError struct{ message string }
+func (ex OmdbMultipleResultError) Error() string {
+	return ex.Message
+}
+
+func (ex OmdbMultipleResultError) Args() map[string]string {
+	return map[string]string{
+		"choice": "int",
+	}
+}
+
+func (ex OmdbMultipleResultError) Resolve(args map[string]interface{}) error {
+	v, ok := args["choice"]
+	if !ok {
+		return fmt.Errorf("Failed to resolve OmdbMultipleResultError - Missing choice (int) key in args")
+	}
+
+	choice, ok := v.(int)
+	if !ok {
+		return fmt.Errorf("Faield to resolve OmdbMultipleResultError - Bad value for choice (int) key in args")
+	}
+
+	if len(ex.Choices)-1 < choice {
+		return fmt.Errorf("Failed to resolve OmdbMultipleResultError - Bad value for choice (int) key in args")
+	}
+
+	// Okay, we have a valid choice from the user. Fetch that choice from OMDB and store
+	info, err := ex.task.fetch(ex.Choices[choice].ImdbId, ex.queueItem)
+	if err != nil {
+		return fmt.Errorf("Failed to resolve OmdbMultipleResultError - %v", err.Error())
+	}
+
+	ex.queueItem.OmdbInfo = info
+	ex.task.advance(ex.queueItem)
+	return nil
+}
+
+func (ex OmdbMultipleResultError) Item() *QueueItem {
+	return ex.queueItem
+}
+
+type OmdbRequestError struct {
+	Message   string
+	queueItem *QueueItem
+	task      *OmdbTask
+}
 
 func (err OmdbRequestError) Error() string {
-	return err.message
+	return err.Message
+}
+
+func (err OmdbRequestError) Args() map[string]string {
+	return map[string]string{}
+}
+
+func (err OmdbRequestError) Resolve() error {
+	err.queueItem.Status = Pending
+	err.task.proc.WorkerPool.WakeupWorkers(worker.Omdb)
+	return nil
+}
+
+func (ex OmdbRequestError) Item() *QueueItem {
+	return ex.queueItem
 }
 
 // OmdbTask is the task responsible for querying to OMDB API for information
 // about the queue item we've processed so far.
 type OmdbTask struct {
-	proc *Processor
+	proc   *Processor
+	apiKey string
 	baseTask
 }
 
@@ -246,63 +341,97 @@ func filterSearchItems(items []*OmdbSearchItem, strategy func(*OmdbSearchItem) b
 		item := items[i]
 		if strategy(item) {
 			out = append(out, item)
+		} else {
 		}
 	}
 
 	return out
 }
 
-func (result *OmdbSearchResult) parse(queueItem *QueueItem) (*OmdbSearchItem, error) {
+func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*OmdbSearchItem, error) {
 	// Check the response by parsing the response, and total results.
 	if !result.Response || result.Count == 0 {
 		// Response from OMDB failed!
-		return nil, OmdbNoResultError{}
+		return nil, &OmdbNoResultError{"Failed to parse OMDB result - response empty", queueItem, task}
 	}
 
-	if result.Count > 1 {
-		// We have multiple results from OMDB.
-		items := result.Results
-		desiredType := "movie"
-		if queueItem.TitleInfo.Episodic {
-			desiredType = "series"
-		}
+	items := result.Results
+	desiredType := "movie"
+	if queueItem.TitleInfo.Episodic {
+		desiredType = "series"
+	}
 
-		// 1. Discard items that are of a different type (i.e movie/series)
-		items = filterSearchItems(items, func(item *OmdbSearchItem) bool {
-			return strings.Compare(item.EntryType, desiredType) == 0
-		})
+	// 1. Discard items that are of a different type (i.e movie/series)
+	items = filterSearchItems(items, func(item *OmdbSearchItem) bool {
+		return strings.Compare(item.EntryType, desiredType) == 0
+	})
 
-		// 2. Discard items that are of a different year
-		yearMatcher := regexp.MustCompile(`\d+`)
+	// 2. Discard items that have release years that don't match ours
+	if queueItem.TitleInfo.Year > -1 {
+		yearMatcher := regexp.MustCompile(`(\d+)(–?)(\d+)?`)
 		items = filterSearchItems(items, func(item *OmdbSearchItem) bool {
-			yearString := yearMatcher.FindString(item.Year)
-			year, err := strconv.Atoi(yearString)
-			if err != nil {
+			yearMatches := yearMatcher.FindStringSubmatch(item.Year)
+			if yearMatches == nil {
 				return false
 			}
 
-			return year == queueItem.TitleInfo.Year
+			var length int = 0
+			for i := 0; i < len(yearMatches); i++ {
+				if yearMatches[i] != "" {
+					length++
+				}
+			}
+
+			switch length {
+			case 0:
+				// No match
+				return false
+			case 1:
+				// Hm, we have only one match group. This *should*
+				// be impossible as FindStringSubmatch always returns
+				// the entire match as index 0, and then the capture groups
+				// as index 1 through to N.
+				return false
+			case 2:
+				// We found a basic year and nothing more. Compare if the dates match
+				if y, err := strconv.Atoi(yearMatches[1]); err == nil {
+					return y == queueItem.TitleInfo.Year
+				}
+			case 3:
+				// We found a basic year, *and* an additional capture group
+				// This should mean we have a date range with no closing date
+				if y, err := strconv.Atoi(yearMatches[1]); err == nil {
+					return queueItem.TitleInfo.Year >= y
+				}
+			case 4:
+				// We found a year range with opening and closing year
+				startYear, sErr := strconv.Atoi(yearMatches[1])
+				endYear, eErr := strconv.Atoi(yearMatches[3])
+				if !(sErr == nil && eErr == nil) {
+					return false
+				}
+
+				return queueItem.TitleInfo.Year >= startYear && queueItem.TitleInfo.Year <= endYear
+			}
+
+			return false
 		})
-
-		// If we still have multiple responses then we need help from the user to decide.
-		if len(items) == 0 {
-			return nil, OmdbNoResultError{}
-		} else if len(items) > 1 {
-			return nil, OmdbMultipleResultError{}
-		}
-
-		return items[0], nil
-	} else if result.Count < 1 {
-		return nil, OmdbNoResultError{}
 	}
 
-	return result.Results[0], nil
+	// If we still have multiple responses then we need help from the user to decide.
+	if len(items) == 0 {
+		return nil, &OmdbNoResultError{"parse failed: no valid choices remain after filtering", queueItem, task}
+	} else if len(items) > 1 {
+		return nil, &OmdbMultipleResultError{"parse failed: multiple choices remain after filtering", queueItem, task, items}
+	}
+
+	return items[0], nil
 }
 
 // Execute uses the provided baseTask.executeTask method to run this tasks
 // work function in a work/wait worker loop
 func (task *OmdbTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.find, task.handleError)
+	return task.executeTask(w, task.proc, task.find)
 }
 
 // search will perform a search query to OMDB and will return the result
@@ -315,28 +444,28 @@ func (task *OmdbTask) search(w *worker.Worker, queueItem *QueueItem) (*OmdbInfo,
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "s", queueItem.TitleInfo.Title, cfg.OmdbKey))
 	if err != nil {
 		// Request exception
-		return nil, OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error())}
+		return nil, &OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error()), queueItem, task}
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error())}
+		return nil, &OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error()), queueItem, task}
 	}
 
 	var searchResult OmdbSearchResult
 	if err = json.Unmarshal(body, &searchResult); err != nil {
-		return nil, OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error())}
+		return nil, &OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error()), queueItem, task}
 	}
 
-	resultItem, err := searchResult.parse(queueItem)
+	resultItem, err := searchResult.parse(queueItem, task)
 	if err != nil {
 		return nil, err
 	}
 
 	// We got a result however OMDB search results don't contain all the info we need
 	// so we need to perform a direct query for this item
-	omdbResult, err := task.fetch(w, resultItem.ImdbId)
+	omdbResult, err := task.fetch(resultItem.ImdbId, queueItem)
 	if err != nil {
 		return nil, err
 	}
@@ -347,23 +476,23 @@ func (task *OmdbTask) search(w *worker.Worker, queueItem *QueueItem) (*OmdbInfo,
 // fetch will perform an Omdb request using the given ID as the API argument.
 // If no match is found a OmdbNoResultError is returned - if the request fails
 // for another reason, an OmdbRequestError is returned.
-func (task *OmdbTask) fetch(w *worker.Worker, imdbId string) (*OmdbInfo, error) {
+func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, error) {
 	cfg := task.proc.Config.Database
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "i", imdbId, cfg.OmdbKey))
 	if err != nil {
 		// Request exception
-		return nil, OmdbRequestError{err.Error()}
+		return nil, &OmdbRequestError{fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, task}
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, OmdbRequestError{err.Error()}
+		return nil, &OmdbRequestError{fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, task}
 	}
 
 	var result OmdbInfo
 	if err = json.Unmarshal(body, &result); err != nil {
-		return nil, OmdbRequestError{err.Error()}
+		return nil, &OmdbRequestError{fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, task}
 	}
 
 	return &result, nil
@@ -382,18 +511,40 @@ func (task *OmdbTask) find(w *worker.Worker, queueItem *QueueItem) error {
 	}
 
 	queueItem.OmdbInfo = res
+	task.advance(queueItem)
 	return nil
 }
 
-// TODO
-func (task *OmdbTask) handleError(item *QueueItem, err error) error {
-	// Not an error we want to raise trouble for.
-	return err
+func (task *OmdbTask) advance(item *QueueItem) {
+	// Release the QueueItem by advancing it to the next pipeline stage
+	task.proc.Queue.AdvanceStage(item)
+
+	// Wakeup any pipeline workers that are sleeping
+	task.proc.WorkerPool.WakeupWorkers(worker.Format)
 }
 
-// TODO
-func (task *OmdbTask) resolveTrouble(trouble *Trouble, args map[string]interface{}) error {
+type FormatTaskError struct {
+	Message   string
+	queueItem *QueueItem
+	task      *FormatTask
+}
+
+func (ex FormatTaskError) Error() string {
+	return fmt.Sprintf("Format task has experienced trouble: %v", ex.Message)
+}
+
+func (ex FormatTaskError) Args() map[string]string {
+	return map[string]string{}
+}
+
+func (ex FormatTaskError) Resolve(map[string]interface{}) error {
+	ex.queueItem.Status = Pending
+	ex.task.proc.WorkerPool.WakeupWorkers(worker.Format)
 	return nil
+}
+
+func (ex FormatTaskError) Item() *QueueItem {
+	return ex.queueItem
 }
 
 // FormatTask is a task that is responsible for performing the transcoding of
@@ -407,16 +558,12 @@ type FormatTask struct {
 // Execute uses the baseTask.executeTask to run this workers
 // task in a worker loop
 func (task *FormatTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.format, task.handleError)
+	return task.executeTask(w, task.proc, task.format)
 }
 
 // format will take the provided queueItem and format the file in to
 // a new format.
 func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
-	if true {
-		return fmt.Errorf("HIT babey. omdbInfo: %#v", queueItem.OmdbInfo)
-	}
-
 	outputFormat := task.proc.Config.Format.TargetFormat
 	ffmpegOverwrite := true
 	ffmpegOpts, ffmpegCfg := &ffmpeg.Options{
@@ -438,7 +585,7 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 		Start(ffmpegOpts)
 
 	if err != nil {
-		return err
+		return &FormatTaskError{err.Error(), queueItem, task}
 	}
 
 	for v := range progress {
@@ -446,17 +593,11 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 	}
 
 	// Advance our item to the next stage
-	task.proc.Queue.AdvanceStage(queueItem)
+	task.advance(queueItem)
 	return nil
 }
 
-// TODO
-func (task *FormatTask) handleError(item *QueueItem, err error) error {
-	// Not an error we want to raise trouble for.
-	return err
-}
-
-// TODO
-func (task *FormatTask) resolveTrouble(trouble *Trouble, args map[string]interface{}) error {
-	return nil
+func (task *FormatTask) advance(item *QueueItem) {
+	// Release the QueueItem by advancing it to the next pipeline stage
+	task.proc.Queue.AdvanceStage(item)
 }

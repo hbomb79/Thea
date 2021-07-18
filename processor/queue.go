@@ -22,7 +22,7 @@ type ProcessorQueue struct {
 // If it is in the queue, the entry is skipped - this is because
 // this method is usually called as a result of polling the
 // input directory many times a day for new files.
-func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool {
+func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -37,19 +37,21 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 	}
 
 	if !isInQueue(path) {
-		queue.Items = append(queue.Items, &QueueItem{
+		item := &QueueItem{
 			Id:     queue.lastId,
 			Name:   fileInfo.Name(),
 			Path:   path,
 			Status: Pending,
 			Stage:  worker.Title,
-		})
+		}
+
+		queue.Items = append(queue.Items, item)
 		queue.lastId++
 
-		return true
+		return item
 	}
 
-	return false
+	return nil
 }
 
 // Pick will search through the queue items looking for the first

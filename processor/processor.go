@@ -142,7 +142,7 @@ func (p *Processor) Start() error {
 	}
 
 	go func(target <-chan time.Time) {
-		p.PollInputSource()
+		p.SynchroniseQueue()
 		p.WorkerPool.WakeupWorkers(worker.Title)
 	}(time.NewTicker(tickInterval).C)
 
@@ -173,10 +173,16 @@ func (p *Processor) Start() error {
 	return nil
 }
 
-// PollInputSource will check the source input directory (from p.Config)
-// pass along the files it finds to the p.Queue to be inserted if not present.
-func (p *Processor) PollInputSource() (newItemsFound int, err error) {
-	newItemsFound = 0
+// SynchroniseQueue will search through the import directory, and the ProcessorQueue
+// cache to find items that are missing from the queue (and then add them to the queue),
+// and also items that are in the queue but are *missing* from the import directory
+func (p *Processor) SynchroniseQueue() (newItemsFound int, err error) {
+	missingItems, newItemsFound := make(map[*QueueItem]bool), 0
+
+	for _, v := range p.Queue.Items {
+		missingItems[v] = true
+	}
+
 	walkFunc := func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
 			log.Panicf("PollInputSource failed - %v\n", err.Error())
@@ -188,8 +194,9 @@ func (p *Processor) PollInputSource() (newItemsFound int, err error) {
 				log.Panicf("Failed to get FileInfo for path %v - %v\n", path, err.Error())
 			}
 
-			if isNew := p.Queue.HandleFile(path, v); isNew {
+			if item := p.Queue.HandleFile(path, v); item != nil {
 				newItemsFound++
+				delete(missingItems, item)
 			}
 		}
 
@@ -197,5 +204,12 @@ func (p *Processor) PollInputSource() (newItemsFound int, err error) {
 	}
 
 	err = filepath.WalkDir(p.Config.Format.ImportPath, walkFunc)
+
+	// Items in the queue that don't exist in the import directory
+	// anymore must be removed
+	for item := range missingItems {
+		// Cancel TODO
+		item.Cancel()
+	}
 	return
 }

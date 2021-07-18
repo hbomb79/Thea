@@ -141,6 +141,16 @@ func (item *QueueItem) FormatTitle() error {
 	return TitleFormatError{item, "Failed to match RegExp!"}
 }
 
+// Cancel TODO
+// In order for a queue item to cancel itself, the queue item needs to be
+// able to interact directly with the task that is currently running. This means
+// QueueItem needs a reference to a worker that is currently holding it, and the
+// WorkerTaskMeta interface needs to be adjusted to enforce implementation of a cancel method
+// as cancelling a task will vary based on the task being run.
+func (item *QueueItem) Cancel() {
+
+}
+
 // TitleInfo contains the information about the import QueueItem
 // that is gleamed from the pathname given; such as the title and
 // if the show is an episode or a movie.

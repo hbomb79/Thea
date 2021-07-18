@@ -20,6 +20,8 @@ import (
 type taskFn func(*worker.Worker, *QueueItem) error
 
 const (
+	// The URL used to query OMDB. First %s is the query type (s for seach, t for title, i for id),
+	// second %s is the term to use for the above query. Third %s is the api key.
 	OMDB_API string = "http://www.omdbapi.com/?%s=%s&apikey=%s"
 )
 
@@ -157,8 +159,6 @@ func (ex TitleTaskError) Resolve(args map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-
-	log.Printf("Successfully decoded incoming arguments to struct %T: %#v\n", result, result)
 
 	ex.queueItem.TitleInfo = &result
 	ex.queueItem.ResetTrouble()
@@ -312,26 +312,36 @@ func (ex OmdbMultipleResultError) Item() *QueueItem {
 	return ex.queueItem
 }
 
+// OmdbRequestError is an error/trouble type that is raised when a request to
+// the OMDB api fails for an unknown reason - likely not related to the thing
+// we're searching for(e.g. a bad response from OMDB that is not JSON)
 type OmdbRequestError struct {
 	Message   string `json:"message"`
 	queueItem *QueueItem
 	task      *OmdbTask
 }
 
+// Error is implemented to satisfy the 'error' interface, and simply returns
+// a string describing the reason for this trouble
 func (err OmdbRequestError) Error() string {
 	return fmt.Sprintf("Omdb task error: %v", err.Message)
 }
 
+// Args returns a map of the arguments required, and their types (string, int, bool, etc)
 func (err OmdbRequestError) Args() map[string]string {
 	return map[string]string{}
 }
 
+// Resolve will attempt to resolve this issue by resetting the queue items trouble
+// state and awakening any workers that are sleeping in the next stage - this essentially
+// just means the queue item will be retried by a worker when one is available.
 func (err OmdbRequestError) Resolve(args map[string]interface{}) error {
 	err.queueItem.ResetTrouble()
 	err.task.proc.WorkerPool.WakeupWorkers(worker.Omdb)
 	return nil
 }
 
+// Item returns the queue item attached to this trouble
 func (ex OmdbRequestError) Item() *QueueItem {
 	return ex.queueItem
 }
@@ -540,6 +550,8 @@ func (task *OmdbTask) find(w *worker.Worker, queueItem *QueueItem) error {
 	return nil
 }
 
+// advance will push the stage of this queue item forward, and wakeup any workers
+// for that stage
 func (task *OmdbTask) advance(item *QueueItem) {
 	// Release the QueueItem by advancing it to the next pipeline stage
 	task.proc.Queue.AdvanceStage(item)
@@ -548,26 +560,38 @@ func (task *OmdbTask) advance(item *QueueItem) {
 	task.proc.WorkerPool.WakeupWorkers(worker.Format)
 }
 
+// FormatTaskError is an error/trouble type that is raised when ffmpeg/ffprobe encounters
+// an error. The only real solution to this is to retry because an error of this type
+// indicates that a glitch occurred, or that the input file is malformed.
 type FormatTaskError struct {
 	Message   string `json:"message"`
 	queueItem *QueueItem
 	task      *FormatTask
 }
 
+// Error is implemented to satisfy the 'error' type. It returns a string that
+// describes the reason for this trouble
 func (ex FormatTaskError) Error() string {
 	return fmt.Sprintf("Format task trouble: %v", ex.Message)
 }
 
+// Args returns a map of the arguments required to resolve this trouble. Each key is the argument
+// name, and each value is a string representation of the type (bool, string, int, etc)
 func (ex FormatTaskError) Args() map[string]string {
 	return map[string]string{}
 }
 
+// Resolve will attempt to resolve this trouble by resetting the queue items status
+// and waking up any sleeping workers in the format worker pool. This essentially means
+// that a worker will try this queue item again. Repeated failures likely means the input
+// file is bad.
 func (ex FormatTaskError) Resolve(map[string]interface{}) error {
 	ex.queueItem.ResetTrouble()
 	ex.task.proc.WorkerPool.WakeupWorkers(worker.Format)
 	return nil
 }
 
+// Item returns the queue item attached to this trouble
 func (ex FormatTaskError) Item() *QueueItem {
 	return ex.queueItem
 }
@@ -646,6 +670,9 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 	return nil
 }
 
+// advance will push the queue item to the next pipeline stage. Currently,
+// this means the item will be marked as finished. In the future however this
+// will likely trigger a database hook
 func (task *FormatTask) advance(item *QueueItem) {
 	// Release the QueueItem by advancing it to the next pipeline stage
 	task.proc.Queue.AdvanceStage(item)

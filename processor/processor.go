@@ -19,6 +19,7 @@ type TPAConfig struct {
 	Concurrent ConcurrentConfig `yaml:"concurrency"`
 	Format     FormatterConfig  `yaml:"formatter"`
 	Database   DatabaseConfig   `yaml:"database"`
+	OmdbKey    string           `yaml:"omdb_api_key"`
 }
 
 // ConcurrentConfig is a subset of the configuration that focuses
@@ -46,13 +47,11 @@ type FormatterConfig struct {
 // DatabaseConfig is a subset of the configuration focusing solely
 // on database connection items
 type DatabaseConfig struct {
-	User       string `yaml:"user"`
-	Password   string `yaml:"password"`
-	Name       string `yaml:"name"`
-	Host       string `yaml:"host"`
-	Port       string `yaml:"port"`
-	OmdbKey    string `yaml:"omdb_api_key"`
-	OmdbApiUrl string `yaml:"omdb_api_url"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
+	Name     string `yaml:"name"`
+	Host     string `yaml:"host"`
+	Port     string `yaml:"port"`
 }
 
 // Loads a configuration file formatted in YAML in to a

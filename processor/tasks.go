@@ -475,7 +475,7 @@ func (task *OmdbTask) Execute(w *worker.Worker) error {
 // fails for another reason, an OmdbRequestError is returned.
 func (task *OmdbTask) search(w *worker.Worker, queueItem *QueueItem) (*OmdbInfo, error) {
 	// Peform the search
-	cfg := task.proc.Config.Database
+	cfg := task.proc.Config
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "s", queueItem.TitleInfo.Title, cfg.OmdbKey))
 	if err != nil {
 		// Request exception
@@ -512,7 +512,7 @@ func (task *OmdbTask) search(w *worker.Worker, queueItem *QueueItem) (*OmdbInfo,
 // If no match is found a OmdbNoResultError is returned - if the request fails
 // for another reason, an OmdbRequestError is returned.
 func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, error) {
-	cfg := task.proc.Config.Database
+	cfg := task.proc.Config
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "i", imdbId, cfg.OmdbKey))
 	if err != nil {
 		// Request exception

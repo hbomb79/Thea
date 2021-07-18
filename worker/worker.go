@@ -1,48 +1,69 @@
-package processor
+package worker
 
 import (
 	"fmt"
 	"log"
 )
 
-type WorkerTask func(*Worker) error
-type WorkerWakeupChan chan int
+// Each stage represents a certain stage in the pipeline
+type PipelineStage int
 
+// When a QueueItem is initially added, it should be of stage Import,
+// each time a worker works on the task it should increment it's
+// Stage (Title->Omdb->etc..) and set it's Status to 'Pending'
+// to allow a worker to pick the item from the Queue
+// TODO Really.. worker should have no concept of pipeline stages
+// as it's only relevant in this package. We could further de-couple
+// this codebase by waking up workers based on their label, rather
+// than the worker.PipelineStage enum
+const (
+	Import PipelineStage = iota
+	Title
+	Omdb
+	Format
+	Finish
+)
+
+type WorkerWakeupChan chan int
 type WorkerStatus int
 
+type WorkerTaskMeta interface {
+	Execute(*Worker) error
+}
+
 const (
-	Idle WorkerStatus = iota
+	Sleeping WorkerStatus = iota
 	Working
 	Finished
 )
 
 type Worker struct {
 	label         string
-	task          WorkerTask
+	task          WorkerTaskMeta
 	wakeupChan    WorkerWakeupChan
 	currentStatus WorkerStatus
 	pipelineStage PipelineStage
 }
 
-func NewWorker(label string, task WorkerTask, wakeupChannel WorkerWakeupChan, pipelineStage PipelineStage) *Worker {
+func NewWorker(label string, task WorkerTaskMeta, pipelineStage PipelineStage, wakeupChan chan int) *Worker {
 	return &Worker{
 		label,
 		task,
-		wakeupChannel,
-		Idle,
+		wakeupChan,
+		Sleeping,
 		pipelineStage,
 	}
 }
 
 func (worker *Worker) Start() {
-	fmt.Printf("[Proc] Starting worker for stage %v with label %v\n", worker.pipelineStage, worker.label)
+	fmt.Printf("[Worker] Starting worker for stage %v with label %v\n", worker.pipelineStage, worker.label)
 	worker.currentStatus = Working
-	if err := worker.task(worker); err != nil {
-		log.Panicf("[Error] Worker for stage %v with label %v has reported an error: %v\n", worker.pipelineStage, worker.label, err.Error())
+	if err := worker.task.Execute(worker); err != nil {
+		log.Panicf("[Error] Worker for stage %v with label %v has reported an error(%T): %v\n", worker.pipelineStage, worker.label, err, err.Error())
 	}
 
 	worker.currentStatus = Finished
-	fmt.Printf("[Proc] Worker for stage %v with label %v has stopped\n", worker.pipelineStage, worker.label)
+	fmt.Printf("[Worker] Worker for stage %v with label %v has stopped\n", worker.pipelineStage, worker.label)
 }
 
 // Stage method returns the current status of this worker,
@@ -76,8 +97,8 @@ func (worker *Worker) Close() error {
 // signalled from another goroutine. Returns a boolean that
 // is 'false' if the wakeup channel was closed - indicating
 // the worker should quit.
-func (worker *Worker) sleep() (isAlive bool) {
-	worker.currentStatus = Idle
+func (worker *Worker) Sleep() (isAlive bool) {
+	worker.currentStatus = Sleeping
 
 	if _, isAlive = <-worker.wakeupChan; isAlive {
 		worker.currentStatus = Working

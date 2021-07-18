@@ -2,21 +2,17 @@ package processor
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
-	"net/http"
-	"strconv"
 	"sync"
 
-	"github.com/gorilla/mux"
-	"github.com/hbomb79/TPA/api"
-	"github.com/liip/sheriff"
+	"github.com/hbomb79/TPA/worker"
 )
 
 // ProcessorQueue is the Queue of items to be processed by this
 // processor
 type ProcessorQueue struct {
-	Items []*QueueItem `groups:"api"`
+	Items  []*QueueItem `groups:"api"`
+	lastId int
 	sync.Mutex
 }
 
@@ -29,13 +25,25 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 	queue.Lock()
 	defer queue.Unlock()
 
-	if !queue.isInQueue(path) {
+	isInQueue := func(path string) bool {
+		for _, v := range queue.Items {
+			if v.Path == path {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	if !isInQueue(path) {
 		queue.Items = append(queue.Items, &QueueItem{
+			Id:     queue.lastId,
 			Name:   fileInfo.Name(),
 			Path:   path,
 			Status: Pending,
-			Stage:  Title,
+			Stage:  worker.Title,
 		})
+		queue.lastId++
 
 		return true
 	}
@@ -48,7 +56,7 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *ProcessorQueue) Pick(stage PipelineStage) *QueueItem {
+func (queue *ProcessorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -70,10 +78,10 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 	queue.Lock()
 	defer queue.Unlock()
 
-	if item.Stage == Finish {
+	if item.Stage == worker.Finish {
 		item.Status = Completed
-	} else if item.Stage == Format {
-		item.Stage = Finish
+	} else if item.Stage == worker.Format {
+		item.Stage = worker.Finish
 		item.Status = Completed
 	} else {
 		item.Stage++
@@ -119,82 +127,12 @@ func (queue *ProcessorQueue) PromoteItem(item *QueueItem) error {
 	return errors.New("cannot promote: item does not exist inside this queue")
 }
 
-// SheriffApiMarshal is a method of QueueItem that will marshal
-// the QueueItem that marshals the struct using Sheriff to remove
-// items from the struct that aren't exposed to the API (i.e. removes
-// struct fields that lack the `groups:"api"` tag)
-func (queue *ProcessorQueue) SheriffApiMarshal() (interface{}, error) {
-	o := &sheriff.Options{Groups: []string{"api"}}
-
-	data, err := sheriff.Marshal(o, queue)
-	if err != nil {
-		return nil, err
-	}
-
-	return data, nil
-}
-
-// isInQueue will return true if the queue contains a QueueItem
-// with a path field matching the path provided to this method
-// Note: callers responsiblity to ensure the queues Mutex is
-// already locked before use - otherwise the queue contents
-// may mutate while iterating through it
-func (queue *ProcessorQueue) isInQueue(path string) bool {
-	for _, v := range queue.Items {
-		if v.Path == path {
-			return true
+func (queue *ProcessorQueue) FindById(id int) *QueueItem {
+	for _, item := range queue.Items {
+		if item.Id == id {
+			return item
 		}
 	}
 
-	return false
-}
-
-// apiQueueIndex returns the current processor queue
-func (queue *ProcessorQueue) ApiQueueIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := queue.SheriffApiMarshal()
-	if err != nil {
-		api.JsonMessage(w, err.Error(), http.StatusInternalServerError)
-
-		return
-	}
-
-	api.JsonMarshal(w, data)
-}
-
-// apiQueueGet returns full details for a queue item at the index {id} inside the queue
-func (queue *ProcessorQueue) ApiQueueGet(w http.ResponseWriter, r *http.Request) {
-	stringId := mux.Vars(r)["id"]
-	id, err := strconv.Atoi(stringId)
-	if err != nil {
-		api.JsonMessage(w, "QueueItem ID '"+stringId+"' not acceptable - "+err.Error(), http.StatusNotAcceptable)
-		return
-	}
-
-	if len(queue.Items) <= id {
-		api.JsonMessage(w, "QueueItem with ID "+fmt.Sprint(id)+" not found", http.StatusNotFound)
-		return
-	}
-
-	api.JsonMarshal(w, queue.Items[id])
-}
-
-// apiQueueUpdate pushes an update to the processor dictating the new
-// positioning of a certain queue item. This allows the user to
-// reorder the queue by sending an item to the top of the
-// queue, therefore priorisiting it - similar to the Steam library
-func (queue *ProcessorQueue) ApiQueueUpdate(w http.ResponseWriter, r *http.Request) {
-	stringId := mux.Vars(r)["id"]
-	id, err := strconv.Atoi(stringId)
-	if err != nil {
-		api.JsonMessage(w, "QueueItem ID '"+stringId+"' not acceptable - "+err.Error(), http.StatusNotAcceptable)
-		return
-	}
-
-	if len(queue.Items) <= id {
-		api.JsonMessage(w, "QueueItem with ID "+fmt.Sprint(id)+" not found", http.StatusNotFound)
-	} else if queue.PromoteItem(queue.Items[id]) != nil {
-		api.JsonMessage(w, "Failed to promote QueueItem #"+stringId+": "+err.Error(), http.StatusInternalServerError)
-	} else {
-		api.JsonMessage(w, "Queue item promoted successfully", http.StatusOK)
-	}
+	return nil
 }

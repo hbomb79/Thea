@@ -10,32 +10,6 @@ import (
 
 type SocketHandler func(*SocketHub, *SocketMessage) error
 
-type socketMessageType int
-
-const (
-	Update socketMessageType = iota
-	Command
-	Response
-	ErrorResponse
-	Welcome
-)
-
-// SocketMessage is a struct that allows us to define the
-// command that has been passed through the web socket.
-// The Id field can be used when replying to this message
-// so the receiving client is aware of which message this reply
-// is for. Origin is much for the same - it allows us to
-// send the reply to the websocket attached to the client
-// with the matching UUID
-type SocketMessage struct {
-	Body      string            `json:"body"`
-	Arguments []string          `json:"args"`
-	Id        int               `json:"id"`
-	Type      socketMessageType `json:"type"`
-	Origin    *uuid.UUID        `json:"-"`
-	Target    *uuid.UUID        `json:"-"`
-}
-
 // SocketHub is the struct responsible for managing
 // the websocket upgrading, connecting, pushing and
 // receiving of messages.
@@ -108,7 +82,7 @@ loop:
 			// No specific target
 			hub.broadcastMessage(message)
 		case message := <-hub.receiveCh:
-			hub.handleMessage(message)
+			go hub.handleMessage(message)
 		case client := <-hub.registerCh:
 			// Register the client by pushing the received client in to the
 			// 'clients' slice
@@ -185,8 +159,8 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Send welcome message to this client
 	hub.Send(&SocketMessage{
-		Body:      "Connection established",
-		Arguments: []string{fmt.Sprintf("client:%v", id)},
+		Title:     "Connection established",
+		Arguments: map[string]interface{}{"client": id},
 		Target:    &id,
 		Type:      Welcome,
 	})
@@ -249,17 +223,29 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 		return
 	}
 
-	if handler, ok := hub.handlers[command.Body]; ok {
+	replyWithError := func(err string) {
+		hub.Send(&SocketMessage{
+			Title:     "COMMAND_FAILURE",
+			Id:        command.Id,
+			Target:    command.Origin,
+			Arguments: map[string]interface{}{"command": command, "error": err},
+			Type:      ErrorResponse,
+		})
+	}
+
+	if handler, ok := hub.handlers[command.Title]; ok {
 		if err := handler(hub, command); err != nil {
-			fmt.Printf("[Websocket] (!!) Handler for command '%v' returned error - %v\n", command.Body, err.Error())
+			fmt.Printf("[Websocket] (!!) Handler for command '%v' returned error - %v\n", command.Title, err.Error())
+			replyWithError(err.Error())
 		} else {
-			fmt.Printf("[Websocket] Handler for command '%v' executed successfully\n", command.Body)
+			fmt.Printf("[Websocket] Handler for command '%v' executed successfully\n", command.Title)
 		}
 
 		return
 	}
 
-	fmt.Printf("[Websocket] (!) No handler found for command '%v'\n", command.Body)
+	replyWithError("Unknown command")
+	fmt.Printf("[Websocket] (!) No handler found for command '%v'\n", command.Title)
 }
 
 // findClient returns a socketClient with the matching uuid if

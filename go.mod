@@ -9,6 +9,7 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/ilyakaznacheev/cleanenv v1.2.5
 	github.com/liip/sheriff v0.10.0
+	github.com/mitchellh/mapstructure v1.4.1
 )
 
 replace github.com/floostack/transcoder => /home/haz/go/src/transcoder

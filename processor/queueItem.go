@@ -1,11 +1,14 @@
 package processor
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/hbomb79/TPA/worker"
 )
 
 // Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
@@ -57,27 +60,42 @@ const (
 // This includes information found from the file-system, OMDB,
 // and the current processing status/stage
 type QueueItem struct {
-	Path       string `groups:"api"`
-	Name       string
-	Status     QueueItemStatus `groups:"api"`
-	Stage      PipelineStage   `groups:"api"`
-	StatusLine string          `groups:"api"`
-	Trouble    *Trouble
-	TitleInfo  *TitleInfo
-	OmdbInfo   *OmdbInfo
+	Id         int                  `json:"id" groups:"api"`
+	Path       string               `json:"path"`
+	Name       string               `json:"name" groups:"api"`
+	Status     QueueItemStatus      `json:"status" groups:"api"`
+	Stage      worker.PipelineStage `json:"stage" groups:"api"`
+	StatusLine string               `json:"statusLine" groups:"api"`
+	TitleInfo  *TitleInfo           `json:"title_info"`
+	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
+	Trouble    Trouble              `json:"trouble"`
 }
 
 // RaiseTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
-func (item *QueueItem) RaiseTrouble(trouble *Trouble) {
-	fmt.Printf("[Trouble] Raising trouble for QueueItem (%v)!\n", item.Path)
+func (item *QueueItem) RaiseTrouble(trouble Trouble) error {
+	fmt.Printf("[Trouble] Raising trouble (%T) for QueueItem (%v)!\n", trouble, item.Path)
 	if item.Trouble == nil {
 		item.Status = Troubled
 		item.Trouble = trouble
-	} else {
-		panic(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble))
+
+		return nil
 	}
+
+	return errors.New(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble))
+}
+
+// ResetTrouble is used to remove the trouble state from
+// this item, and sets the items status to 'Pending', rather than
+// 'Troubled'
+func (item *QueueItem) ResetTrouble() {
+	if item.Status != Troubled {
+		return
+	}
+
+	item.Trouble = nil
+	item.Status = Pending
 }
 
 // FormatTitle accepts a string (title) and reformats it
@@ -192,4 +210,13 @@ func (rt *OmdbResponseType) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+type TitleFormatError struct {
+	item    *QueueItem
+	message string
+}
+
+func (e TitleFormatError) Error() string {
+	return fmt.Sprintf("failed to format title(%v) - %v", e.item.Name, e.message)
 }

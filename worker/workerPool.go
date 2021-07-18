@@ -1,7 +1,6 @@
-package processor
+package worker
 
 import (
-	"fmt"
 	"log"
 	"sync"
 )
@@ -22,16 +21,6 @@ func NewWorkerPool() *WorkerPool {
 	return &WorkerPool{workers: make([]*Worker, 0)}
 }
 
-// NewWorkers creates worker instances (n=amount)
-// and labels them with the label provided (appended with
-// the worker ID derived from the iterator used to create
-// the workers).
-func (pool *WorkerPool) NewWorkers(amount int, workerLabel string, workerTask WorkerTask, wakeupChannel chan int, pipelineStage PipelineStage) {
-	for i := 0; i < amount; i++ {
-		pool.PushWorker(NewWorker(fmt.Sprintf("%v:%v", workerLabel, i), workerTask, wakeupChannel, pipelineStage))
-	}
-}
-
 // StartWorkers cycles through all the workers
 // currently inside the WorkerPool and creates
 // a goroutine for each. The 'Start' method of
@@ -49,8 +38,8 @@ func (pool *WorkerPool) StartWorkers() {
 // PushWorker inserts the worker provided in to the worker pool,
 // this method will first lock the mutex to ensure mutually exclusive
 // access to the worker pool slice.
-func (pool *WorkerPool) PushWorker(w *Worker) {
-	pool.workers = append(pool.workers, w)
+func (pool *WorkerPool) PushWorker(workers ...*Worker) {
+	pool.workers = append(pool.workers, workers...)
 }
 
 // WakeupWorkers will search for workers in the pool
@@ -59,7 +48,7 @@ func (pool *WorkerPool) PushWorker(w *Worker) {
 // to wake up sleeping workers
 func (pool *WorkerPool) WakeupWorkers(stage PipelineStage) {
 	for _, w := range pool.workers {
-		if w.Stage() == stage && w.Status() == Idle {
+		if w.Stage() == stage && w.Status() == Sleeping {
 			w.WakeupChan() <- 1
 		}
 	}

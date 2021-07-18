@@ -125,7 +125,7 @@ func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn) 
 // TitleTaskError is an error raised during the processing of the
 // title task
 type TitleTaskError struct {
-	Message   string
+	Message   string `json:"message"`
 	queueItem *QueueItem
 	task      *TitleTask
 }
@@ -313,7 +313,7 @@ func (ex OmdbMultipleResultError) Item() *QueueItem {
 }
 
 type OmdbRequestError struct {
-	Message   string
+	Message   string `json:"message"`
 	queueItem *QueueItem
 	task      *OmdbTask
 }
@@ -549,7 +549,7 @@ func (task *OmdbTask) advance(item *QueueItem) {
 }
 
 type FormatTaskError struct {
-	Message   string
+	Message   string `json:"message"`
 	queueItem *QueueItem
 	task      *FormatTask
 }
@@ -610,10 +610,34 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 		Start(ffmpegOpts)
 
 	if err != nil {
-		return &FormatTaskError{err.Error(), queueItem, task}
+		// Try and pick out some relevant information from the HUGE
+		// output log from ffmpeg. The error we get contains lots of information
+		// about how the binary was compiled... this is useless info, we just
+		// want the 'message' JSON that is encoded inside.
+		messageMatcher := regexp.MustCompile(`(?s)message: ({.*})`)
+		groups := messageMatcher.FindStringSubmatch(err.Error())
+		if messageMatcher == nil {
+			return &FormatTaskError{err.Error(), queueItem, task}
+		}
+
+		// ffmpeg error is returned as a JSON encoded string. Unmarshal so we can extract the
+		// error string..
+		var out map[string]interface{}
+		jsonErr := json.Unmarshal([]byte(groups[1]), &out)
+		if jsonErr != nil {
+			// We failed to extract the info.. just use the entire string as our error
+			return &FormatTaskError{groups[1], queueItem, task}
+		}
+
+		// Extract the exception from this result
+		ffmpegException := out["error"].(map[string]interface{})
+		return &FormatTaskError{ffmpegException["string"].(string), queueItem, task}
 	}
 
 	for v := range progress {
+		//TODO inform processor of update ticks.. might be worth implementing some form of
+		// rate-limiting here as the output might be quite overwhelming, especially if multiple
+		// instances of this task are running concurrently.
 		log.Printf("[Progress] %#v\n", v)
 	}
 

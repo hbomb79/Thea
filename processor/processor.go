@@ -95,6 +95,7 @@ func New() *Processor {
 	p := &Processor{
 		Queue: &ProcessorQueue{
 			Items: make([]*QueueItem, 0),
+			cache: new(queueCache),
 		},
 	}
 

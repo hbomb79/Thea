@@ -13,6 +13,7 @@ import (
 type ProcessorQueue struct {
 	Items  []*QueueItem `groups:"api"`
 	lastId int
+	cache  *queueCache
 	sync.Mutex
 }
 

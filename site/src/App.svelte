@@ -22,8 +22,10 @@ function handleMessage(dataStr:string) {
     // Try to convert to JSON
     try {
         let dataObj = JSON.parse(dataStr)
+        if(!dataObj) return
+
         if(appState == STATE.LOADING) {
-            if(dataObj && dataObj.title == "CONNECTION_ESTABLISHED") {
+            if(dataObj.title == "CONNECTION_ESTABLISHED") {
                 appState = STATE.CONNECTED
                 console.info("Connection success!")
 

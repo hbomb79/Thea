@@ -27,7 +27,7 @@ socket.addEventListener('close', function(event) {
 })
 
 export default {
-    "webstore": {
+    webstore: {
         subscribe: webstore.subscribe,
         sendMessage
     }

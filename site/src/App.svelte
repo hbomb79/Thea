@@ -1,5 +1,21 @@
 <script lang="ts">
-    import Nav from './components/Nav.svelte'
+import { onMount } from 'svelte'
+import Nav from './components/Nav.svelte'
+import store from './store'
+
+const socketStore = store.webstore
+
+function handleMessage(data:string) {
+
+}
+
+onMount(() => {
+    socketStore.subscribe((data) => {
+        // Handle event
+        handleMessage(data)
+    })
+})
+
 </script>
 
 <style lang="scss">

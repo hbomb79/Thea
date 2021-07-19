@@ -6,12 +6,13 @@ export let title:string;
 
 <style lang="scss">
 @use "../styles/global.scss";
+@use 'sass:math';
 
 nav {
     position: fixed;
     top: 0;
     background-color: #eee;
-    padding: global.$navHeight / 2;
+    padding: math.div(global.$navHeight, 2);
     left: 0;
     right: 0;
     box-shadow: 0px -8px 10px 3px black;

@@ -1,16 +1,44 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import Nav from './components/Nav.svelte'
+
 import store from './store'
 
-const socketStore = store.webstore
+import Nav from './components/Nav.svelte'
+import Queue from './components/Queue.svelte'
 
-function handleMessage(data:string) {
+const enum STATE {
+    LOADING,
+    CONNECTED,
+    ERR
+}
 
+const socketStore:any = store.webstore
+let appState:STATE = STATE.LOADING
+
+function handleMessage(dataStr:string) {
+    // Consume the initial writeable empty string that is emitted on creation
+    if(dataStr == "") return
+
+    // Try to convert to JSON
+    try {
+        let dataObj = JSON.parse(dataStr)
+        if(appState == STATE.LOADING) {
+            if(dataObj && dataObj.title == "CONNECTION_ESTABLISHED") {
+                appState = STATE.CONNECTED
+                console.info("Connection success!")
+
+                return
+            }
+
+            console.error("Unexpected message received from websocket", dataStr)
+        }
+    } catch(e:any) {
+        console.warn("Connection to websocket seems to have failed, or response is unexpected: ", e)
+    }
 }
 
 onMount(() => {
-    socketStore.subscribe((data) => {
+    socketStore.subscribe((data:string) => {
         // Handle event
         handleMessage(data)
     })
@@ -44,6 +72,18 @@ main {
 
 <Nav title="TPA Dashboard"/>
 <main>
+    {#if appState == STATE.LOADING}
+        <div class="loading modal">
+            <h2>Connecting to server...</h2>
+        </div>
+    {:else if appState == STATE.CONNECTED}
+        <Queue />
+    {:else}
+        <div class="err modal">
+            <h2>Failed to connect to server.</h2>
+            <p>Ensure the server is online, or try again later.</p>
+        </div>
+    {/if}
     <span class="subtitle">Queue</span>
 </main>
 

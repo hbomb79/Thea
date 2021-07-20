@@ -10,6 +10,7 @@ import titleIcon from '../assets/title-stage.svg';
 import omdbIcon from '../assets/omdb-stage.svg';
 import ffmpegIcon from '../assets/ffmpeg-stage.svg';
 import dbIcon from '../assets/db-stage.svg';
+import troubleIcon from '../assets/warning.svg';
 
 enum ComponentState {
     LOADING,
@@ -156,6 +157,20 @@ onMount(getDetails)
             font-style: italic;
             color: #6d6d6d;
             font-size: 0.8rem;
+
+            span {
+                height: 24px;
+                display: inline-block;
+                line-height: 24px;
+            }
+
+            :global(svg) {
+                width: 21px;
+                height: 21px;
+                float: right;
+                margin-left: 8px;
+                fill: red;
+            }
         }
     }
 
@@ -230,7 +245,10 @@ onMount(getDetails)
                 <h2>{details.name}</h2>
             {/if}
 
-            <span class="status">{stat()}</span>
+            <div class="status">
+                <span>{stat()}</span>
+                {#if details.trouble} {@html troubleIcon} {/if}
+            </div>
         </div>
         <div class="panel">
             <span class:active="{page == ComponentPage.OVERVIEW}" on:click="{() => page = ComponentPage.OVERVIEW}">Overview</span>

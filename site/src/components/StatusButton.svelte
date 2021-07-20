@@ -22,7 +22,11 @@ a {
     :global(svg) {
         width: 1rem;
         height: 1rem;
-        fill: #8c43f9;
+        fill: #9d5ffb;
+
+        :global(path:nth-child(2)) {
+            fill: #5883ef;
+        }
     }
 }
 

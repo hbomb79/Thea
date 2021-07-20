@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { commander } from "../commander";
-import { SocketMessageType } from "../store";
+import { SocketMessageType, SocketPacketType } from "../store";
 import type { SocketData } from "../store";
 import type { QueueItem } from "./Queue.svelte";
 
@@ -68,6 +68,29 @@ const getDetails = function() {
     })
 }
 
+const getStageStr = function(stage:number): string {
+    switch(stage) {
+        case 0: return "IO Poller"
+        case 1: return "Title Format"
+        case 2: return "OMDB Querying"
+        case 3: return "Formatter"
+        case 4: return "Finished"
+    }
+}
+
+const getStatusStr = function(status:number): string {
+    switch(status) {
+        case 0: return "Pending"
+        case 1: return "Working"
+        case 2: return "Completed"
+        case 3: return "Troubled"
+    }
+}
+
+$:stat = function() {
+    return getStageStr(details.stage) + ": " + getStatusStr(details.status)
+}
+
 onMount(getDetails)
 </script>
 
@@ -78,7 +101,7 @@ onMount(getDetails)
     max-width: 950px;
     border-radius: 2px;
     width: 80%;
-    margin: 1rem auto;
+    margin: 2rem auto;
     overflow: hidden;
 
     .header {
@@ -92,12 +115,22 @@ onMount(getDetails)
         display: flex;
         justify-content: space-between;
 
+        .id {
+            color: #a0a0a0;
+            align-self: center;
+            padding-left: 11px;
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+
         h2 {
             margin: 0;
             font-size: 1.2rem;
             color: #5E5E5E;
             display: inline-block;
             padding: 0.8rem;
+            padding-left: 7px;
+            flex: auto;
         }
 
         .status {
@@ -107,7 +140,7 @@ onMount(getDetails)
             padding-right: 1rem;
             font-style: italic;
             color: #6d6d6d;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
         }
     }
 
@@ -115,22 +148,22 @@ onMount(getDetails)
         padding: 1rem 0 1rem 0;
     }
 }
-
 </style>
 
 <!-- Template -->
 {#if state == ComponentState.LOADING}
     <span>Loading...</span>
 {:else if state == ComponentState.COMPLETE}
-    <div class="item">
+    <div class="item" class:trouble="{details.trouble}">
         <div class="header">
+            <span class="id">#{details.id}</span>
             {#if details.omdb_info}
                 <h2>{details.omdb_info.Title}</h2>
             {:else}
                 <h2>{details.name}</h2>
             {/if}
 
-            <span class="status">Status line text goes here</span>
+            <span class="status">{stat()}</span>
         </div>
         <main>
             <p>queue item status line goes here...</p>

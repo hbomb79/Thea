@@ -1,51 +1,9 @@
 <script lang="ts">
-import { onMount } from 'svelte'
-
-import store from './store'
-
 import Nav from './components/Nav.svelte'
 import Queue from './components/Queue.svelte'
 
-const enum STATE {
-    LOADING,
-    CONNECTED,
-    ERR
-}
-
-const socketStore:any = store.webstore
-let appState:STATE = STATE.LOADING
-
-function handleMessage(dataStr:string) {
-    // Consume the initial writeable empty string that is emitted on creation
-    if(dataStr == "") return
-
-    // Try to convert to JSON
-    try {
-        let dataObj = JSON.parse(dataStr)
-        if(!dataObj) return
-
-        if(appState == STATE.LOADING) {
-            if(dataObj.title == "CONNECTION_ESTABLISHED") {
-                appState = STATE.CONNECTED
-                console.info("Connection success!")
-
-                return
-            }
-
-            console.error("Unexpected message received from websocket", dataStr)
-        }
-    } catch(e:any) {
-        console.warn("Connection to websocket seems to have failed, or response is unexpected: ", e)
-    }
-}
-
-onMount(() => {
-    socketStore.subscribe((data:string) => {
-        // Handle event
-        handleMessage(data)
-    })
-})
-
+import { statusStream } from './commander'
+import { SocketPacketType } from './store'
 </script>
 
 <style lang="scss">
@@ -74,11 +32,11 @@ main {
 
 <Nav title="TPA Dashboard"/>
 <main>
-    {#if appState == STATE.LOADING}
+    {#if $statusStream == SocketPacketType.INIT}
         <div class="loading modal">
             <h2>Connecting to server...</h2>
         </div>
-    {:else if appState == STATE.CONNECTED}
+    {:else if $statusStream == SocketPacketType.OPEN}
         <Queue />
     {:else}
         <div class="err modal">

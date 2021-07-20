@@ -1,4 +1,6 @@
 <script lang="typescript">
+import { statusStream } from '../commander';
+import { SocketPacketType } from '../store';
 import StatusButton from './StatusButton.svelte';
 
 export let title:string;
@@ -30,7 +32,9 @@ nav {
 
 <nav>
     <span class="title">{title}</span>
-    <div class="status-button">
-        <StatusButton/>
-    </div>
+    {#if $statusStream == SocketPacketType.OPEN}
+        <div class="status-button">
+            <StatusButton/>
+        </div>
+    {/if}
 </nav>

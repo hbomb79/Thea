@@ -4,12 +4,12 @@ import { commander, dataStream } from '../commander';
 import { SocketMessageType } from '../store';
 import type { SocketData } from '../store';
 
-enum QueueState {
+enum ComponentState {
     INDEXING,
     COMPLETE
 }
 
-let state = QueueState.INDEXING
+let state = ComponentState.INDEXING
 let items = []
 onMount(() => {
     // As soon as this 
@@ -18,7 +18,7 @@ onMount(() => {
         type: 1
     }, (response:SocketData):boolean => {
         if(response.type == SocketMessageType.RESPONSE) {
-            state = QueueState.COMPLETE
+            state = ComponentState.COMPLETE
             items = response.arguments.payload.items
         }
 
@@ -33,11 +33,11 @@ onMount(() => {
 </script>
 
 <div>
-    {#if state == QueueState.INDEXING}
+    {#if state == ComponentState.INDEXING}
         <div>
             <span>Spinning up...</span>
         </div>
-    {:else if state == QueueState.COMPLETE}
+    {:else if state == ComponentState.COMPLETE}
         {#each items as item}
             <div>
                 <h2>{item.title}</h2>

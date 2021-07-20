@@ -5,6 +5,7 @@ import { writable } from 'svelte/store'
 export interface SocketDataArguments {
     payload?: any
     command?: any
+    [key:string]: any
 }
 
 // socketData is an interface that speifies the data of

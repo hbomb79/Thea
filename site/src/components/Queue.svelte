@@ -30,7 +30,7 @@ onMount(() => {
     // As soon as this 
     commander.sendMessage({
         title: "QUEUE_INDEX",
-        type: 1
+        type: SocketMessageType.COMMAND
     }, (response:SocketData):boolean => {
         if(response.type == SocketMessageType.RESPONSE) {
             state = ComponentState.COMPLETE
@@ -62,7 +62,7 @@ onMount(() => {
     {:else if state == ComponentState.COMPLETE}
         {#each items as item}
             <!-- QueueItem is aliased to Item to avoid naming conflict -->
-            <Item queueDetails={item} />
+            <Item queueInfo={item} />
         {/each}
     {:else}
         <div><span>Fail</span></div>

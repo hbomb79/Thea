@@ -49,7 +49,8 @@ class Commander {
     sendMessage(message:SocketData, callback?:CommandCallback){
         if(callback != undefined) {
             if(!message.id) {
-                message.id = this.lastId++
+                this.lastId++
+                message.id = this.lastId
             }
 
             this.callbacks[message.id] = callback

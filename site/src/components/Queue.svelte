@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import { commander } from '../commander';
+import { commander, dataStream } from '../commander';
 import { SocketMessageType } from '../store';
 import type { SocketData } from '../store';
 
@@ -12,18 +12,22 @@ enum QueueState {
 let state = QueueState.INDEXING
 let items = []
 onMount(() => {
+    // As soon as this 
     commander.sendMessage({
         title: "QUEUE_INDEX",
-        type: 1,
-        id: 42
+        type: 1
     }, (response:SocketData):boolean => {
         if(response.type == SocketMessageType.RESPONSE) {
             state = QueueState.COMPLETE
             items = response.arguments.payload.items
         }
 
-        return false
+        return true
     });
+
+    dataStream.subscribe(data => {
+
+    })
 })
 
 </script>

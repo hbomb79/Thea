@@ -10,7 +10,7 @@ export interface SocketDataArguments {
 // socketData is an interface that speifies the data of
 // a socket message dispatched from the go-server
 export interface SocketData {
-    id: number
+    id?: number
     title: string
     type: number
     arguments?: SocketDataArguments
@@ -89,7 +89,7 @@ socket.addEventListener('message', function(event) {
 })
 
 socket.addEventListener('close', function(event) {
-    console.error("[Websocket] Connection closed...", event)
+    console.warn("[Websocket] Connection closed...", event)
     socketStream.set({
         type: SocketPacketType.CLOSE,
         ev: event

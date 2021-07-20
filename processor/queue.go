@@ -11,7 +11,7 @@ import (
 // ProcessorQueue is the Queue of items to be processed by this
 // processor
 type ProcessorQueue struct {
-	Items  []*QueueItem `groups:"api"`
+	Items  []*QueueItem `json:"items" groups:"api"`
 	lastId int
 	sync.Mutex
 }

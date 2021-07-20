@@ -7,6 +7,7 @@ import sveltePreprocess from 'svelte-preprocess';
 import typescript from '@rollup/plugin-typescript';
 import css from 'rollup-plugin-css-only';
 import svg from 'rollup-plugin-svg-import';
+import html from 'rollup-plugin-html';
 
 const production = !process.env.ROLLUP_WATCH;
 
@@ -52,6 +53,9 @@ export default {
 		css({ output: 'bundle.css' }),
 
     svg({stringify: true}),
+    html({
+      include: "**/*.html"
+    }),
 
 		// If you have external dependencies installed from
 		// npm, you'll most likely need these plugins. In

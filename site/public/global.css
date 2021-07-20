@@ -14,7 +14,7 @@ body {
   overflow-y: scroll;
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-  background: linear-gradient(326deg, #d9b6ea, #bfd9ff)
+  background: linear-gradient(326deg, #d9b6ea, #bfd9ff);
 }
 
 a {

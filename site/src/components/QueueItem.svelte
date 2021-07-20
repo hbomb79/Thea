@@ -12,6 +12,8 @@ import ffmpegIcon from '../assets/ffmpeg-stage.svg';
 import dbIcon from '../assets/db-stage.svg';
 import troubleIcon from '../assets/warning.svg';
 
+import ellipsisHtml from '../assets/html/ellipsis.html';
+
 enum ComponentState {
     LOADING,
     ERR,
@@ -58,6 +60,7 @@ interface QueueDetails extends QueueItem {
     trouble: QueueTroubleInfo
 }
 
+const els:HTMLElement[] = new Array(4);
 export let queueInfo:QueueItem
 
 let state = ComponentState.LOADING
@@ -73,6 +76,8 @@ const getDetails = function() {
         if(response.type == SocketMessageType.RESPONSE) {
             details = response.arguments.payload
             state = ComponentState.COMPLETE
+
+            requestAnimationFrame(updateEllipsis);
 
             return true
         }
@@ -103,9 +108,24 @@ const getStatusStr = function(status:number): string {
     }
 }
 
+const updateEllipsis = function() {
+    const left = els[details.stage] as HTMLElement
+    const right = els[details.stage + 1] as HTMLElement
+    const spinner = els[5];
+
+    if (!left || !right || !spinner) {
+        return
+    }
+
+    const mid = ((left.offsetLeft + left.offsetWidth) + (right.offsetLeft))/2
+    spinner.setAttribute("style", "left: " + (mid - spinner.offsetWidth / 2) + "px;")
+}
+
 $:stat = function() {
     return getStageStr(details.stage) + ": " + getStatusStr(details.status)
 }
+
+window.addEventListener("resize", updateEllipsis);
 
 onMount(getDetails)
 </script>
@@ -169,7 +189,7 @@ onMount(getDetails)
                 height: 21px;
                 float: right;
                 margin-left: 8px;
-                fill: red;
+                fill: #ff3030;
             }
         }
     }
@@ -180,12 +200,13 @@ onMount(getDetails)
         text-align: left;
 
         span {
-            padding: 8px 16px;
-            background-color: #cee0ff;
+            padding: 6px 14px;
+            background-color: #eeeeee;
             display: inline-block;
             margin: 9px 5px;
-            border-radius: 15px;
+            border-radius: 6px;
             cursor: pointer;
+            font-size: 0.8rem;
 
             transition: background-color 100ms ease-in-out, border-color 100ms ease-in-out;
             border: 2px solid #f5f5f5;
@@ -195,9 +216,17 @@ onMount(getDetails)
             }
 
             &.active {
-                border-color: red;
+                border-color: #a294f8;
+                background-color: #ffffff;
+                box-shadow: 0px 3px 6px -5px #909090;
             }
         }
+    }
+
+    @keyframes blinker {
+      50% {
+        opacity: 30%;
+      }
     }
 
     main {
@@ -212,14 +241,36 @@ onMount(getDetails)
             display: flex;
             justify-content: space-around;
             padding: 2rem;
+            position: relative;
+
+            .active :global(svg), .active .caption {
+                animation: blinker 1s linear infinite;
+
+            }
+
+            .loading {
+                position: absolute;
+                transform: scale(0.55);
+            }
 
             .stage {
                 display: flex;
                 flex-direction: column-reverse;
 
+                &.hidden {
+                    .caption {
+                        opacity: 0.1;
+                    }
+
+                    :global(svg) {
+                        fill: #eee;
+                    }
+                }
+
                 .caption {
                     display: block;
                     margin-top: 6px;
+
                 }
 
                 :global(svg) {
@@ -259,11 +310,12 @@ onMount(getDetails)
         </div>
         <main>
             <div class="stages">
-                <div class="stage import"><span class="caption">Import</span>{@html importIcon}</div>
-                <div class="stage title"><span class="caption">Title</span>{@html titleIcon}</div>
-                <div class="stage omdb"><span class="caption">OMDB</span>{@html omdbIcon}</div>
-                <div class="stage ffmpeg"><span class="caption">Ffmpeg</span>{@html ffmpegIcon}</div>
-                <div class="stage db"><span class="caption">DB</span>{@html dbIcon}</div>
+                <div bind:this={els[0]} class="stage import" class:hidden="{0 < details.status}" class:active="{details.status == 0}"><span class="caption">Import</span>{@html importIcon}</div>
+                <div bind:this={els[1]} class="stage title" class:hidden="{1 < details.status}" class:active="{details.status == 1}"><span class="caption">Title</span>{@html titleIcon}</div>
+                <div bind:this={els[2]} class="stage omdb" class:hidden="{details.status == 0 || details.status > 2}" class:active="{details.status == 2}"><span class="caption">OMDB</span>{@html omdbIcon}</div>
+                <div bind:this={els[3]} class="stage ffmpeg" class:hidden="{details.status > 1 && details.status < 2}" class:active="{details.status == 3}"><span class="caption">Ffmpeg</span>{@html ffmpegIcon}</div>
+                <div bind:this={els[4]} class="stage db" class:hidden="{details.status > 2 && details.status < 3}" class:active="{details.status == 4}"><span class="caption">DB</span>{@html dbIcon}</div>
+                <div bind:this={els[5]} class="loading">{@html ellipsisHtml}</div>
             </div>
         </main>
     </div>

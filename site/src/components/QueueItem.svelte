@@ -71,18 +71,50 @@ const getDetails = function() {
 onMount(getDetails)
 </script>
 
-<style lang="sass">
-.item
-    background: #eee
-    box-shadow: 0px 0px 6px -3px #4b494c
-    border: solid 2px rgba(32,152,218,20%)
-    border-radius: 3px
-    max-width: 950px
-    width: 80%
-    margin: 1rem auto
+<style lang="scss">
+.item {
+    background: white;
+    box-shadow: 0px 0px 6px -3px #4b494c;
+    max-width: 950px;
+    border-radius: 2px;
+    width: 80%;
+    margin: 1rem auto;
+    overflow: hidden;
 
-    .status
-        float: left
+    .header {
+        /* Ocupy all remaining width of the flexbox */
+        width: 100%;
+        text-align: left;
+        overflow: hidden;
+        box-shadow: 0px 0px 5px -3px black;
+        background: #eee;
+
+        display: flex;
+        justify-content: space-between;
+
+        h2 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: #5E5E5E;
+            display: inline-block;
+            padding: 0.8rem;
+        }
+
+        .status {
+            display: inline-block;
+            height: fit-content;
+            align-self: center;
+            padding-right: 1rem;
+            font-style: italic;
+            color: #6d6d6d;
+            font-size: 0.9rem;
+        }
+    }
+
+    main {
+        padding: 1rem 0 1rem 0;
+    }
+}
 
 </style>
 
@@ -97,12 +129,12 @@ onMount(getDetails)
             {:else}
                 <h2>{details.name}</h2>
             {/if}
-            <span>queue item status line goes here...</span>
+
+            <span class="status">Status line text goes here</span>
         </div>
-        <div class="status">
-            <span>{queueInfo.id}</span>
-            <p>{queueInfo.stage}: {queueInfo.status}</p>
-        </div>
+        <main>
+            <p>queue item status line goes here...</p>
+        </main>
     </div>
 {:else}
     <div class="item">

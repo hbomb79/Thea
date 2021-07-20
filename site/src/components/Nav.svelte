@@ -18,6 +18,10 @@ nav {
     left: 0;
     right: 0;
     box-shadow: 0px -8px 10px 3px black;
+    box-shadow: 0px -8px 10px 3px black;
+    border-bottom: solid 2px red;
+    border-image-source: linear-gradient(to left, #cd8cf7, #6e9df9);
+    border-image-slice: 1;
 
     .title {
         float: left;

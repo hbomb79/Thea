@@ -18,13 +18,14 @@ a {
     &:hover {
         background-color: #cec4f2;
     }
+
+    :global(svg) {
+        width: 1rem;
+        height: 1rem;
+        fill: #8c43f9;
+    }
 }
 
-:global(nav a svg) {
-    width: 1rem;
-    height: 1rem;
-    fill: #8c43f9;
-}
 </style>
 
 <a href="/#" class="nav-svg" on:click="{getStatus}">

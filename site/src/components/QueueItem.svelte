@@ -5,10 +5,24 @@ import { SocketMessageType, SocketPacketType } from "../store";
 import type { SocketData } from "../store";
 import type { QueueItem } from "./Queue.svelte";
 
+import importIcon from '../assets/import-stage.svg';
+import titleIcon from '../assets/title-stage.svg';
+import omdbIcon from '../assets/omdb-stage.svg';
+import ffmpegIcon from '../assets/ffmpeg-stage.svg';
+import dbIcon from '../assets/db-stage.svg';
+
 enum ComponentState {
     LOADING,
     ERR,
     COMPLETE
+}
+
+enum ComponentPage {
+    OVERVIEW,
+    TITLE,
+    OMDB,
+    FFMPEG,
+    DB,
 }
 
 interface QueueTitleInfo {
@@ -46,6 +60,7 @@ interface QueueDetails extends QueueItem {
 export let queueInfo:QueueItem
 
 let state = ComponentState.LOADING
+let page = ComponentPage.OVERVIEW
 let details:QueueDetails = null
 const getDetails = function() {
     // Get enhanced details of the queue item
@@ -144,8 +159,60 @@ onMount(getDetails)
         }
     }
 
+    .panel {
+        background: #f5f5f5;
+        padding: 0 1rem;
+        text-align: left;
+
+        span {
+            padding: 8px 16px;
+            background-color: #cee0ff;
+            display: inline-block;
+            margin: 9px 5px;
+            border-radius: 15px;
+            cursor: pointer;
+
+            transition: background-color 100ms ease-in-out, border-color 100ms ease-in-out;
+            border: 2px solid #f5f5f5;
+
+            &:hover {
+                background-color: #d0c3f2;
+            }
+
+            &.active {
+                border-color: red;
+            }
+        }
+    }
+
     main {
         padding: 1rem 0 1rem 0;
+
+        span {
+            font-style: italic;
+            color: #868686;
+        }
+
+        .stages {
+            display: flex;
+            justify-content: space-around;
+            padding: 2rem;
+
+            .stage {
+                display: flex;
+                flex-direction: column-reverse;
+
+                .caption {
+                    display: block;
+                    margin-top: 6px;
+                }
+
+                :global(svg) {
+                    width: 3rem;
+                    height: 3rem;
+                }
+            }
+        }
     }
 }
 </style>
@@ -165,8 +232,21 @@ onMount(getDetails)
 
             <span class="status">{stat()}</span>
         </div>
+        <div class="panel">
+            <span class:active="{page == ComponentPage.OVERVIEW}" on:click="{() => page = ComponentPage.OVERVIEW}">Overview</span>
+            <span class:active="{page == ComponentPage.TITLE}" on:click="{() => page = ComponentPage.TITLE}">Title</span>
+            <span class:active="{page == ComponentPage.OMDB}" on:click="{() => page = ComponentPage.OMDB}">OMDB</span>
+            <span class:active="{page == ComponentPage.FFMPEG}" on:click="{() => page = ComponentPage.FFMPEG}">FFmpeg</span>
+            <span class:active="{page == ComponentPage.DB}" on:click="{() => page = ComponentPage.DB}">DB</span>
+        </div>
         <main>
-            <p>queue item status line goes here...</p>
+            <div class="stages">
+                <div class="stage import"><span class="caption">Import</span>{@html importIcon}</div>
+                <div class="stage title"><span class="caption">Title</span>{@html titleIcon}</div>
+                <div class="stage omdb"><span class="caption">OMDB</span>{@html omdbIcon}</div>
+                <div class="stage ffmpeg"><span class="caption">Ffmpeg</span>{@html ffmpegIcon}</div>
+                <div class="stage db"><span class="caption">DB</span>{@html dbIcon}</div>
+            </div>
         </main>
     </div>
 {:else}

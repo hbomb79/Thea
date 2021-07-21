@@ -4,7 +4,7 @@
     position: relative;
 
     .active:not(:hover) :global(svg), .active:not(:hover) .caption {
-        animation: blinker 1s linear infinite;
+        /* animation: blinker 1s linear infinite; */
     }
 
     .stage {
@@ -19,10 +19,13 @@
         padding: 1.1rem;
         width: 60px;
 
+        z-index: 50;
+
         &.hidden {
             .caption {
                 opacity: 0.3;
-                transition: 300ms ease-in-out opacity;
+                transition: all 300ms ease-in-out;
+                transition-property: opacity, color;
             }
 
             :global(svg) {
@@ -33,6 +36,7 @@
             &:hover {
                 .caption {
                     opacity: 1;
+                    color: black;
                 }
 
                 :global(svg) {
@@ -48,11 +52,21 @@
             font-size: 0.9rem;
         }
 
+        &:hover {
+            :global(svg) {
+                fill: black;
+            }
+
+            .caption {
+                color: black;
+            }
+        }
+
         :global(svg) {
             width: 2rem;
             height: 2rem;
             margin: 0 auto;
-            fill: #333333;
+            fill: #737070;
         }
 
         &:after {
@@ -68,6 +82,7 @@
             transition: opacity 200ms ease-out;
             background: linear-gradient(326deg, #d9b6ea5e, #bfd9ff4f);
             box-shadow: 0px 0px 6px -5px black;
+            border-radius: 4px;
         }
         
         &:hover:after {
@@ -79,6 +94,7 @@
         align-self: center;
         padding: 0.5rem;
         height: 1.5rem;
+        position: relative;
 
         :global(svg) {
             width: 1.5rem;
@@ -107,25 +123,58 @@
             }
 
             :global(svg g:nth-child(1) path) {
-                transform: rotate(0deg);
-                transform-origin: 194px 190px;
+                fill: red;
+            }
 
-                animation: spinner 6s linear infinite;
-                fill: #ffa9a9;
+            @keyframes errfade {
+                50% {
+                    fill: #ff000070;
+                }
             }
 
             :global(svg g:nth-child(2) path) {
-                animation: blinker 1s linear infinite;
                 fill: red;
+                animation: errfade 1s linear infinite;
+            }
+
+            &:before {
+                background-color: #ff6565;
+            }
+
+            &:after {
+                display: none;
             }
         }
 
-        &.queued :global(svg) {
-            fill: #abaaaa;
+        &.queued {
+            &:before, &:after {
+                display: none;
+            }
+
+            :global(svg) {
+                fill: #abaaaa;
+            }
         }
 
         &.hidden {
             opacity: 0;
+        }
+
+        &:before, &:after {
+            content: '';
+            height: 2px;
+            position: absolute;
+            top: 18px;
+            width: 80px;
+            background-color: #abc3fb;
+        }
+
+        &:before {
+            right: 32px;
+        }
+
+        &:after {
+            left: 32px;
         }
     }
 }

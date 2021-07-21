@@ -59,11 +59,11 @@ onMount(() => {
     width: 80%;
     min-width: 780px;
     margin: 0 auto;
+    max-width: 950px;
 
     .subtitle {
-        margin-top: 2rem;
-        margin-left: 3rem;
-        margin-bottom: -1rem;
+        margin: 2rem auto -1rem auto;
+        padding-left: 1rem;
         display: block;
         text-align: left;
         font-weight: 500;

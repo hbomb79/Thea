@@ -104,7 +104,7 @@ const getStatusStr = function(status:number): string {
         case 0: return "Pending"
         case 1: return "Working"
         case 2: return "Completed"
-        case 3: return "Troubled"
+        case 3: return "<b>Troubled</b>"
     }
 }
 
@@ -161,8 +161,7 @@ onMount(getDetails)
             </h2>
 
             <div class="status" on:click="{handleStatClick}" class:active="{isStatActive()}">
-                <span>{stat()}</span>
-                {#if details.trouble} {@html troubleIcon} {/if}
+                <span>{@html stat()}</span>
             </div>
         </div>
         <div class="panel">

@@ -13,6 +13,8 @@ import dbIcon from '../assets/db-stage.svg';
 import troubleIcon from '../assets/warning.svg';
 
 import ellipsisHtml from '../assets/html/ellipsis.html';
+import workingHtml from '../assets/html/dual-ring.html';
+import errHtml from '../assets/err.svg';
 
 enum ComponentState {
     LOADING,
@@ -167,6 +169,10 @@ onMount(getDetails)
             padding: 0.8rem;
             padding-left: 7px;
             flex: auto;
+
+            .season {
+                font-weight: 300;
+            }
         }
 
         .status {
@@ -229,6 +235,18 @@ onMount(getDetails)
       }
     }
 
+    @keyframes spinner {
+        0% {
+            transform: rotate(0deg);
+        }
+        50%{
+            transform: rotate(180deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
     main {
         padding: 1rem 0 1rem 0;
 
@@ -245,12 +263,29 @@ onMount(getDetails)
 
             .active :global(svg), .active .caption {
                 animation: blinker 1s linear infinite;
-
             }
 
             .loading {
                 position: absolute;
                 transform: scale(0.55);
+
+                :global(svg) {
+                    width: 4rem;
+                    height: 4rem;
+                }
+
+                :global(svg g:nth-child(1) path) {
+                    transform: rotate(0deg);
+                    transform-origin: 194px 190px;
+
+                    animation: spinner 6s linear infinite;
+                    fill: #ffa9a9;
+                }
+
+                :global(svg g:nth-child(2) path) {
+                    animation: blinker 1s linear infinite;
+                    fill: red;
+                }
             }
 
             .stage {
@@ -290,11 +325,15 @@ onMount(getDetails)
     <div class="item" class:trouble="{details.trouble}">
         <div class="header">
             <span class="id">#{details.id}</span>
-            {#if details.omdb_info}
-                <h2>{details.omdb_info.Title}</h2>
-            {:else}
-                <h2>{details.name}</h2>
-            {/if}
+            <h2>
+                {#if details.omdb_info} {details.omdb_info.Title}
+                {:else if details.title_info} {details.title_info.Title}
+                {/if}
+
+                {#if details.title_info && details.title_info.Episodic}
+                    <span class="season">S{details.title_info.Season}E{details.title_info.Episode}</span>
+                {/if}
+            </h2>
 
             <div class="status">
                 <span>{stat()}</span>
@@ -310,12 +349,20 @@ onMount(getDetails)
         </div>
         <main>
             <div class="stages">
-                <div bind:this={els[0]} class="stage import" class:hidden="{0 < details.status}" class:active="{details.status == 0}"><span class="caption">Import</span>{@html importIcon}</div>
-                <div bind:this={els[1]} class="stage title" class:hidden="{1 < details.status}" class:active="{details.status == 1}"><span class="caption">Title</span>{@html titleIcon}</div>
-                <div bind:this={els[2]} class="stage omdb" class:hidden="{details.status == 0 || details.status > 2}" class:active="{details.status == 2}"><span class="caption">OMDB</span>{@html omdbIcon}</div>
-                <div bind:this={els[3]} class="stage ffmpeg" class:hidden="{details.status > 1 && details.status < 2}" class:active="{details.status == 3}"><span class="caption">Ffmpeg</span>{@html ffmpegIcon}</div>
-                <div bind:this={els[4]} class="stage db" class:hidden="{details.status > 2 && details.status < 3}" class:active="{details.status == 4}"><span class="caption">DB</span>{@html dbIcon}</div>
-                <div bind:this={els[5]} class="loading">{@html ellipsisHtml}</div>
+                <div bind:this={els[0]} class="stage import" class:hidden="{0 < details.stage}" class:active="{details.stage == 0}"><span class="caption">Import</span>{@html importIcon}</div>
+                <div bind:this={els[1]} class="stage title" class:hidden="{1 < details.stage}" class:active="{details.stage == 1}"><span class="caption">Title</span>{@html titleIcon}</div>
+                <div bind:this={els[2]} class="stage omdb" class:hidden="{details.stage == 0 || details.stage > 2}" class:active="{details.stage == 2}"><span class="caption">OMDB</span>{@html omdbIcon}</div>
+                <div bind:this={els[3]} class="stage ffmpeg" class:hidden="{details.stage > 1 && details.stage < 2}" class:active="{details.stage == 3}"><span class="caption">Ffmpeg</span>{@html ffmpegIcon}</div>
+                <div bind:this={els[4]} class="stage db" class:hidden="{details.stage < 3}" class:active="{details.stage == 4}"><span class="caption">DB</span>{@html dbIcon}</div>
+                <div bind:this={els[5]} class="loading">
+                    {#if details.trouble}
+                        {@html errHtml}
+                    {:else if details.status == 0}
+                        {@html ellipsisHtml}
+                    {:else if details.status == 1}
+                        {@html workingHtml}
+                    {/if}
+                </div>
             </div>
         </main>
     </div>

@@ -12,6 +12,7 @@ export let title:string;
 
 nav {
     position: fixed;
+    z-index: 100;
     top: 0;
     background-color: #eee;
     padding: math.div(global.$navHeight, 2);

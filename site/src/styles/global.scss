@@ -1,4 +1,6 @@
 $navHeight: 2rem;
+$statusPanelWidth: 380px;
+$statusPanelAnimTime: 200ms;
 @keyframes blinker {
   50% {
     opacity: 30%;
@@ -17,3 +19,13 @@ $navHeight: 2rem;
     }
 }
 
+::-webkit-scrollbar {
+    width: 12px;
+    background-color: #817d7d66;
+    box-shadow: 0px 0px 8px -5px black;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #ffffffb0;
+    border-radius: 7px;
+}

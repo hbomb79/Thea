@@ -121,13 +121,13 @@ const updateEllipsis = function() {
 
     const mid = ((left.offsetLeft + left.offsetWidth) + (right.offsetLeft))/2
     spinner.setAttribute("style", "left: " + (mid - spinner.offsetWidth / 2) + "px;")
+
+    requestAnimationFrame(updateEllipsis)
 }
 
 $:stat = function() {
     return getStageStr(details.stage) + ": " + getStatusStr(details.status)
 }
-
-window.addEventListener("resize", updateEllipsis);
 
 onMount(getDetails)
 </script>

@@ -11,7 +11,6 @@ body {
   color: #333;
   margin: 0;
   padding: 8px;
-  overflow-y: scroll;
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
   background: linear-gradient(326deg, #d9b6ea, #bfd9ff);
@@ -66,3 +65,4 @@ button:not(:disabled):active {
 button:focus {
 	border-color: #666;
 }
+

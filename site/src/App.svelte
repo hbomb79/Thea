@@ -1,6 +1,7 @@
 <script lang="ts">
 import Nav from './components/Nav.svelte'
 import Queue from './components/Queue.svelte'
+import StatusPanel from './components/StatusPanel.svelte'
 
 import { statusStream } from './commander'
 import { SocketPacketType } from './store'
@@ -9,22 +10,27 @@ import { SocketPacketType } from './store'
 <style lang="scss">
 @use "./styles/global.scss";
 
-main {
-    text-align: center;
-    padding: 1em;
-    max-width: 240px;
-    margin: 0 auto;
-    margin-top: global.$navHeight + 1rem;
+:global(body.status-panel-open) main {
+    right: global.$statusPanelWidth;
 }
 
-@media (min-width: 640px) {
-    main {
-        max-width: none;
-    }
+main {
+    text-align: center;
+
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 60px;
+    bottom: 0;
+
+    overflow-y: scroll;
+
+    transition: right global.$statusPanelAnimTime ease-out;
 }
 </style>
 
 <Nav title="TPA Dashboard"/>
+<StatusPanel/>
 <main>
     {#if $statusStream == SocketPacketType.INIT}
         <div class="loading modal">

@@ -1,0 +1,111 @@
+.stages {
+    display: flex;
+    justify-content: space-around;
+    padding: 1rem;
+    position: relative;
+
+    .active:not(:hover) :global(svg), .active:not(:hover) .caption {
+        animation: blinker 1s linear infinite;
+    }
+
+    .loading {
+        position: absolute;
+        transform: scale(0.55) translateY(-90%);
+        top: 50%;
+
+        transition: all 200ms ease-in-out;
+        transition-property: background-color, box-shadow;
+        background-color: white;
+        box-shadow: 0px 0px 0px 0px transparent;
+        padding: 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+
+        &:hover {
+            background-color: #f68e8e38;
+            box-shadow: 0px 0px 5px -4px black;
+        }
+
+        :global(svg) {
+            width: 4rem;
+            height: 4rem;
+        }
+
+        :global(svg g:nth-child(1) path) {
+            transform: rotate(0deg);
+            transform-origin: 194px 190px;
+
+            animation: spinner 6s linear infinite;
+            fill: #ffa9a9;
+        }
+
+        :global(svg g:nth-child(2) path) {
+            animation: blinker 1s linear infinite;
+            fill: red;
+        }
+    }
+
+    .stage {
+        display: flex;
+        flex-direction: column-reverse;
+        cursor: pointer;
+        background: white;
+        position: relative;
+
+        transition: background 200ms ease-out, box-shadow 200ms ease-out;
+        border-radius: 4px;
+        padding: 1.5rem;
+
+        &.hidden {
+            .caption {
+                opacity: 0.1;
+                transition: 300ms ease-in-out opacity;
+            }
+
+            :global(svg) {
+                transition: 300ms ease-in-out fill;
+                fill: #eee;
+            }
+
+            &:hover {
+                .caption {
+                    opacity: 1;
+                }
+
+                :global(svg) {
+                    fill: black;
+                }
+            }
+        }
+
+        .caption {
+            display: block;
+            margin-top: 6px;
+
+        }
+
+        :global(svg) {
+            width: 3rem;
+            height: 3rem;
+        }
+
+        &:after {
+            opacity: 0;
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+
+            width: 100%;
+            height: 100%;
+
+            transition: opacity 200ms ease-out;
+            background: linear-gradient(326deg, #d9b6ea5e, #bfd9ff4f);
+            box-shadow: 0px 0px 6px -5px black;
+        }
+        
+        &:hover:after {
+            opacity: 1;
+        }
+    }
+}

@@ -14,7 +14,7 @@ nav {
     position: fixed;
     z-index: 100;
     top: 0;
-    background-color: #eee;
+    background-color: #f5f5f5;
     padding: math.div(global.$navHeight, 2);
     left: 0;
     right: 0;

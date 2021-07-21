@@ -123,6 +123,10 @@ const handleSpinnerClick = function() {
     page = details.stage as ComponentPage
 }
 
+const handleStageClick = function(event:CustomEvent) {
+    page = event.detail
+}
+
 $:stat = function() {
     return getStageStr(details.stage) + ": " + getStatusStr(details.status)
 }
@@ -170,7 +174,7 @@ onMount(getDetails)
         </div>
         <main>
             {#if page == ComponentPage.OVERVIEW}
-                <OverviewPanel details={details} on:spinner-click="{handleSpinnerClick}"/>
+                <OverviewPanel details={details} on:spinner-click="{handleSpinnerClick}" on:stage-click="{handleStageClick}"/>
             {:else if page == ComponentPage.TITLE}
                 <TitlePanel/>
             {:else if page == ComponentPage.OMDB}

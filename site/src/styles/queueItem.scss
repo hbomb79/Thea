@@ -3,8 +3,6 @@
     box-shadow: 0px 0px 6px -3px #4b494c;
     max-width: 950px;
     border-radius: 2px;
-    width: 80%;
-    min-width: 780px;
     margin: 2rem auto;
     overflow: hidden;
 
@@ -73,7 +71,7 @@
                 height: 21px;
                 float: right;
                 margin-left: 8px;
-                fill: #ff3030;
+                fill: #ff6a6a;
             }
         }
     }
@@ -108,7 +106,7 @@
     }
 
     main {
-        padding: 1rem 0 1rem 0;
+        padding: 1rem;
 
         span {
             font-style: italic;

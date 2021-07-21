@@ -218,7 +218,7 @@ onMount(getDetails)
             border: 2px solid #f5f5f5;
 
             &:hover {
-                background-color: #d0c3f2;
+                background-color: #cecece;
             }
 
             &.active {
@@ -258,7 +258,7 @@ onMount(getDetails)
         .stages {
             display: flex;
             justify-content: space-around;
-            padding: 2rem;
+            padding: 1rem;
             position: relative;
 
             .active :global(svg), .active .caption {
@@ -267,7 +267,8 @@ onMount(getDetails)
 
             .loading {
                 position: absolute;
-                transform: scale(0.55);
+                transform: scale(0.55) translateY(-90%);
+                top: 50%;
 
                 :global(svg) {
                     width: 4rem;
@@ -291,14 +292,33 @@ onMount(getDetails)
             .stage {
                 display: flex;
                 flex-direction: column-reverse;
+                cursor: pointer;
+                background: white;
+                position: relative;
+
+                transition: background 200ms ease-out, box-shadow 200ms ease-out;
+                border-radius: 4px;
+                padding: 1.5rem;
 
                 &.hidden {
                     .caption {
                         opacity: 0.1;
+                        transition: 300ms ease-in-out opacity;
                     }
 
                     :global(svg) {
+                        transition: 300ms ease-in-out fill;
                         fill: #eee;
+                    }
+
+                    &:hover {
+                        .caption {
+                            opacity: 1;
+                        }
+
+                        :global(svg) {
+                            fill: black;
+                        }
                     }
                 }
 
@@ -311,6 +331,25 @@ onMount(getDetails)
                 :global(svg) {
                     width: 3rem;
                     height: 3rem;
+                }
+
+                &:after {
+                    opacity: 0;
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+
+                    width: 100%;
+                    height: 100%;
+
+                    transition: opacity 200ms ease-out;
+                    background: linear-gradient(326deg, #d9b6ea5e, #bfd9ff4f);
+                    box-shadow: 0px 0px 6px -5px black;
+                }
+                
+                &:hover:after {
+                    opacity: 1;
                 }
             }
         }

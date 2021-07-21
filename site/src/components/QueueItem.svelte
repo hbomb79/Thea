@@ -41,6 +41,10 @@ import type { QueueItem } from "./Queue.svelte";
 
 import troubleIcon from '../assets/warning.svg';
 import OverviewPanel from "./panels/OverviewPanel.svelte";
+import TitlePanel from "./panels/TitlePanel.svelte";
+import OmdbPanel from "./panels/OmdbPanel.svelte";
+import FfmpegPanel from "./panels/FfmpegPanel.svelte";
+import DatabasePanel from "./panels/DatabasePanel.svelte";
 
 enum ComponentState {
     LOADING,
@@ -54,6 +58,7 @@ enum ComponentPage {
     OMDB,
     FFMPEG,
     DB,
+    TROUBLE
 }
 
 
@@ -103,8 +108,27 @@ const getStatusStr = function(status:number): string {
     }
 }
 
+const handleStatClick = function() {
+    if(details.trouble) {
+        page = ComponentPage.TROUBLE
+    }
+}
+
+const handleSpinnerClick = function() {
+    if(details.trouble) {
+        page = ComponentPage.TROUBLE;
+        return
+    }
+
+    page = details.stage as ComponentPage
+}
+
 $:stat = function() {
     return getStageStr(details.stage) + ": " + getStatusStr(details.status)
+}
+
+$:isStatActive = function() {
+    return details.trouble && page == ComponentPage.TROUBLE
 }
 
 onMount(getDetails)
@@ -132,7 +156,7 @@ onMount(getDetails)
                 {/if}
             </h2>
 
-            <div class="status">
+            <div class="status" on:click="{handleStatClick}" class:active="{isStatActive()}">
                 <span>{stat()}</span>
                 {#if details.trouble} {@html troubleIcon} {/if}
             </div>
@@ -145,7 +169,19 @@ onMount(getDetails)
             <span class:active="{page == ComponentPage.DB}" on:click="{() => page = ComponentPage.DB}">DB</span>
         </div>
         <main>
-            <OverviewPanel details={details}/>
+            {#if page == ComponentPage.OVERVIEW}
+                <OverviewPanel details={details} on:spinner-click="{handleSpinnerClick}"/>
+            {:else if page == ComponentPage.TITLE}
+                <TitlePanel/>
+            {:else if page == ComponentPage.OMDB}
+                <OmdbPanel/>
+            {:else if page == ComponentPage.FFMPEG}
+                <FfmpegPanel/>
+            {:else if page == ComponentPage.DB}
+                <DatabasePanel/>
+            {:else if page == ComponentPage.TROUBLE}
+                <span><b>Trouble: </b>{details.trouble.message}</span>
+            {/if}
         </main>
     </div>
 {:else}

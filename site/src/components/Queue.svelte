@@ -60,7 +60,7 @@ onMount(() => {
             <span>Spinning up...</span>
         </div>
     {:else if state == ComponentState.COMPLETE}
-        {#each items as item}
+        {#each items as item (item.id)}
             <!-- QueueItem is aliased to Item to avoid naming conflict -->
             <Item queueInfo={item} />
         {/each}

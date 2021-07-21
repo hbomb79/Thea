@@ -7,12 +7,13 @@ import dbIcon from '../../assets/db-stage.svg';
 import ellipsisHtml from '../../assets/html/ellipsis.html';
 import workingHtml from '../../assets/html/dual-ring.html';
 import errHtml from '../../assets/err.svg';
-import { onMount } from "svelte";
+import { createEventDispatcher, onMount } from "svelte";
 import type { QueueDetails } from '../QueueItem.svelte';
 
 export let details:QueueDetails;
 const els:HTMLElement[] = new Array(4);
 
+const dispatch = createEventDispatcher();
 onMount(() => {
     requestAnimationFrame(updateEllipsis);
 })
@@ -31,6 +32,10 @@ const updateEllipsis = function() {
 
     requestAnimationFrame(updateEllipsis)
 }
+
+const handleSpinnerClick = function() {
+    dispatch('spinner-click')
+}
 </script>
 
 <style lang="scss">
@@ -45,7 +50,7 @@ const updateEllipsis = function() {
     <div bind:this={els[2]} class="stage omdb" class:hidden="{details.stage == 0 || details.stage > 2}" class:active="{details.stage == 2}"><span class="caption">OMDB</span>{@html omdbIcon}</div>
     <div bind:this={els[3]} class="stage ffmpeg" class:hidden="{details.stage > 1 && details.stage < 2}" class:active="{details.stage == 3}"><span class="caption">Ffmpeg</span>{@html ffmpegIcon}</div>
     <div bind:this={els[4]} class="stage db" class:hidden="{details.stage < 3}" class:active="{details.stage == 4}"><span class="caption">DB</span>{@html dbIcon}</div>
-    <div bind:this={els[5]} class="loading">
+    <div bind:this={els[5]} class="loading" on:click={handleSpinnerClick}>
         {#if details.trouble}
             {@html errHtml}
         {:else if details.status == 0}

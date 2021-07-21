@@ -55,8 +55,11 @@
 
             transition: background-color 150ms ease-in-out;
 
-            &:hover {
+            &:hover:not(.active), &.active {
                 background-color: #e2e0e0;
+            }
+            &:hover.active {
+                background-color: #d0cdcd;
             }
 
             span {

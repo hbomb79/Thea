@@ -29,3 +29,7 @@ $statusPanelAnimTime: 200ms;
     background-color: #ffffffb0;
     border-radius: 7px;
 }
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #ffffffef;
+}

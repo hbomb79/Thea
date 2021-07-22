@@ -11,10 +11,12 @@
         display: flex;
         flex-direction: column-reverse;
         cursor: pointer;
-        background: white;
+
+        /* ha nice */
+        background: radial-gradient(white 50%, transparent 69% 100%);
         position: relative;
 
-        transition: background 200ms ease-out, box-shadow 200ms ease-out, transform 100ms ease-in-out;
+        transition: box-shadow 200ms ease-out, transform 100ms ease-in-out;
         border-radius: 4px;
         padding: 1.1rem;
         width: 60px;
@@ -54,6 +56,7 @@
         }
 
         &:hover {
+            background: white;
             :global(svg) {
                 fill: black;
             }

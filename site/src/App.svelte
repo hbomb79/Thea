@@ -2,6 +2,7 @@
 import Nav from './components/Nav.svelte'
 import Queue from './components/Queue.svelte'
 import StatusPanel from './components/StatusPanel.svelte'
+import rippleHtml from './assets/html/ripple.html'
 
 import { statusStream } from './commander'
 import { SocketPacketType } from './store'
@@ -38,7 +39,6 @@ main {
     }
 
     .modal {
-        height: 10%;
         background: #ffffff85;
         display: inline-block;
         width: 450px;
@@ -61,6 +61,7 @@ main {
     {#if $statusStream == SocketPacketType.INIT}
         <div class="loading modal">
             <h2>Connecting to server...</h2>
+            {@html rippleHtml}
         </div>
     {:else if $statusStream == SocketPacketType.OPEN}
         <Queue />

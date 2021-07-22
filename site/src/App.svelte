@@ -26,6 +26,32 @@ main {
     overflow-y: scroll;
 
     transition: right global.$statusPanelAnimTime ease-out;
+    display: flex;
+    align-items: flex-start;
+
+    .modal, :global(.queue) {
+        margin: 0 auto;
+    }
+
+    :global(.queue) {
+        flex: 1 auto;
+    }
+
+    .modal {
+        height: 10%;
+        background: #ffffff85;
+        display: inline-block;
+        width: 450px;
+        align-self: center;
+        padding: 2rem;
+        border: solid 1px #c0c0c3;
+        border-radius: 6px;
+        color: #83769c;
+        box-shadow: 0px 0px 5px -3px black;
+        flex: 0 auto;
+    }
+
+
 }
 </style>
 

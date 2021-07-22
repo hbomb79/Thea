@@ -73,7 +73,7 @@ onMount(() => {
 }
 </style>
 
-<div>
+<div class="queue">
     {#if state == ComponentState.INDEXING}
         <div>
             <span>Spinning up...</span>

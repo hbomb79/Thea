@@ -6,6 +6,7 @@ export let details:QueueDetails;
 </script>
 
 <style lang="scss">
+/*TODO: Move duplicate styling for panels in to SCSS @use*/
 .title-info {
     display: flex;
     flex-direction: row;

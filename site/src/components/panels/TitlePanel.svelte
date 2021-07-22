@@ -17,10 +17,6 @@ export let details:QueueDetails;
         display: flex;
         flex-direction: column-reverse;
         margin: 1rem 1rem 1rem 2rem;
-        /*background: linear-gradient( 139deg , #d0c3f2b5, #c1d6fd66);
-        border: solid 1px #eeeeee;
-        border-radius: 3px;
-        box-shadow: 0px 0px 3px -2px black;*/
 
         :global(svg) {
             width: 4.5rem;
@@ -32,19 +28,31 @@ export let details:QueueDetails;
     }
 
     .view {
-        flex: 1;
+        flex: 1 auto;
         padding: 1rem 2rem 1rem 1rem;
         flex-direction: row;
+        min-width: 0;
+        flex-basis: auto;
 
         .props {
             display: flex;
             flex-wrap: wrap;
             height: 100%;
+            justify-content: space-around;
+            text-align: left;
 
             .prop {
                 width: 33%;
                 min-width: 170px;
                 align-self: center;
+
+                overflow: hidden;
+                text-overflow: ellipsis;
+                padding: 0.5rem 1rem;
+
+                .name {
+                    display: block;
+                }
             }
         }
     }

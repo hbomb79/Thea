@@ -217,7 +217,7 @@ $:isStatActive = function() {
             {:else if page == ComponentPage.TITLE}
                 <TitlePanel details={details}/>
             {:else if page == ComponentPage.OMDB}
-                <OmdbPanel/>
+                <OmdbPanel details={details}/>
             {:else if page == ComponentPage.FFMPEG}
                 <FfmpegPanel/>
             {:else if page == ComponentPage.DB}

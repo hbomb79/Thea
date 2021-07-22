@@ -14,7 +14,7 @@
         background: white;
         position: relative;
 
-        transition: background 200ms ease-out, box-shadow 200ms ease-out;
+        transition: background 200ms ease-out, box-shadow 200ms ease-out, transform 200ms ease-in-out;
         border-radius: 4px;
         padding: 1.1rem;
         width: 60px;

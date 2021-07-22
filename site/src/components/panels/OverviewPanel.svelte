@@ -94,6 +94,14 @@ const onCheckClick = function(checkIndex:number) {
         dispatch('spinner-click')
     }
 }
+
+const stages = [
+    {caption: "import", icon: importIcon},
+    {caption: "title", icon: titleIcon},
+    {caption: "omdb", icon: omdbIcon},
+    {caption: "ffmpeg", icon: ffmpegIcon},
+    {caption: "db", icon: dbIcon}
+]
 </script>
 
 <style lang="scss">
@@ -103,56 +111,14 @@ const onCheckClick = function(checkIndex:number) {
 
 
 <div class="stages" bind:this={perspectiveContainer}>
-    <div bind:this={els[0]} 
-        on:click="{handleStageClick}"
-        class="stage import"
-        class:active="{details.stage == 0}">
-            <span class="caption">Import</span>
-            {@html importIcon}
-    </div>
+    {#each stages as {caption, icon}, index (caption)}
+        <div bind:this={els[index]} class="stage {caption}" class:active="{details.stage == index}">
+            <span class="caption">{caption.toUpperCase()}</span>
+            {@html icon}
+        </div>
 
-    <div bind:this={checkEls[0]} class="check {getCheckClass(0)}" on:click="{() => onCheckClick(0)}">{@html getCheckContent(0)}</div>
-
-    <div bind:this={els[1]}
-        on:click="{handleStageClick}"
-        class="stage title"
-        class:hidden="{details.stage < 1}"
-        class:active="{details.stage == 1}">
-            <span class="caption">Title</span>
-            {@html titleIcon}
-    </div>
-
-    <div bind:this={checkEls[1]} class="check {getCheckClass(1)}" on:click="{() => onCheckClick(1)}">{@html getCheckContent(1)}</div>
-
-    <div bind:this={els[2]}
-        on:click="{handleStageClick}"
-        class="stage omdb"
-        class:hidden="{details.stage < 2}"
-        class:active="{details.stage == 2}">
-            <span class="caption">OMDB</span>
-            {@html omdbIcon}
-    </div>
-
-    <div bind:this={checkEls[2]} class="check {getCheckClass(2)}" on:click="{() => onCheckClick(2)}">{@html getCheckContent(2)}</div>
-
-    <div bind:this={els[3]}
-        on:click="{handleStageClick}"
-        class="stage ffmpeg"
-        class:hidden="{details.stage < 3}"
-        class:active="{details.stage == 3}">
-            <span class="caption">Ffmpeg</span>
-            {@html ffmpegIcon}
-    </div>
-
-
-    <div bind:this={checkEls[3]} class="check {getCheckClass(3)}" on:click="{() => onCheckClick(3)}">{@html getCheckContent(3)}</div>
-
-    <div bind:this={els[4]}
-        on:click="{handleStageClick}"
-        class="stage db"
-        class:hidden="{details.stage < 4}"
-        class:active="{details.stage == 4}">
-            <span class="caption">DB</span>
-            {@html dbIcon}
-    </div>
+        {#if index < stages.length - 1}
+            <div bind:this={checkEls[index]} class="check {getCheckClass(index)}" on:click="{() => onCheckClick(index)}">{@html getCheckContent(index)}</div>
+        {/if}
+    {/each}
 </div>

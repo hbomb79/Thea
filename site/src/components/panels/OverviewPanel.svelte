@@ -112,7 +112,7 @@ const stages = [
 
 <div class="stages" bind:this={perspectiveContainer}>
     {#each stages as {caption, icon}, index (caption)}
-        <div bind:this={els[index]} class="stage {caption}" class:active="{details.stage == index}">
+        <div bind:this={els[index]} class="stage {caption}" class:active="{details.stage == index}" on:click="{handleStageClick}">
             <span class="caption">{caption.toUpperCase()}</span>
             {@html icon}
         </div>

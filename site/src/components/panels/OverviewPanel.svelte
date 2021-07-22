@@ -1,14 +1,13 @@
+<script lang="ts" context="module">
+</script>
+
 <script lang="ts">
 import importIcon from '../../assets/import-stage.svg';
 import titleIcon from '../../assets/title-stage.svg';
 import omdbIcon from '../../assets/omdb-stage.svg';
 import ffmpegIcon from '../../assets/ffmpeg-stage.svg';
 import dbIcon from '../../assets/db-stage.svg';
-import ellipsisHtml from '../../assets/html/ellipsis.html';
-import workingHtml from '../../assets/html/dual-ring.html';
-import errHtml from '../../assets/err.svg';
-import checkHtml from '../../assets/check-mark.svg';
-import pendingHtml from '../../assets/pending.svg';
+import StageIcon from '../StageIcon.svelte';
 import { createEventDispatcher, onMount } from "svelte";
 import type { QueueDetails } from '../QueueItem.svelte';
 
@@ -21,8 +20,9 @@ const dispatch = createEventDispatcher();
 onMount(() => {
     els.forEach(el => {
         el.addEventListener('mousemove', (e) => handleMouseOver(el, e))
-        el.addEventListener('mouseleave', (e) => handleMouseLeave(el))
+        el.addEventListener('mouseleave', (_) => handleMouseLeave(el))
     })
+
 })
 
 const handleMouseLeave = function(el:HTMLElement) {
@@ -32,23 +32,17 @@ const handleMouseLeave = function(el:HTMLElement) {
 }
 
 const handleMouseOver = function(el:HTMLElement, ev:MouseEvent) {
-    // transform: rotate3d(1, 1, 0, 21deg)
-    // First, convert the mouse position to a value
-    // between 1 and 0 relative to the coords of the
-    // element
     const {offsetX, offsetY} = ev
     const midX = el.offsetWidth / 2
     const midY = el.offsetHeight / 2
+    const vecX = (midX - offsetX) / el.offsetWidth * 2
+    const vecY = (midY - offsetY) / el.offsetHeight * 2
 
     // Center the camera over the div we're rotating
     perspectiveContainer.style.perspectiveOrigin = `${el.offsetLeft + midX}px center`
     perspectiveContainer.style.perspective = "400px";
 
-    const vecX = (midX - offsetX) / el.offsetWidth * 2
-    const vecY = (midY - offsetY) / el.offsetHeight * 2
-
     el.style.transform = `rotate3d(${-vecY}, ${vecX}, 0, -10deg)`
-    // console.log(rot)
 }
 
 const handleStageClick = function(e:Event) {
@@ -73,22 +67,6 @@ $:getCheckClass = function(checkIndex:number):string {
     }
 }
 
-$:getCheckContent = function(checkIndex:number):string {
-    if(checkIndex < details.stage) {
-        return checkHtml
-    } else if(checkIndex == details.stage) {
-        if(details.trouble) {
-            return errHtml
-        } else if(details.status == 0) {
-            return ellipsisHtml
-        }
-
-        return workingHtml
-    } else if(checkIndex > details.stage) {
-        return pendingHtml
-    }
-}
-
 const onCheckClick = function(checkIndex:number) {
     if(checkIndex == details.stage && details.trouble) {
         dispatch('spinner-click')
@@ -110,7 +88,7 @@ const stages = [
 </style>
 
 
-<div class="stages" bind:this={perspectiveContainer}>
+<div class="stages tile" bind:this={perspectiveContainer}>
     {#each stages as {caption, icon}, index (caption)}
         <div bind:this={els[index]} class="stage {caption}" class:active="{details.stage == index}" on:click="{handleStageClick}">
             <span class="caption">{caption.toUpperCase()}</span>
@@ -118,7 +96,9 @@ const stages = [
         </div>
 
         {#if index < stages.length - 1}
-            <div bind:this={checkEls[index]} class="check {getCheckClass(index)}" on:click="{() => onCheckClick(index)}">{@html getCheckContent(index)}</div>
+            <div bind:this={checkEls[index]} class="check {getCheckClass(index)}" on:click="{() => onCheckClick(index)}">
+                <StageIcon details={details} stageIndex={index}/>
+            </div>
         {/if}
     {/each}
 </div>

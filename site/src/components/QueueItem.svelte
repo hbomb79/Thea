@@ -39,7 +39,6 @@ import { SocketMessageType } from "../store";
 import type { SocketData } from "../store";
 import type { QueueItem } from "./Queue.svelte";
 
-import troubleIcon from '../assets/warning.svg';
 import OverviewPanel from "./panels/OverviewPanel.svelte";
 import TitlePanel from "./panels/TitlePanel.svelte";
 import OmdbPanel from "./panels/OmdbPanel.svelte";
@@ -175,7 +174,7 @@ onMount(getDetails)
             {#if page == ComponentPage.OVERVIEW}
                 <OverviewPanel details={details} on:spinner-click="{handleSpinnerClick}" on:stage-click="{handleStageClick}"/>
             {:else if page == ComponentPage.TITLE}
-                <TitlePanel/>
+                <TitlePanel details={details}/>
             {:else if page == ComponentPage.OMDB}
                 <OmdbPanel/>
             {:else if page == ComponentPage.FFMPEG}
@@ -191,7 +190,9 @@ onMount(getDetails)
     <div class="item">
         <div class="header">
             <h2>Failed to load</h2>
-            <span>Our request to the server failed. Please check the console for details.</span>
         </div>
+        <main>
+            <span>Our request to the server failed. Please check the console for details.</span>
+        </main>
     </div>
 {/if}

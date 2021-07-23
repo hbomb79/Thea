@@ -21,6 +21,7 @@ const (
 	Title
 	Omdb
 	Format
+	Database
 	Finish
 )
 

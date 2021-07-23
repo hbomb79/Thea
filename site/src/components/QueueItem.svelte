@@ -52,7 +52,8 @@ import { onMount } from "svelte";
 import { commander } from "../commander";
 import { SocketMessageType } from "../store";
 import type { SocketData } from "../store";
-import type { QueueItem } from "./Queue.svelte";
+import type { QueueItem } from './Queue.svelte';
+import { QueueStage, QueueStatus } from "./Queue.svelte";
 
 import rippleHtml from '../assets/html/ripple.html';
 
@@ -80,19 +81,10 @@ enum ComponentState {
 
 // The page/panel we're wanting to view inside this component,
 // affected by user interaction (e.g. on:click events)
-enum ComponentPage {
-    OVERVIEW,
-    TITLE,
-    OMDB,
-    FFMPEG,
-    DB,
-    TROUBLE
-}
 
 // The initial state/page of the component
 let state = ComponentState.LOADING
-let page = ComponentPage.OVERVIEW
-
+let page = QueueStage.IMPORT
 
 // Get enhanced details of the queue item
 onMount(() => {
@@ -129,10 +121,12 @@ onMount(() => {
 // getStageStr returns a string representing the current stage of this item
 function getStageStr(stage:number): string {
     switch(stage) {
+        //TODO add case for DB stage
         case 0: return "IO Poller"
-        case 1: return "Title Format"
+        case 1: return "Title Formatter"
         case 2: return "OMDB Querying"
         case 3: return "Formatter"
+        case 4: return "DB Committer"
         case 4: return "Finished"
     }
 }
@@ -151,20 +145,14 @@ function getStatusStr(status:number): string {
 // page IF the queue item is currently troubled.
 // If it's not troubled, the page is set to the page for the current stage
 function handleStatClick():void {
-    if(details.trouble) {
-        page = ComponentPage.TROUBLE
-
-        return
-    }
-
-    page = details.stage as ComponentPage
+    page = details.stage + 1
 }
 
 // handleStageClick will set the page to the event detail
 // passed to this method - this function is called when
 // we receive the 'stage-click' custom event from a child component
 function handleStageClick(event:CustomEvent) {
-    page = event.detail as ComponentPage
+    page = event.detail as QueueStage
 }
 
 // stat is a dynamic binding method for Svelte that will live update
@@ -177,7 +165,7 @@ $:stat = function() {
 // button for this component should be marked 'active'. Is active
 // if the stage is troubled AND we're viewing the trouble.
 $:isStatActive = function() {
-    return details.trouble && page == ComponentPage.TROUBLE
+    return <number>page == details.stage
 }
 </script>
 
@@ -214,26 +202,40 @@ $:isStatActive = function() {
             </div>
         </div>
         <div class="panel">
-            <span class:active="{page == ComponentPage.OVERVIEW}" on:click="{() => page = ComponentPage.OVERVIEW}">Overview</span>
-            <span class:active="{page == ComponentPage.TITLE}" on:click="{() => page = ComponentPage.TITLE}">Title</span>
-            <span class:active="{page == ComponentPage.OMDB}" on:click="{() => page = ComponentPage.OMDB}">OMDB</span>
-            <span class:active="{page == ComponentPage.FFMPEG}" on:click="{() => page = ComponentPage.FFMPEG}">FFmpeg</span>
-            <span class:active="{page == ComponentPage.DB}" on:click="{() => page = ComponentPage.DB}">DB</span>
+            <span class:active="{page == QueueStage.IMPORT}" on:click="{() => page = QueueStage.IMPORT}">Overview</span>
+            <span class:active="{page == QueueStage.TITLE}" on:click="{() => page = QueueStage.TITLE}">Title</span>
+            <span class:active="{page == QueueStage.OMDB}" on:click="{() => page = QueueStage.OMDB}">OMDB</span>
+            <span class:active="{page == QueueStage.FFMPEG}" on:click="{() => page = QueueStage.FFMPEG}">FFmpeg</span>
+            <span class:active="{page == QueueStage.DB}" on:click="{() => page = QueueStage.DB}">DB</span>
         </div>
         <main>
-            {#if details.stage >= page || page == ComponentPage.OVERVIEW || page == ComponentPage.TROUBLE}
-                {#if page == ComponentPage.OVERVIEW}
+            <!-- We have a few cases here:
+            1: The page we're viewing is not yet started
+            2: the page we're viewing is complete
+            3: the page we're viewing is in progress
+            4: the page we're viewing is troubled
+            -->
+            {#if details.stage == page && details.status != QueueStatus.COMPLETED}
+                <!-- We're viewing the page representing the current stage -->
+                {#if details.status == QueueStatus.TROUBLED}
+                    <!-- Stage is troubled. Show the trouble panel -->
+                    <span>Trouble panel here.. NYI</span>
+                {:else if details.status == QueueStatus.PENDING}
+                    <span>Waiting for worker</span>
+                {:else if details.status == QueueStatus.PROCESSING}
+                    <span>Working...</span>
+                {/if}
+            {:else if details.stage >= page || page == QueueStage.IMPORT}
+                {#if page == QueueStage.IMPORT}
                     <OverviewPanel details={details} on:spinner-click="{handleStatClick}" on:stage-click="{handleStageClick}"/>
-                {:else if page == ComponentPage.TITLE}
+                {:else if page == QueueStage.TITLE}
                     <TitlePanel details={details}/>
-                {:else if page == ComponentPage.OMDB}
+                {:else if page == QueueStage.OMDB}
                     <OmdbPanel details={details}/>
-                {:else if page == ComponentPage.FFMPEG}
+                {:else if page == QueueStage.FFMPEG}
                     <FfmpegPanel/>
-                {:else if page == ComponentPage.DB}
+                {:else if page == QueueStage.DB}
                     <DatabasePanel/>
-                {:else if page == ComponentPage.TROUBLE}
-                    <span><b>Trouble: </b>{details.trouble.message}</span>
                 {/if}
             {:else}
                 <div class="pending-tile">

@@ -2,11 +2,32 @@
 // Export the types that we want to be able to reference
 // from any QueueItem child components
 export type QueueList = QueueItem[]
+
+
+//TODO Defining these enums here causes a circular dependency
+// They're better placed in QueueItem as this component is already
+// having to import QueueItem in order to use the component.
+export enum QueueStatus {
+    PENDING,
+    PROCESSING,
+    COMPLETED,
+    TROUBLED
+}
+
+export enum QueueStage {
+    IMPORT,
+    TITLE,
+    OMDB,
+    FFMPEG,
+    DB, //TODO Implement in Go server
+    FINISH
+}
+
 export interface QueueItem {
     id: number
     name: string
-    stage: number
-    status: number
+    stage: QueueStage
+    status: QueueStatus
     statusLine: string
 }
 </script>
@@ -71,7 +92,9 @@ onMount(() => {
         text-transform: uppercase;
     }
 }
+
 </style>
+
 
 <div class="queue">
     {#if state == ComponentState.INDEXING}

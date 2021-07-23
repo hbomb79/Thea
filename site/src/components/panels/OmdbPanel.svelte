@@ -107,12 +107,7 @@ export let details:QueueDetails;
 
 </style>
 
-{#if details.stage == 2 && details.trouble}
-    <div class="error-tile">
-        <h2>This stage has failed</h2>
-        <span>An error has occured while completing this stage...{details.trouble.message}</span>
-    </div>
-{:else if details.omdb_info && details.omdb_info.Response}
+{#if details.omdb_info && details.omdb_info.Response}
     <div class="title-info tile" class:troubled={details.trouble && details.stage == 2}>
         <section class="view">
             <div class="side">

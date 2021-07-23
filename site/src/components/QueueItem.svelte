@@ -145,7 +145,7 @@ function getStatusStr(status:number): string {
 // page IF the queue item is currently troubled.
 // If it's not troubled, the page is set to the page for the current stage
 function handleStatClick():void {
-    page = details.stage + 1
+    page = details.stage
 }
 
 // handleStageClick will set the page to the event detail

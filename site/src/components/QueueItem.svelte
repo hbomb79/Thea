@@ -54,6 +54,8 @@ import { SocketMessageType } from "../store";
 import type { SocketData } from "../store";
 import type { QueueItem } from "./Queue.svelte";
 
+import rippleHtml from '../assets/html/ripple.html';
+
 import OverviewPanel from "./panels/OverviewPanel.svelte";
 import TitlePanel from "./panels/TitlePanel.svelte";
 import OmdbPanel from "./panels/OmdbPanel.svelte";
@@ -103,6 +105,15 @@ onMount(() => {
             details = response.arguments.payload
             state = ComponentState.COMPLETE
 
+            // TODO REMOVE THIS, for simulating data changing ONLY
+            const original = details.stage;
+            setTimeout(() => {
+                details.stage = 0;
+                const int = setInterval(() => {
+                    details.stage++;
+                    if(details.stage == original) clearInterval(int)
+                }, 500);
+            }, 2000)
 
             return true
         }
@@ -113,14 +124,6 @@ onMount(() => {
         return false
     })
 
-    // TODO REMOVE THIS, for simulating data changing ONLY
-    setTimeout(() => {
-        details.stage = 0;
-        const int = setInterval(() => {
-            details.stage++;
-            if(details.stage == 2) clearInterval(int)
-        }, 500);
-    }, 2000)
 })
 
 // getStageStr returns a string representing the current stage of this item
@@ -185,7 +188,13 @@ $:isStatActive = function() {
 
 <!-- Template -->
 {#if state == ComponentState.LOADING}
-    <span>Loading...</span>
+    <div class="item">
+        <main>
+            <h2>Loading</h2>
+            <span style="display:block;">Please wait while we fetch this queue item from the server</span>
+            {@html rippleHtml}
+        </main>
+    </div>
 {:else if state == ComponentState.COMPLETE}
     <div class="item" class:trouble="{details.trouble}">
         <div class="header">
@@ -212,18 +221,26 @@ $:isStatActive = function() {
             <span class:active="{page == ComponentPage.DB}" on:click="{() => page = ComponentPage.DB}">DB</span>
         </div>
         <main>
-            {#if page == ComponentPage.OVERVIEW}
-                <OverviewPanel details={details} on:spinner-click="{handleStatClick}" on:stage-click="{handleStageClick}"/>
-            {:else if page == ComponentPage.TITLE}
-                <TitlePanel details={details}/>
-            {:else if page == ComponentPage.OMDB}
-                <OmdbPanel details={details}/>
-            {:else if page == ComponentPage.FFMPEG}
-                <FfmpegPanel/>
-            {:else if page == ComponentPage.DB}
-                <DatabasePanel/>
-            {:else if page == ComponentPage.TROUBLE}
-                <span><b>Trouble: </b>{details.trouble.message}</span>
+            {#if details.stage >= page || page == ComponentPage.OVERVIEW || page == ComponentPage.TROUBLE}
+                {#if page == ComponentPage.OVERVIEW}
+                    <OverviewPanel details={details} on:spinner-click="{handleStatClick}" on:stage-click="{handleStageClick}"/>
+                {:else if page == ComponentPage.TITLE}
+                    <TitlePanel details={details}/>
+                {:else if page == ComponentPage.OMDB}
+                    <OmdbPanel details={details}/>
+                {:else if page == ComponentPage.FFMPEG}
+                    <FfmpegPanel/>
+                {:else if page == ComponentPage.DB}
+                    <DatabasePanel/>
+                {:else if page == ComponentPage.TROUBLE}
+                    <span><b>Trouble: </b>{details.trouble.message}</span>
+                {/if}
+            {:else}
+                <div class="pending-tile">
+                    <h2>This stage is scheduled</h2>
+                    <span>We're waiting on previous stages of the pipeline to succeed before we start this stage. Check the 'Overview' to track progress.</span>
+                    {@html rippleHtml}
+                </div>
             {/if}
         </main>
     </div>

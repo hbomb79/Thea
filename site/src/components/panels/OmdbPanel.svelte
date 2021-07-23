@@ -22,7 +22,8 @@ export let details:QueueDetails;
 
         .side {
             padding: 1rem;
-            min-width: 250px;
+            min-width: 180px;
+            width: 0;
             overflow: hidden;
 
             img {

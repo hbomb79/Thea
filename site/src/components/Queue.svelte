@@ -2,42 +2,15 @@
 // Export the types that we want to be able to reference
 // from any QueueItem child components
 export type QueueList = QueueItem[]
-
-
-//TODO Defining these enums here causes a circular dependency
-// They're better placed in QueueItem as this component is already
-// having to import QueueItem in order to use the component.
-export enum QueueStatus {
-    PENDING,
-    PROCESSING,
-    COMPLETED,
-    TROUBLED
-}
-
-export enum QueueStage {
-    IMPORT,
-    TITLE,
-    OMDB,
-    FFMPEG,
-    DB, //TODO Implement in Go server
-    FINISH
-}
-
-export interface QueueItem {
-    id: number
-    name: string
-    stage: QueueStage
-    status: QueueStatus
-    statusLine: string
-}
 </script>
 
 <script lang="ts">
 import { onMount } from 'svelte'
 import { commander, dataStream } from '../commander';
 import { SocketMessageType } from '../store';
-import type { SocketData } from '../store';
 import Item from './QueueItem.svelte';
+import type { SocketData } from '../store';
+import type { QueueItem } from './QueueItem.svelte';
 
 enum ComponentState {
     INDEXING,

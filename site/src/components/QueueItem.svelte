@@ -1,6 +1,29 @@
 <script context="module" lang="ts">
 // This module just exports some interfaces that we want
 // to be able to use in other components.
+export enum QueueStatus {
+    PENDING,
+    PROCESSING,
+    COMPLETED,
+    TROUBLED
+}
+
+export enum QueueStage {
+    IMPORT,
+    TITLE,
+    OMDB,
+    FFMPEG,
+    DB, //TODO Implement in Go server
+    FINISH
+}
+
+export interface QueueItem {
+    id: number
+    name: string
+    stage: QueueStage
+    status: QueueStatus
+    statusLine: string
+}
 
 // QueueTroubleInfo represents the data we receive
 // from the Go server regarding the Title info for
@@ -52,8 +75,6 @@ import { onMount } from "svelte";
 import { commander } from "../commander";
 import { SocketMessageType } from "../store";
 import type { SocketData } from "../store";
-import type { QueueItem } from './Queue.svelte';
-import { QueueStage, QueueStatus } from "./Queue.svelte";
 
 import rippleHtml from '../assets/html/ripple.html';
 

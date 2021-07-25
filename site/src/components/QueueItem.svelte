@@ -77,12 +77,14 @@ import { SocketMessageType } from "../store";
 import type { SocketData } from "../store";
 
 import rippleHtml from '../assets/html/ripple.html';
+import pendingHtml from '../assets/html/ellipsis.html';
 
 import OverviewPanel from "./panels/OverviewPanel.svelte";
 import TitlePanel from "./panels/TitlePanel.svelte";
 import OmdbPanel from "./panels/OmdbPanel.svelte";
 import FfmpegPanel from "./panels/FfmpegPanel.svelte";
 import DatabasePanel from "./panels/DatabasePanel.svelte";
+import TroublePanel from './panels/TroublePanel.svelte';
 
 // The queueInfo we're wanting to display from the parent component.
 export let queueInfo:QueueItem
@@ -236,17 +238,19 @@ $:isStatActive = function() {
             3: the page we're viewing is in progress
             4: the page we're viewing is troubled
             -->
-            {#if details.stage == page && details.status != QueueStatus.COMPLETED}
+            {#if details.stage == page && details.status != QueueStatus.COMPLETED && details.status != QueueStatus.PROCESSING}
                 <!-- We're viewing the page representing the current stage -->
                 {#if details.status == QueueStatus.TROUBLED}
                     <!-- Stage is troubled. Show the trouble panel -->
-                    <span>Trouble panel here.. NYI</span>
+                    <TroublePanel details={details}/>
                 {:else if details.status == QueueStatus.PENDING}
-                    <span>Waiting for worker</span>
-                {:else if details.status == QueueStatus.PROCESSING}
-                    <span>Working...</span>
+                    <div class="pending tile">
+                        <h2>This stage is enqueued</h2>
+                        <span>All {getStageStr(details.stage)} are busy with other items - once it's this items turn, it's progress will appear here.</span>
+                        {@html rippleHtml}
+                    </div>
                 {/if}
-            {:else if details.stage >= page || page == QueueStage.IMPORT}
+            {:else if details.stage >= page || page == QueueStage.IMPORT || details.status == QueueStatus.PROCESSING}
                 {#if page == QueueStage.IMPORT}
                     <OverviewPanel details={details} on:spinner-click="{handleStatClick}" on:stage-click="{handleStageClick}"/>
                 {:else if page == QueueStage.TITLE}
@@ -259,7 +263,7 @@ $:isStatActive = function() {
                     <DatabasePanel/>
                 {/if}
             {:else}
-                <div class="pending-tile">
+                <div class="pending tile">
                     <h2>This stage is scheduled</h2>
                     <span>We're waiting on previous stages of the pipeline to succeed before we start this stage. Check the 'Overview' to track progress.</span>
                     {@html rippleHtml}

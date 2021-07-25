@@ -19,7 +19,7 @@ export interface QueueTroubleDetails {
 <script lang="ts">
 import { onMount } from "svelte";
 import { commander } from "../../commander";
-import { SocketMessageType, SocketPacketType } from "../../store";
+import { SocketMessageType } from "../../store";
 
 import type { SocketData } from "../../store";
 import type { QueueDetails, QueueTroubleInfo } from "../QueueItem.svelte";
@@ -164,6 +164,7 @@ const onOmdbSelection = function(ev:MouseEvent) {
         {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
             <!-- A title failure means we need to provide the arguments back to the server that we need to
                  make a new TitleInfo struct -->
+            <!--TODO -->
         {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE && troubleDetails.trouble?.choices}
             <!-- This trouble means we have multiple choices from OMDB as to what movie/series this is.
                  Get the user to select it. -->
@@ -179,9 +180,13 @@ const onOmdbSelection = function(ev:MouseEvent) {
                 {/each}
             </div>
         {:else if troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
+            <!--TODO -->
         {:else if troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE}
+            <!--TODO -->
         {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
+            <!--TODO -->
         {:else}
+            <!--TODO -->
         {/if}
     {:else if state == ComponentState.LOADING}
         <p>Fetching trouble resolution</p>

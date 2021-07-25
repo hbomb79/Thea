@@ -247,7 +247,7 @@ $:isStatActive = function() {
                     <div class="pending tile">
                         <h2>This stage is enqueued</h2>
                         <span>All {getStageStr(details.stage)} are busy with other items - once it's this items turn, it's progress will appear here.</span>
-                        {@html rippleHtml}
+                        {@html pendingHtml}
                     </div>
                 {/if}
             {:else if details.stage >= page || page == QueueStage.IMPORT || details.status == QueueStatus.PROCESSING}

@@ -314,9 +314,14 @@ func (ex OmdbMultipleResultError) Resolve(args map[string]interface{}) error {
 		return fmt.Errorf("Failed to resolve OmdbMultipleResultError - Missing choice (int) key in args")
 	}
 
-	choice, ok := v.(int)
+	choiceFloat, ok := v.(float64)
+	if !ok {
+		return fmt.Errorf("Faield to resolve OmdbMultipleResultError - Bad value for choice (int) key in args (not a number)")
+	}
+
+	choice := int(choiceFloat)
 	if !ok || len(ex.Choices)-1 < choice {
-		return fmt.Errorf("Faield to resolve OmdbMultipleResultError - Bad value for choice (int) key in args")
+		return fmt.Errorf("Faield to resolve OmdbMultipleResultError - Bad value for choice (int) key in args (not in range)")
 	}
 
 	// Okay, we have a valid choice from the user. Fetch that choice from OMDB and store

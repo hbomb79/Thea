@@ -19,11 +19,12 @@ export interface QueueTroubleDetails {
 <script lang="ts">
 import { onMount } from "svelte";
 import { commander } from "../../commander";
-import { SocketMessageType } from "../../store";
-import { QueueStage } from "../QueueItem.svelte";
+import { SocketMessageType, SocketPacketType } from "../../store";
 
 import type { SocketData } from "../../store";
 import type { QueueDetails, QueueTroubleInfo } from "../QueueItem.svelte";
+
+import rippleHtml from '../../assets/html/ripple.html';
 
 enum ComponentState {
     LOADING,
@@ -35,6 +36,7 @@ export let details:QueueDetails
 let state = ComponentState.LOADING
 let troubleDetails:QueueTroubleDetails
 
+let omdbChoices: HTMLElement[] = []
 onMount(() => {
     commander.sendMessage({
         title: "TROUBLE_DETAILS",
@@ -52,34 +54,138 @@ onMount(() => {
         return true;
     })
 })
+
+const onOmdbSelection = function(ev:MouseEvent) {
+    const target = ev.currentTarget as HTMLElement
+    let choiceId:number = -1;
+    omdbChoices.every((el, idx) => {
+        console.log("Testing isSameNode for ", target, el)
+        el.classList.remove("working", "disabled")
+        if(el.isSameNode(target)) {
+            console.log("HIT")
+            el.classList.add("working")
+            choiceId = idx
+
+            return true
+        }
+
+        el.classList.add("disabled")
+        return true
+    })
+
+    if(choiceId < 0) {
+        return
+    }
+
+    commander.sendMessage({
+        title: "TROUBLE_RESOLVE",
+        type: SocketMessageType.COMMAND,
+        arguments: {
+            id: details.id,
+            choice: choiceId
+        }
+    }, (data:SocketData): boolean => {
+        omdbChoices.every((el) => {
+            el.classList.remove("working", "disabled")
+            return true
+        })
+
+        if(data.type == SocketMessageType.RESPONSE) {
+            // Success
+            console.log("Successfully resolved trouble state")
+            return true
+        }
+
+        // Failure.
+        console.warn("Failed to resolve trouble state")
+        // TODO Window popup for errors.
+        return false
+    })
+}
 </script>
 
 <style lang="scss">
 .tile.trouble {
     padding: 1rem;
+
+    h2 {
+        margin: 0;
+        color: #5e5e5e;
+    }
+
+    .choices {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-around;
+        margin-top: 1rem;
+
+        .choice {
+            flex: 1;
+            max-width: 40%;
+            height: fit-content;
+            padding: 1rem;
+            cursor: pointer;
+
+            background: whitesmoke;
+            box-shadow: 0px 0px 6px -5px black;
+            border: solid 1px #e4e3e3;
+
+            transition: all 200ms ease-out;
+            transition-property: background, box-shadow, border;
+
+            .title {
+                font-size: 1rem;
+
+                .id {
+                    font-size: 0.8rem;
+                    font-style: italic;
+                    font-weight: 400;
+
+                    padding-left: 6px;
+                }
+            }
+
+            p {
+                color: #5e5e5e;
+            }
+
+            &:hover {
+                background: #eeeeee;
+                box-shadow: 0px 0px 6px -4px black;
+            }
+        }
+    }
 }
 </style>
 
 <!-- Template -->
 <div class="tile trouble">
-    <h2>This stage is troubled</h2>
-    <span>While processing this stage, we experienced an error</span>
-    <span class="trouble">{details.trouble.message}</span>
-
     {#if state == ComponentState.COMPLETE}
-        {#if details.stage == QueueStage.TITLE}
-            <span></span>
-        {:else if details.stage == QueueStage.OMDB}
-            <!-- Figure out what kind of trouble we're dealing with -->
-        {:else if details.stage == QueueStage.FFMPEG}
-            <span>FFMPEG trouble resolution</span>
-        {:else if details.stage == QueueStage.DB}
-            <span>Database trouble</span>
+        {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
+            <!-- A title failure means we need to provide the arguments back to the server that we need to
+                 make a new TitleInfo struct -->
+        {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE && troubleDetails.trouble?.choices}
+            <!-- This trouble means we have multiple choices from OMDB as to what movie/series this is.
+                 Get the user to select it. -->
+            <h2>OMDB Trouble</h2>
+            <p class="trouble">{troubleDetails.trouble.message}</p>
+
+            <div class="choices">
+                {#each troubleDetails.trouble.choices as {Title, Year, imdbId, Type}, i}
+                    <div class="choice choice-{i}" on:click="{onOmdbSelection}" bind:this="{omdbChoices[i]}">
+                        <h2 class="title">{Title}<span class="id">{imdbId}</span></h2>
+                        <p>{Type} from {Year}</p>
+                    </div>
+                {/each}
+            </div>
+        {:else if troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
+        {:else if troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE}
+        {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
         {:else}
-            <span>This stage has no known trouble resolution methods. Please consult the server logs for more information.</span>
         {/if}
     {:else if state == ComponentState.LOADING}
-        <span>Fetching trouble resolution</span>
+        <p>Fetching trouble resolution</p>
+        {@html rippleHtml}
     {:else}
         <span class="err">Failed to fetch trouble resolution</span>
     {/if}

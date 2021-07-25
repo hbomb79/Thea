@@ -59,6 +59,7 @@ export interface QueueOmdbInfo {
 // state from the Go server
 export interface QueueTroubleInfo {
     message: string
+    [key:string]: any
 }
 
 // QueueDetails is a single interface that extends the definition

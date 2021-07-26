@@ -154,6 +154,10 @@
                     display: inline-block;
                 }
 
+                &.promote {
+                    transform: rotate(-90deg);
+                }
+
                 &:hover {
                     background: #cecece;
                 }

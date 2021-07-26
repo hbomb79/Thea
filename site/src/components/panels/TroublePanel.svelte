@@ -1,5 +1,5 @@
 <script context="module" lang="ts">
-export enum QueueTroubleType {
+enum QueueTroubleType {
 	TITLE_FAILURE,
 	OMDB_NO_RESULT_FAILURE,
 	OMDB_MULTIPLE_RESULT_FAILURE,
@@ -86,10 +86,8 @@ const onOmdbSelection = function(ev:MouseEvent) {
     const target = ev.currentTarget as HTMLElement
     let choiceId:number = -1;
     omdbChoices.every((el, idx) => {
-        console.log("Testing isSameNode for ", target, el)
         el.classList.remove("working", "disabled")
         if(el.isSameNode(target)) {
-            console.log("HIT")
             el.classList.add("working")
             choiceId = idx
 
@@ -164,12 +162,15 @@ const onOmdbSelection = function(ev:MouseEvent) {
     .choices {
         display: flex;
         flex-direction: row;
-        justify-content: space-around;
+        justify-content: space-between;
         margin-top: 1rem;
+        flex-wrap: wrap;
+        padding: 0 2rem;
 
         .choice {
             flex: 1;
-            max-width: 40%;
+            max-width: 33%;
+            min-width: 33%;
             height: fit-content;
             padding: 1rem;
             cursor: pointer;
@@ -180,6 +181,8 @@ const onOmdbSelection = function(ev:MouseEvent) {
 
             transition: all 200ms ease-out;
             transition-property: background, box-shadow, border;
+
+            margin: 2rem;
 
             .title {
                 font-size: 1rem;

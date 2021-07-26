@@ -24,10 +24,10 @@ export let details:QueueDetails
 let state = ComponentState.INIT
 let troubleDetails:QueueTroubleDetails
 
-interface TroublePanel extends SvelteComponent {
+interface EmbeddedTroublePanel extends SvelteComponent {
     updateState(arg0:QueueDetails):void
 }
-let troublePanel:TroublePanel
+let embeddedPanel:EmbeddedTroublePanel
 
 onMount(() => {
     commander.sendMessage({
@@ -54,7 +54,7 @@ onMount(() => {
                 if(!item || item.id != details.id) return;
 
                 // We received an update about this queue item. Ship the trouble (if any)
-                troublePanel.updateState(item)
+                embeddedPanel.updateState(item)
             }
         }
     })
@@ -101,7 +101,7 @@ function tryResolve(packet:CustomEvent) {
                  make a new TitleInfo struct -->
             <p>NYI</p>
         {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
-            <OmdbTroublePanel bind:this={troublePanel} troubleDetails={troubleDetails} queueDetails={details} on:try-resolve={tryResolve}/>
+            <OmdbTroublePanel bind:this={embeddedPanel} troubleDetails={troubleDetails} queueDetails={details} on:try-resolve={tryResolve}/>
         {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
             <h2>FFMPEG Troubled</h2>
             <p>NYI</p>

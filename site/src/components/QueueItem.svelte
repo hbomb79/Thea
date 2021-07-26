@@ -97,6 +97,10 @@ import type { SocketData } from "../store";
 import rippleHtml from '../assets/html/ripple.html';
 import pendingHtml from '../assets/html/ellipsis.html';
 
+import pauseSvg from '../assets/pause.svg';
+import advanceSvg from '../assets/advance.svg';
+import cancelSvg from '../assets/cancel.svg';
+
 import OverviewPanel from "./panels/OverviewPanel.svelte";
 import TitlePanel from "./panels/TitlePanel.svelte";
 import OmdbPanel from "./panels/OmdbPanel.svelte";
@@ -182,6 +186,15 @@ function getStatusStr(status:number): string {
     }
 }
 
+function promoteItem() {
+}
+
+function pauseItem() {
+}
+
+function cancelItem() {
+}
+
 // handleStatClick will switch the component page to the TROUBLE
 // page IF the queue item is currently troubled.
 // If it's not troubled, the page is set to the page for the current stage
@@ -243,11 +256,17 @@ $:isStatActive = function() {
             </div>
         </div>
         <div class="panel">
-            <span class:active="{page == QueueStage.IMPORT}" on:click="{() => page = QueueStage.IMPORT}">Overview</span>
-            <span class:active="{page == QueueStage.TITLE}" on:click="{() => page = QueueStage.TITLE}">Title</span>
-            <span class:active="{page == QueueStage.OMDB}" on:click="{() => page = QueueStage.OMDB}">OMDB</span>
-            <span class:active="{page == QueueStage.FFMPEG}" on:click="{() => page = QueueStage.FFMPEG}">FFmpeg</span>
-            <span class:active="{page == QueueStage.DB}" on:click="{() => page = QueueStage.DB}">DB</span>
+            <span class:active="{page == QueueStage.IMPORT}" class="panel-item" on:click="{() => page = QueueStage.IMPORT}">Overview</span>
+            <span class:active="{page == QueueStage.TITLE}" class="panel-item" on:click="{() => page = QueueStage.TITLE}">Title</span>
+            <span class:active="{page == QueueStage.OMDB}" class="panel-item" on:click="{() => page = QueueStage.OMDB}">OMDB</span>
+            <span class:active="{page == QueueStage.FFMPEG}" class="panel-item" on:click="{() => page = QueueStage.FFMPEG}">FFmpeg</span>
+            <span class:active="{page == QueueStage.DB}" class="panel-item" on:click="{() => page = QueueStage.DB}">DB</span>
+
+            <div class="controls">
+                <span class="pause" on:click="{pauseItem}">{@html pauseSvg}</span>
+                <span class="cancel" on:click="{cancelItem}">{@html cancelSvg}</span>
+                <span class="promote" on:click="{promoteItem}">{@html advanceSvg}</span>
+            </div>
         </div>
         <main>
             <!-- We have a few cases here:

@@ -55,6 +55,33 @@ onMount(() => {
     })
 })
 
+const retryFfmpeg = function(ev:MouseEvent) {
+    const target = ev.currentTarget as HTMLButtonElement
+    target.classList.add("spinning")
+    target.disabled = true
+
+    commander.sendMessage({
+        title: "TROUBLE_RESOLVE",
+        type: SocketMessageType.COMMAND,
+        arguments: {
+            id: details.id
+        }
+    }, (data:SocketData): boolean => {
+        target.classList.remove("spinning")
+        target.disabled = false
+        if(data.type == SocketMessageType.RESPONSE) {
+            // Success
+            console.log("Successfully resolved trouble state")
+            return true
+        }
+
+        // Failure.
+        console.warn("Failed to resolve trouble state")
+        // TODO Window popup for errors.
+        return false
+    })
+}
+
 const onOmdbSelection = function(ev:MouseEvent) {
     const target = ev.currentTarget as HTMLElement
     let choiceId:number = -1;
@@ -105,6 +132,27 @@ const onOmdbSelection = function(ev:MouseEvent) {
 </script>
 
 <style lang="scss">
+.spinner-button {
+    position: relative;
+
+    .spinner {
+        position: absolute;
+        top: -2px;
+        right: -15px;
+
+        width: 10px;
+        height: 10px;
+
+        transform: scale(0.4);
+        opacity: 0;
+
+        transition: opacity 100ms;
+    }
+
+    &.spinning :global(.spinner) {
+        opacity: 1;
+    }
+}
 .tile.trouble {
     padding: 1rem;
 
@@ -185,8 +233,12 @@ const onOmdbSelection = function(ev:MouseEvent) {
             <!--TODO -->
         {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
             <!--TODO -->
+            <h2>FFMPEG Troubled</h2>
+            <p class="trouble">{troubleDetails.trouble.message}</p>
+            <button class="spinner-button" on:click="{retryFfmpeg}">Retry<div class="spinner">{@html rippleHtml}</div></button>
         {:else}
-            <!--TODO -->
+            <h2>Unknown trouble</h2>
+            <p>We don't have a known resolution for this trouble case. Please check server logs for guidance.</p>
         {/if}
     {:else if state == ComponentState.LOADING}
         <p>Fetching trouble resolution</p>

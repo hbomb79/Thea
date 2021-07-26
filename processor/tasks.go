@@ -25,6 +25,16 @@ const (
 	OMDB_API string = "http://www.omdbapi.com/?%s=%s&apikey=%s"
 )
 
+type TroubleType = int
+
+const (
+	TITLE_FAILURE TroubleType = iota
+	OMDB_NO_RESULT_FAILURE
+	OMDB_MULTIPLE_RESULT_FAILURE
+	OMDB_REQUEST_FAILURE
+	FFMPEG_FAILURE
+)
+
 // toArgsMap takes a given struct and will go through all
 // fields of the provided input and create an output map where
 // each key is the name of the field, and each value is a string
@@ -172,6 +182,13 @@ func (ex TitleTaskError) Item() *QueueItem {
 	return ex.queueItem
 }
 
+// Type returns the type of trouble case this is - predominantly for
+// code using the websocket API to tell what trouble it is, and how to deal
+// with it
+func (ex TitleTaskError) Type() TroubleType {
+	return TITLE_FAILURE
+}
+
 // TitleTask is the task responsible for searching through the
 // queue items raw path name and filtering out relevant information
 // such as the title, season/episode information, release year, and resolution.
@@ -258,6 +275,13 @@ func (ex OmdbNoResultError) Item() *QueueItem {
 	return ex.queueItem
 }
 
+// Type returns the type of trouble case this is - predominantly for
+// code using the websocket API to tell what trouble it is, and how to deal
+// with it
+func (ex OmdbNoResultError) Type() TroubleType {
+	return OMDB_NO_RESULT_FAILURE
+}
+
 // OmdbMultipleResultError is an error/trouble raised when a search query
 // to OMDB has many possible results. This trouble allows the user to chose which
 // option they'd like to use
@@ -290,9 +314,14 @@ func (ex OmdbMultipleResultError) Resolve(args map[string]interface{}) error {
 		return fmt.Errorf("Failed to resolve OmdbMultipleResultError - Missing choice (int) key in args")
 	}
 
-	choice, ok := v.(int)
+	choiceFloat, ok := v.(float64)
+	if !ok {
+		return fmt.Errorf("Faield to resolve OmdbMultipleResultError - Bad value for choice (int) key in args (not a number)")
+	}
+
+	choice := int(choiceFloat)
 	if !ok || len(ex.Choices)-1 < choice {
-		return fmt.Errorf("Faield to resolve OmdbMultipleResultError - Bad value for choice (int) key in args")
+		return fmt.Errorf("Faield to resolve OmdbMultipleResultError - Bad value for choice (int) key in args (not in range)")
 	}
 
 	// Okay, we have a valid choice from the user. Fetch that choice from OMDB and store
@@ -310,6 +339,13 @@ func (ex OmdbMultipleResultError) Resolve(args map[string]interface{}) error {
 // Item returns the QueueItem attached to this trouble
 func (ex OmdbMultipleResultError) Item() *QueueItem {
 	return ex.queueItem
+}
+
+// Type returns the type of trouble case this is - predominantly for
+// code using the websocket API to tell what trouble it is, and how to deal
+// with it
+func (ex OmdbMultipleResultError) Type() TroubleType {
+	return OMDB_MULTIPLE_RESULT_FAILURE
 }
 
 // OmdbRequestError is an error/trouble type that is raised when a request to
@@ -344,6 +380,13 @@ func (err OmdbRequestError) Resolve(args map[string]interface{}) error {
 // Item returns the queue item attached to this trouble
 func (ex OmdbRequestError) Item() *QueueItem {
 	return ex.queueItem
+}
+
+// Type returns the type of trouble case this is - predominantly for
+// code using the websocket API to tell what trouble it is, and how to deal
+// with it
+func (ex OmdbRequestError) Type() TroubleType {
+	return OMDB_REQUEST_FAILURE
 }
 
 // OmdbTask is the task responsible for querying to OMDB API for information
@@ -594,6 +637,13 @@ func (ex FormatTaskError) Resolve(map[string]interface{}) error {
 // Item returns the queue item attached to this trouble
 func (ex FormatTaskError) Item() *QueueItem {
 	return ex.queueItem
+}
+
+// Type returns the type of trouble case this is - predominantly for
+// code using the websocket API to tell what trouble it is, and how to deal
+// with it
+func (ex FormatTaskError) Type() TroubleType {
+	return FFMPEG_FAILURE
 }
 
 // FormatTask is a task that is responsible for performing the transcoding of

@@ -105,10 +105,20 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *ws.SocketHub, message *ws.Sock
 		return errors.New(fmt.Sprintf(ERR_FMT, "item has no trouble"))
 	}
 
+	trouble := struct {
+		Type              processor.TroubleType `json:"type"`
+		ExpectedArgs      map[string]string     `json:"expectedArgs"`
+		processor.Trouble `json:"trouble"`
+	}{
+		queueItem.Trouble.Type(),
+		queueItem.Trouble.Args(),
+		queueItem.Trouble,
+	}
+
 	fmt.Printf("[Payload] Encoding a payload for %#v\n", queueItem.Trouble)
 	hub.Send(&ws.SocketMessage{
 		Title:     "COMMAND_SUCCESS",
-		Arguments: map[string]interface{}{"payload": queueItem.Trouble, "command": message},
+		Arguments: map[string]interface{}{"payload": trouble, "command": message},
 		Id:        message.Id,
 		Target:    message.Origin,
 		Type:      ws.Response,

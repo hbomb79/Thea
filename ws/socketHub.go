@@ -31,8 +31,12 @@ type SocketHub struct {
 func NewSocketHub() *SocketHub {
 	return &SocketHub{
 		handlers: make(map[string]SocketHandler),
-		upgrader: &websocket.Upgrader{},
-		running:  false,
+		upgrader: &websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+		},
+		running: false,
 	}
 }
 
@@ -159,7 +163,7 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Send welcome message to this client
 	hub.Send(&SocketMessage{
-		Title:     "Connection established",
+		Title:     "CONNECTION_ESTABLISHED",
 		Arguments: map[string]interface{}{"client": id},
 		Target:    &id,
 		Type:      Welcome,

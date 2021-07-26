@@ -50,6 +50,14 @@ export let details:QueueDetails;
 
                     h2 {
                         margin: 0;
+                        display: inline-block;
+                    }
+
+                    .id {
+                        display: block;
+                        font-weight: 300;
+                        font-style: italic;
+                        color: #5e5e5e;
                     }
                 }
 
@@ -121,6 +129,7 @@ export let details:QueueDetails;
                         {#if details.title_info.Episodic}
                             <span>S{details.title_info.Season}E{details.title_info.Episode}</span>
                         {/if}
+                        <a class="id" target="_new" href="https://www.imdb.com/title/{details.omdb_info.ImdbId}/">{details.omdb_info.ImdbId}</a>
                     </div>
                     <div class="stats">
                         <div class="runtime">

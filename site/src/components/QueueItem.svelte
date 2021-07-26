@@ -17,6 +17,14 @@ export enum QueueStage {
     FINISH
 }
 
+export enum QueueTroubleType {
+	TITLE_FAILURE,
+	OMDB_NO_RESULT_FAILURE,
+	OMDB_MULTIPLE_RESULT_FAILURE,
+	OMDB_REQUEST_FAILURE,
+	FFMPEG_FAILURE,
+}
+
 export interface QueueItem {
     id: number
     name: string
@@ -55,11 +63,20 @@ export interface QueueOmdbInfo {
     Genre: string[]
 }
 
+// TODO evaluate if this is needed, or if we can just bundle 'expectedArgs' in
+// with trouble info instead (server side)
+export interface QueueTroubleDetails {
+    trouble:QueueTroubleInfo,
+    expectedArgs:Object,
+    [key:string]:any
+}
+
 // QueueTroubleInfo is the information regarding a trouble
 // state from the Go server
 export interface QueueTroubleInfo {
     message: string
-    [key:string]: any
+    type:QueueTroubleType
+    [key:string]:any
 }
 
 // QueueDetails is a single interface that extends the definition

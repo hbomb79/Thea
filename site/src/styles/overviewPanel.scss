@@ -1,0 +1,184 @@
+.stages {
+    display: flex;
+    justify-content: space-around;
+    position: relative;
+
+    .active:not(:hover) :global(svg), .active:not(:hover) .caption {
+        /* animation: blinker 1s linear infinite; */
+    }
+
+    .stage {
+        display: flex;
+        flex-direction: column-reverse;
+        cursor: pointer;
+
+        /* ha nice */
+        background: radial-gradient(white 50%, transparent 69% 100%);
+        position: relative;
+
+        transition: box-shadow 200ms ease-out, transform 50ms ease-in-out;
+        border-radius: 4px;
+        padding: 1.1rem;
+        width: 60px;
+
+        z-index: 50;
+
+        &.hidden {
+            .caption {
+                opacity: 0.3;
+                transition: all 300ms ease-in-out;
+                transition-property: opacity, color;
+            }
+
+            :global(svg) {
+                transition: 300ms ease-in-out fill;
+                fill: #dedede;
+            }
+
+            &:hover {
+                .caption {
+                    opacity: 1;
+                    color: black;
+                }
+
+                :global(svg) {
+                    fill: black;
+                }
+            }
+        }
+
+        .caption {
+            display: block;
+            margin-top: 6px;
+            color: #9d99a7;
+            font-size: 0.8rem;
+            text-transform: capitalize;
+        }
+
+        &:hover {
+            background: white;
+            :global(svg) {
+                fill: black;
+            }
+
+            .caption {
+                color: black;
+            }
+        }
+
+        :global(svg) {
+            width: 2rem;
+            height: 2rem;
+            margin: 0 auto;
+            fill: #737070;
+        }
+
+        &:after {
+            opacity: 0;
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+
+            width: 100%;
+            height: 100%;
+
+            transition: opacity 200ms ease-out;
+            background: linear-gradient(326deg, #d9b6ea5e, #bfd9ff4f);
+            box-shadow: 0px 0px 6px -5px black;
+            border-radius: 4px;
+        }
+        
+        &:hover:after {
+            opacity: 1;
+        }
+    }
+
+    .check {
+        align-self: center;
+        padding: 0.5rem;
+        height: 1.5rem;
+        position: relative;
+
+        :global(svg) {
+            width: 1.5rem;
+            height: 1.5rem;
+            fill: #749cf9;
+            opacity: 0.6;
+
+            transition: opacity 200ms ease-out;
+        }
+
+        &:hover :global(svg) {
+            opacity: 1;
+        }
+
+        &.trouble {
+            transition: all 200ms ease-in-out;
+            transition-property: background-color, box-shadow;
+            background-color: white;
+            box-shadow: 0px 0px 0px 0px transparent;
+            border-radius: 6px;
+            cursor: pointer;
+
+            &:hover {
+                background-color: #f68e8e38;
+                box-shadow: 0px 0px 5px -4px black;
+            }
+
+            :global(svg g:nth-child(1) path) {
+                fill: red;
+            }
+
+            @keyframes errfade {
+                50% {
+                    fill: #ff000070;
+                }
+            }
+
+            :global(svg g:nth-child(2) path) {
+                fill: red;
+                animation: errfade 1s linear infinite;
+            }
+
+            &:before {
+                background-color: #ff6565;
+            }
+
+            &:after {
+                display: none;
+            }
+        }
+
+        &.queued {
+            &:before, &:after {
+                display: none;
+            }
+
+            :global(svg) {
+                fill: #abaaaa;
+            }
+        }
+
+        &.hidden {
+            opacity: 0;
+        }
+
+        &:before, &:after {
+            content: '';
+            height: 2px;
+            position: absolute;
+            top: 18px;
+            width: 80px;
+            background-color: #abc3fb;
+        }
+
+        &:before {
+            right: 32px;
+        }
+
+        &:after {
+            left: 32px;
+        }
+    }
+}

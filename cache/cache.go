@@ -7,7 +7,6 @@ import (
 	"os"
 )
 
-type cacheItemKey string
 type cacheItemValue map[string]interface{}
 
 // The Cache is a struct from the cache package that allows other parts
@@ -16,7 +15,7 @@ type cacheItemValue map[string]interface{}
 // status of queue items to enable persistent memory over server-restarts
 type Cache struct {
 	filePath string
-	content  map[cacheItemKey]cacheItemValue
+	content  map[string]cacheItemValue
 }
 
 // New constructs a new instance of a Cache struct, setting the
@@ -27,7 +26,7 @@ type Cache struct {
 func New(path string) *Cache {
 	c := &Cache{
 		filePath: path,
-		content:  make(map[cacheItemKey]cacheItemValue),
+		content:  make(map[string]cacheItemValue),
 	}
 
 	if err := c.load(); err != nil {
@@ -39,7 +38,7 @@ func New(path string) *Cache {
 
 // HasItem will check the cache for an item in it's content with a matching key.
 // True is returned if found, false otherwise.
-func (cache *Cache) HasItem(key cacheItemKey) bool {
+func (cache *Cache) HasItem(key string) bool {
 	_, ok := cache.content[key]
 
 	return ok
@@ -47,7 +46,7 @@ func (cache *Cache) HasItem(key cacheItemKey) bool {
 
 // RetriveItem will return the value for a cache item at the key provided.
 // If no item exists at the key provided, nil is returned.
-func (cache *Cache) RetriveItem(key cacheItemKey) cacheItemValue {
+func (cache *Cache) RetriveItem(key string) cacheItemValue {
 	v, ok := cache.content[key]
 	if !ok {
 		return nil
@@ -59,13 +58,13 @@ func (cache *Cache) RetriveItem(key cacheItemKey) cacheItemValue {
 // PushItem will store new data at the key provided and saves the new cache data
 // to file via 'save'.
 // Note: This method will *overwrite* data already stored at the given key.
-func (cache *Cache) PushItem(key cacheItemKey, content cacheItemValue) {
+func (cache *Cache) PushItem(key string, content cacheItemValue) {
 	cache.content[key] = content
 }
 
 // DeleteItem will remove cache data at the key provided, returning true
 // if an item was deleted and false if there was no data to delete.
-func (cache *Cache) DeleteItem(key cacheItemKey) bool {
+func (cache *Cache) DeleteItem(key string) bool {
 	if !cache.HasItem(key) {
 		return false
 	}

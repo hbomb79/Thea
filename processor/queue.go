@@ -5,16 +5,25 @@ import (
 	"io/fs"
 	"sync"
 
+	"github.com/hbomb79/TPA/cache"
 	"github.com/hbomb79/TPA/worker"
 )
 
-// ProcessorQueue is the Queue of items to be processed by this
+// processorQueue is the Queue of items to be processed by this
 // processor
-type ProcessorQueue struct {
+type processorQueue struct {
 	Items  []*QueueItem `json:"items" groups:"api"`
 	lastId int
-	cache  *queueCache
+	cache  *cache.Cache
 	sync.Mutex
+}
+
+func NewProcessorQueue(cachePath string) *processorQueue {
+	return &processorQueue{
+		Items:  make([]*QueueItem, 0),
+		lastId: 0,
+		cache:  cache.New(cachePath),
+	}
 }
 
 // HandleFile will take the provided file and if it's not
@@ -22,7 +31,7 @@ type ProcessorQueue struct {
 // If it is in the queue, the entry is skipped - this is because
 // this method is usually called as a result of polling the
 // input directory many times a day for new files.
-func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) *QueueItem {
+func (queue *processorQueue) HandleFile(path string, fileInfo fs.FileInfo) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -59,7 +68,7 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) *Queu
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *ProcessorQueue) Pick(stage worker.PipelineStage) *QueueItem {
+func (queue *processorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -77,7 +86,7 @@ func (queue *ProcessorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 // and set it's stage to the next stage and reset it's status to Pending
 // Note: this method will lock the mutex for protected access to the
 // shared queue.
-func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
+func (queue *processorQueue) AdvanceStage(item *QueueItem) {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -98,7 +107,7 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 // inside the queue slice.
 // Note: this method will lock the mutex for protected access to the
 // shared queue.
-func (queue *ProcessorQueue) PromoteItem(item *QueueItem) error {
+func (queue *processorQueue) PromoteItem(item *QueueItem) error {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -130,7 +139,7 @@ func (queue *ProcessorQueue) PromoteItem(item *QueueItem) error {
 	return errors.New("cannot promote: item does not exist inside this queue")
 }
 
-func (queue *ProcessorQueue) FindById(id int) *QueueItem {
+func (queue *processorQueue) FindById(id int) *QueueItem {
 	for _, item := range queue.Items {
 		if item.Id == id {
 			return item

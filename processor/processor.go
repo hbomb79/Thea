@@ -20,6 +20,7 @@ type TPAConfig struct {
 	Format     FormatterConfig  `yaml:"formatter"`
 	Database   DatabaseConfig   `yaml:"database"`
 	OmdbKey    string           `yaml:"omdb_api_key"`
+	CachePath  string           `yaml:"cache_path"`
 }
 
 // ConcurrentConfig is a subset of the configuration that focuses
@@ -71,7 +72,7 @@ func (config *TPAConfig) LoadFromFile(configPath string) error {
 // processing the queue, and the users configuration
 type Processor struct {
 	Config     *TPAConfig
-	Queue      *ProcessorQueue
+	Queue      *processorQueue
 	WorkerPool *worker.WorkerPool
 	Negotiator Negotiator
 }
@@ -91,16 +92,8 @@ type ProcessorUpdate struct {
 
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
-func New() *Processor {
-	p := &Processor{
-		Queue: &ProcessorQueue{
-			Items: make([]*QueueItem, 0),
-			cache: new(queueCache),
-		},
-	}
-
-	p.WorkerPool = worker.NewWorkerPool()
-	return p
+func NewProcessor() *Processor {
+	return &Processor{WorkerPool: worker.NewWorkerPool()}
 }
 
 // Returns the processor provided after setting the Config
@@ -136,6 +129,8 @@ func (p *Processor) PushUpdate(update *ProcessorUpdate) {
 // and the FFMPEG formatting (NYI)
 // This method will wait on the WaitGroup attached to the WorkerPool
 func (p *Processor) Start() error {
+	p.Queue = NewProcessorQueue(p.Config.CachePath)
+
 	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
 	if tickInterval <= 0 {
 		log.Panic("Failed to start PollingWorker - TickInterval is non-positive (make sure 'import_polling_delay' is set in your config)")

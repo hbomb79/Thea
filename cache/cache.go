@@ -37,9 +37,9 @@ func New(path string) *Cache {
 	return c
 }
 
-// HasKey will check the cache for an item in it's content with a matching key.
+// HasItem will check the cache for an item in it's content with a matching key.
 // True is returned if found, false otherwise.
-func (cache *Cache) HasKey(key cacheItemKey) bool {
+func (cache *Cache) HasItem(key cacheItemKey) bool {
 	_, ok := cache.content[key]
 
 	return ok
@@ -66,7 +66,7 @@ func (cache *Cache) PushItem(key cacheItemKey, content cacheItemValue) {
 // DeleteItem will remove cache data at the key provided, returning true
 // if an item was deleted and false if there was no data to delete.
 func (cache *Cache) DeleteItem(key cacheItemKey) bool {
-	if !cache.HasKey(key) {
+	if !cache.HasItem(key) {
 		return false
 	}
 

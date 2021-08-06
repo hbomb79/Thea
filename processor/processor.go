@@ -168,43 +168,50 @@ func (p *Processor) Start() error {
 	return nil
 }
 
-// SynchroniseQueue will search through the import directory, and the ProcessorQueue
-// cache to find items that are missing from the queue (and then add them to the queue),
-// and also items that are in the queue but are *missing* from the import directory
-func (p *Processor) SynchroniseQueue() (newItemsFound int, err error) {
-	missingItems, newItemsFound := make(map[*QueueItem]bool), 0
+func (p *Processor) SynchroniseQueue() {
+	p.InjestQueue()
+	p.PruneQueue()
+}
 
-	for _, v := range p.Queue.Items {
-		missingItems[v] = true
-	}
-
-	walkFunc := func(path string, dir fs.DirEntry, err error) error {
+// InjestQueue will check the input source directory for files, and
+// add them to the Queue providing that they don't already exist
+// in the queue, and aren't inside the cache.
+func (p *Processor) InjestQueue() error {
+	// Create an array of all the items we wish to add.
+	injestableItems := make(map[string]fs.FileInfo, 0)
+	err := filepath.WalkDir(p.Config.Format.ImportPath, func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
-			log.Panicf("PollInputSource failed - %v\n", err.Error())
+			return err
 		}
 
 		if !dir.IsDir() {
 			v, err := dir.Info()
 			if err != nil {
-				log.Panicf("Failed to get FileInfo for path %v - %v\n", path, err.Error())
+				return err
 			}
 
-			if item := p.Queue.HandleFile(path, v); item != nil {
-				newItemsFound++
-				delete(missingItems, item)
-			}
+			injestableItems[path] = v
 		}
 
 		return nil
+	})
+
+	if err != nil {
+		return errors.New("Failed to injest: " + err.Error())
 	}
 
-	err = filepath.WalkDir(p.Config.Format.ImportPath, walkFunc)
-
-	// Items in the queue that don't exist in the import directory
-	// anymore must be removed
-	for item := range missingItems {
-		// Cancel TODO
-		item.Cancel()
+	// Test if each exists inside the cache. If not, add to Queue.
+	for path, info := range injestableItems {
+		name := info.Name()
+		if !p.Queue.Contains(name) {
+			item := NewQueueItem(name, path)
+			p.Queue.Push(item)
+		}
 	}
-	return
+
+	return nil
+}
+
+//TODO
+func (p *Processor) PruneQueue() {
 }

@@ -2,7 +2,6 @@ package processor
 
 import (
 	"errors"
-	"io/fs"
 	"sync"
 
 	"github.com/hbomb79/TPA/cache"
@@ -26,41 +25,39 @@ func NewProcessorQueue(cachePath string) *processorQueue {
 	}
 }
 
-// HandleFile will take the provided file and if it's not
-// currently inside the queue, it will be inserted in to the queue.
-// If it is in the queue, the entry is skipped - this is because
-// this method is usually called as a result of polling the
-// input directory many times a day for new files.
-func (queue *processorQueue) HandleFile(path string, fileInfo fs.FileInfo) *QueueItem {
-	queue.Lock()
-	defer queue.Unlock()
-
-	isInQueue := func(path string) bool {
-		for _, v := range queue.Items {
-			if v.Path == path {
-				return true
-			}
+// Retrieve will search the Queue for a QueueItem with a path that matches
+// the one provided. If one is found, a pointer to the item is returned; otherwise
+// nil is returned.
+func (queue *processorQueue) Retrieve(path string) *QueueItem {
+	for _, item := range queue.Items {
+		if item.Path == path {
+			return item
 		}
-
-		return false
-	}
-
-	if !isInQueue(path) {
-		item := &QueueItem{
-			Id:     queue.lastId,
-			Name:   fileInfo.Name(),
-			Path:   path,
-			Status: Pending,
-			Stage:  worker.Title,
-		}
-
-		queue.Items = append(queue.Items, item)
-		queue.lastId++
-
-		return item
 	}
 
 	return nil
+}
+
+// Contains will return true if a QueueItem exists inside of this Queue that
+// has a matching path to the one provided; false otherwise
+func (queue *processorQueue) Contains(path string) bool {
+	if item := queue.Retrieve(path); item != nil {
+		return true
+	}
+
+	return false
+}
+
+// Push accepts a QueueItem pointer and will push (append) it to
+// the Queue. This method also sets the 'Id' of the QueueItem
+// automatically (queue.lastId)
+func (queue *processorQueue) Push(item *QueueItem) {
+	queue.Lock()
+	defer queue.Unlock()
+
+	item.Id = queue.lastId
+	queue.Items = append(queue.Items, item)
+	queue.lastId++
 }
 
 // Pick will search through the queue items looking for the first

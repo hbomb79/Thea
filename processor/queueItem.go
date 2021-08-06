@@ -71,6 +71,15 @@ type QueueItem struct {
 	Trouble    Trouble              `json:"trouble"`
 }
 
+func NewQueueItem(name string, path string) *QueueItem {
+	return &QueueItem{
+		Name:   name,
+		Path:   path,
+		Status: Pending,
+		Stage:  worker.Title,
+	}
+}
+
 // RaiseTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user

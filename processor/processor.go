@@ -174,10 +174,8 @@ func (p *Processor) SynchroniseQueue() {
 }
 
 // InjestQueue will check the input source directory for files, and
-// add them to the Queue providing that they don't already exist
-// in the queue, and aren't inside the cache.
+// add them to the Queue
 func (p *Processor) InjestQueue() error {
-	// Create an array of all the items we wish to add.
 	injestableItems := make(map[string]fs.FileInfo, 0)
 	err := filepath.WalkDir(p.Config.Format.ImportPath, func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
@@ -200,12 +198,9 @@ func (p *Processor) InjestQueue() error {
 		return errors.New("Failed to injest: " + err.Error())
 	}
 
-	// Test if each exists inside the cache. If not, add to Queue.
 	for path, info := range injestableItems {
-		name := info.Name()
-		if !p.Queue.Contains(name) {
-			item := NewQueueItem(name, path)
-			p.Queue.Push(item)
+		if e := p.Queue.Push(NewQueueItem(info.Name(), path)); e != nil {
+			fmt.Printf("[Processor] (!) Ignoring injestable item - " + e.Error())
 		}
 	}
 

@@ -73,6 +73,18 @@ func (cache *Cache) DeleteItem(key string) bool {
 	return true
 }
 
+// IterItems runs the provided callback function for each item
+// in the caches content map as long as the callback returns true.
+// If the callback returns false, it essentially 'breaks' the loop and
+// this method will return.
+func (cache *Cache) IterItems(cb func(*Cache, string, cacheItemValue) bool) {
+	for k, v := range cache.content {
+		if !cb(cache, k, v) {
+			return
+		}
+	}
+}
+
 // load is a private method that will load the cache data from the 'filePath' and
 // attempt to unmarshal the string content back to the map[string]interface{}. If
 // an error occurs (JSON failure, file not found, etc), it will be returned from this method.

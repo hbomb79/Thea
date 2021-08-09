@@ -142,14 +142,6 @@ func (p *Processor) Start() error {
 	}(time.NewTicker(tickInterval).C)
 
 	// Start some workers in the pool to handle various tasks
-
-	// TODO: This is *incredibly* ugly code.. it makes me
-	// want to cry. I couldn't figure out any other way
-	// to solve this without the Go Generics soon to come.
-	// The problem is that I can't simply pass something
-	// like []*ImportTask to a method that is expecting
-	// a slice like []worker.WorkerTaskMeta as the two
-	// types are different.
 	threads, workers := p.Config.Concurrent, make([]*worker.Worker, 0)
 	for i := 0; i < threads.Title; i++ {
 		workers = append(workers, worker.NewWorker(fmt.Sprintf("Title:%v", i), &TitleTask{proc: p}, worker.Title, make(chan int)))
@@ -168,15 +160,21 @@ func (p *Processor) Start() error {
 	return nil
 }
 
-func (p *Processor) SynchroniseQueue() {
-	p.InjestQueue()
-	p.PruneQueue()
+func (p *Processor) SynchroniseQueue() error {
+	presentItems, err := p.DiscoverItems()
+	if err != nil {
+		return err
+	}
+
+	p.InjestQueue(presentItems)
+	p.PruneQueue(presentItems)
+	p.PruneQueueCache()
+
+	return nil
 }
 
-// InjestQueue will check the input source directory for files, and
-// add them to the Queue
-func (p *Processor) InjestQueue() error {
-	injestableItems := make(map[string]fs.FileInfo, 0)
+func (p *Processor) DiscoverItems() (map[string]fs.FileInfo, error) {
+	presentItems := make(map[string]fs.FileInfo, 0)
 	err := filepath.WalkDir(p.Config.Format.ImportPath, func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -188,17 +186,23 @@ func (p *Processor) InjestQueue() error {
 				return err
 			}
 
-			injestableItems[path] = v
+			presentItems[path] = v
 		}
 
 		return nil
 	})
 
 	if err != nil {
-		return errors.New("Failed to injest: " + err.Error())
+		return nil, errors.New("Failed to discover items for injestion: " + err.Error())
 	}
 
-	for path, info := range injestableItems {
+	return presentItems, nil
+}
+
+// InjestQueue will check the input source directory for files, and
+// add them to the Queue
+func (p *Processor) InjestQueue(presentItems map[string]fs.FileInfo) error {
+	for path, info := range presentItems {
 		if e := p.Queue.Push(NewQueueItem(info.Name(), path)); e != nil {
 			fmt.Printf("[Processor] (!) Ignoring injestable item - " + e.Error())
 		}
@@ -207,6 +211,10 @@ func (p *Processor) InjestQueue() error {
 	return nil
 }
 
-//TODO
-func (p *Processor) PruneQueue() {
+func (p *Processor) PruneQueue(presentItems map[string]fs.FileInfo) {
+	// TODO
+}
+
+func (p *Processor) PruneQueueCache() {
+	// TODO
 }

@@ -2,6 +2,7 @@ package processor
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/hbomb79/TPA/cache"
@@ -51,13 +52,19 @@ func (queue *processorQueue) Contains(path string) bool {
 // Push accepts a QueueItem pointer and will push (append) it to
 // the Queue. This method also sets the 'Id' of the QueueItem
 // automatically (queue.lastId)
-func (queue *processorQueue) Push(item *QueueItem) {
+func (queue *processorQueue) Push(item *QueueItem) error {
 	queue.Lock()
 	defer queue.Unlock()
+
+	if queue.Contains(item.Path) || queue.cache.HasItem(item.Path) {
+		return errors.New(fmt.Sprintf("item (%s) is either already in queue, or marked as complete in cache", item.Path))
+	}
 
 	item.Id = queue.lastId
 	queue.Items = append(queue.Items, item)
 	queue.lastId++
+
+	return nil
 }
 
 // Pick will search through the queue items looking for the first

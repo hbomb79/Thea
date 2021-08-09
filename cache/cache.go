@@ -24,13 +24,18 @@ type Cache struct {
 // from that file. Errors resulting from a malformed/missing cache
 // are handled by constructing a blank cache and overwriting this data.
 func New(path string) *Cache {
+	if path == "" {
+		panic("[Cache] (!!) Cannot instantiate new Cache - provided filesystem path is empty!")
+	}
+
 	c := &Cache{
 		filePath: path,
 		content:  make(map[string]cacheItemValue),
 	}
 
 	if err := c.load(); err != nil {
-		fmt.Printf("[Cache] (!!) Failed to load preexisting cache content from file: " + err.Error() + ". Defaulting to empty cache.\n")
+		fmt.Printf("[Cache] (!!) Failed to load preexisting cache content from file(%s): %s\n - Defaulting to empty cache and attempting to save.\n", path, err.Error())
+		c.Save()
 	}
 
 	return c
@@ -60,6 +65,7 @@ func (cache *Cache) RetriveItem(key string) cacheItemValue {
 // Note: This method will *overwrite* data already stored at the given key.
 func (cache *Cache) PushItem(key string, content cacheItemValue) {
 	cache.content[key] = content
+	cache.Save()
 }
 
 // DeleteItem will remove cache data at the key provided, returning true
@@ -70,6 +76,7 @@ func (cache *Cache) DeleteItem(key string) bool {
 	}
 
 	delete(cache.content, key)
+	cache.Save()
 	return true
 }
 
@@ -82,6 +89,15 @@ func (cache *Cache) IterItems(cb func(*Cache, string, cacheItemValue) bool) {
 		if !cb(cache, k, v) {
 			return
 		}
+	}
+}
+
+// Save will attempt to save the cache to file, errors will be reported in console
+// This calls the private 'save' method to execute the save, this method just acts
+// as a public wrapper
+func (cache *Cache) Save() {
+	if err := cache.save(); err != nil {
+		fmt.Printf("[Cache] (!!) Failed to save cache! %s\n", err.Error())
 	}
 }
 

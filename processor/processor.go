@@ -124,9 +124,6 @@ func (p *Processor) PushUpdate(update *ProcessorUpdate) {
 
 // Start will start the workers inside the WorkerPool
 // responsible for the various tasks inside the program
-// This includes: HTTP RESTful API (NYI), user interaction (NYI),
-// import directory polling, title formatting (NYI), OMDB querying (NYI),
-// and the FFMPEG formatting (NYI)
 // This method will wait on the WaitGroup attached to the WorkerPool
 func (p *Processor) Start() error {
 	p.Queue = NewProcessorQueue(p.Config.CachePath)
@@ -160,6 +157,10 @@ func (p *Processor) Start() error {
 	return nil
 }
 
+// SynchroniseQueue will first discover all items inside the import directory,
+// and then will injest any that do not already exist in the queue. Any items
+// in the queue that no longer exist in the discovered items will also be cancelled
+// and removed from the queue.
 func (p *Processor) SynchroniseQueue() error {
 	presentItems, err := p.DiscoverItems()
 	if err != nil {
@@ -173,6 +174,9 @@ func (p *Processor) SynchroniseQueue() error {
 	return nil
 }
 
+// DiscoverItems will walk through the import directory and construct a map
+// of all the items inside the import directory (or any nested directories).
+// The key of the map is the path, and the value contains the FileInfo
 func (p *Processor) DiscoverItems() (map[string]fs.FileInfo, error) {
 	presentItems := make(map[string]fs.FileInfo, 0)
 	err := filepath.WalkDir(p.Config.Format.ImportPath, func(path string, dir fs.DirEntry, err error) error {
@@ -211,8 +215,18 @@ func (p *Processor) InjestQueue(presentItems map[string]fs.FileInfo) error {
 	return nil
 }
 
+// PruneQueue will cancel and remove any items that exist in the queue that do NOT
+// exist in the presentItems map
 func (p *Processor) PruneQueue(presentItems map[string]fs.FileInfo) {
-	// TODO
+	p.Queue.Filter(func(queue *processorQueue, key int, item *QueueItem) bool {
+		if _, ok := presentItems[item.Path]; !ok {
+			item.Cancel()
+
+			return false
+		}
+
+		return true
+	})
 }
 
 func (p *Processor) PruneQueueCache() {

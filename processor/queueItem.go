@@ -53,6 +53,7 @@ const (
 	Processing
 	Completed
 	Troubled
+	Cancelled
 )
 
 // QueueItem contains all the information needed to fully
@@ -157,7 +158,11 @@ func (item *QueueItem) FormatTitle() error {
 // WorkerTaskMeta interface needs to be adjusted to enforce implementation of a cancel method
 // as cancelling a task will vary based on the task being run.
 func (item *QueueItem) Cancel() {
+	if item.Status == Cancelled {
+		return
+	}
 
+	// TODO cancel item
 }
 
 // TitleInfo contains the information about the import QueueItem

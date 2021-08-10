@@ -143,6 +143,20 @@ func (queue *processorQueue) PromoteItem(item *QueueItem) error {
 	return errors.New("cannot promote: item does not exist inside this queue")
 }
 
+type FilterFn func(*processorQueue, int, *QueueItem) bool
+
+// Filter runs the provided callback for every item inside the queue. If the callback
+// returns true, the item is retained. Otherwise, if the callback returns false, the item
+// is ejected from the queue.
+func (queue *processorQueue) Filter(cb FilterFn) {
+	newItems := make([]*QueueItem, 0)
+	for key, item := range queue.Items {
+		if cb(queue, key, item) {
+			newItems[key] = item
+		}
+	}
+}
+
 func (queue *processorQueue) FindById(id int) *QueueItem {
 	for _, item := range queue.Items {
 		if item.Id == id {

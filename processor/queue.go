@@ -152,7 +152,7 @@ func (queue *processorQueue) Filter(cb FilterFn) {
 	newItems := make([]*QueueItem, 0)
 	for key, item := range queue.Items {
 		if cb(queue, key, item) {
-			newItems[key] = item
+			newItems = append(newItems, item)
 		}
 	}
 }

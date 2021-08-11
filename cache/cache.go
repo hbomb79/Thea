@@ -7,15 +7,13 @@ import (
 	"os"
 )
 
-type cacheItemValue map[string]interface{}
-
 // The Cache is a struct from the cache package that allows other parts
 // of the TPA to store persistent information about items inside the queue.
 // The primary use case for this cache is to allow us to store the current
 // status of queue items to enable persistent memory over server-restarts
 type Cache struct {
 	filePath string
-	content  map[string]cacheItemValue
+	content  map[string]interface{}
 }
 
 // New constructs a new instance of a Cache struct, setting the
@@ -30,7 +28,7 @@ func New(path string) *Cache {
 
 	c := &Cache{
 		filePath: path,
-		content:  make(map[string]cacheItemValue),
+		content:  make(map[string]interface{}),
 	}
 
 	if err := c.load(); err != nil {
@@ -51,7 +49,7 @@ func (cache *Cache) HasItem(key string) bool {
 
 // RetriveItem will return the value for a cache item at the key provided.
 // If no item exists at the key provided, nil is returned.
-func (cache *Cache) RetriveItem(key string) cacheItemValue {
+func (cache *Cache) RetriveItem(key string) interface{} {
 	v, ok := cache.content[key]
 	if !ok {
 		return nil
@@ -63,7 +61,7 @@ func (cache *Cache) RetriveItem(key string) cacheItemValue {
 // PushItem will store new data at the key provided and saves the new cache data
 // to file via 'save'.
 // Note: This method will *overwrite* data already stored at the given key.
-func (cache *Cache) PushItem(key string, content cacheItemValue) {
+func (cache *Cache) PushItem(key string, content interface{}) {
 	cache.content[key] = content
 	cache.Save()
 }
@@ -84,7 +82,7 @@ func (cache *Cache) DeleteItem(key string) bool {
 // in the caches content map as long as the callback returns true.
 // If the callback returns false, it essentially 'breaks' the loop and
 // this method will return.
-func (cache *Cache) IterItems(cb func(*Cache, string, cacheItemValue) bool) {
+func (cache *Cache) IterItems(cb func(*Cache, string, interface{}) bool) {
 	for k, v := range cache.content {
 		if !cb(cache, k, v) {
 			return

@@ -168,7 +168,17 @@ func (p *Processor) SynchroniseQueue() error {
 	}
 
 	p.InjestQueue(presentItems)
-	p.PruneQueue(presentItems)
+
+	p.Queue.Filter(func(queue *processorQueue, key int, item *QueueItem) bool {
+		if _, ok := presentItems[item.Path]; !ok {
+			item.Cancel()
+
+			return false
+		}
+
+		return true
+	})
+
 	p.PruneQueueCache()
 
 	return nil
@@ -213,20 +223,6 @@ func (p *Processor) InjestQueue(presentItems map[string]fs.FileInfo) error {
 	}
 
 	return nil
-}
-
-// PruneQueue will cancel and remove any items that exist in the queue that do NOT
-// exist in the presentItems map
-func (p *Processor) PruneQueue(presentItems map[string]fs.FileInfo) {
-	p.Queue.Filter(func(queue *processorQueue, key int, item *QueueItem) bool {
-		if _, ok := presentItems[item.Path]; !ok {
-			item.Cancel()
-
-			return false
-		}
-
-		return true
-	})
 }
 
 func (p *Processor) PruneQueueCache() {

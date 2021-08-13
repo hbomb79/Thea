@@ -2,53 +2,69 @@ package processor
 
 import (
 	"errors"
-	"io/fs"
+	"fmt"
 	"sync"
 
+	"github.com/hbomb79/TPA/cache"
 	"github.com/hbomb79/TPA/worker"
 )
 
-// ProcessorQueue is the Queue of items to be processed by this
+// processorQueue is the Queue of items to be processed by this
 // processor
-type ProcessorQueue struct {
+type processorQueue struct {
 	Items  []*QueueItem `json:"items" groups:"api"`
 	lastId int
+	cache  *cache.Cache
 	sync.Mutex
 }
 
-// HandleFile will take the provided file and if it's not
-// currently inside the queue, it will be inserted in to the queue.
-// If it is in the queue, the entry is skipped - this is because
-// this method is usually called as a result of polling the
-// input directory many times a day for new files.
-func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool {
-	queue.Lock()
-	defer queue.Unlock()
+func NewProcessorQueue(cachePath string) *processorQueue {
+	return &processorQueue{
+		Items:  make([]*QueueItem, 0),
+		lastId: 0,
+		cache:  cache.New(cachePath),
+	}
+}
 
-	isInQueue := func(path string) bool {
-		for _, v := range queue.Items {
-			if v.Path == path {
-				return true
-			}
+// Retrieve will search the Queue for a QueueItem with a path that matches
+// the one provided. If one is found, a pointer to the item is returned; otherwise
+// nil is returned.
+func (queue *processorQueue) Retrieve(path string) *QueueItem {
+	for _, item := range queue.Items {
+		if item.Path == path {
+			return item
 		}
-
-		return false
 	}
 
-	if !isInQueue(path) {
-		queue.Items = append(queue.Items, &QueueItem{
-			Id:     queue.lastId,
-			Name:   fileInfo.Name(),
-			Path:   path,
-			Status: Pending,
-			Stage:  worker.Title,
-		})
-		queue.lastId++
+	return nil
+}
 
+// Contains will return true if a QueueItem exists inside of this Queue that
+// has a matching path to the one provided; false otherwise
+func (queue *processorQueue) Contains(path string) bool {
+	if item := queue.Retrieve(path); item != nil {
 		return true
 	}
 
 	return false
+}
+
+// Push accepts a QueueItem pointer and will push (append) it to
+// the Queue. This method also sets the 'Id' of the QueueItem
+// automatically (queue.lastId)
+func (queue *processorQueue) Push(item *QueueItem) error {
+	queue.Lock()
+	defer queue.Unlock()
+
+	if queue.Contains(item.Path) || queue.cache.HasItem(item.Path) {
+		return errors.New(fmt.Sprintf("item (%s) is either already in queue, or marked as complete in cache", item.Path))
+	}
+
+	item.Id = queue.lastId
+	queue.Items = append(queue.Items, item)
+	queue.lastId++
+
+	return nil
 }
 
 // Pick will search through the queue items looking for the first
@@ -56,7 +72,7 @@ func (queue *ProcessorQueue) HandleFile(path string, fileInfo fs.FileInfo) bool 
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *ProcessorQueue) Pick(stage worker.PipelineStage) *QueueItem {
+func (queue *processorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -74,7 +90,7 @@ func (queue *ProcessorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 // and set it's stage to the next stage and reset it's status to Pending
 // Note: this method will lock the mutex for protected access to the
 // shared queue.
-func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
+func (queue *processorQueue) AdvanceStage(item *QueueItem) {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -83,6 +99,9 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 	} else if item.Stage == worker.Format {
 		item.Stage = worker.Finish
 		item.Status = Completed
+
+		// Add this item to the cache to indicate it's complete
+		queue.cache.PushItem(item.Path, true)
 	} else {
 		item.Stage++
 		item.Status = Pending
@@ -95,7 +114,7 @@ func (queue *ProcessorQueue) AdvanceStage(item *QueueItem) {
 // inside the queue slice.
 // Note: this method will lock the mutex for protected access to the
 // shared queue.
-func (queue *ProcessorQueue) PromoteItem(item *QueueItem) error {
+func (queue *processorQueue) PromoteItem(item *QueueItem) error {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -127,7 +146,21 @@ func (queue *ProcessorQueue) PromoteItem(item *QueueItem) error {
 	return errors.New("cannot promote: item does not exist inside this queue")
 }
 
-func (queue *ProcessorQueue) FindById(id int) *QueueItem {
+type FilterFn func(*processorQueue, int, *QueueItem) bool
+
+// Filter runs the provided callback for every item inside the queue. If the callback
+// returns true, the item is retained. Otherwise, if the callback returns false, the item
+// is ejected from the queue.
+func (queue *processorQueue) Filter(cb FilterFn) {
+	newItems := make([]*QueueItem, 0)
+	for key, item := range queue.Items {
+		if cb(queue, key, item) {
+			newItems = append(newItems, item)
+		}
+	}
+}
+
+func (queue *processorQueue) FindById(id int) *QueueItem {
 	for _, item := range queue.Items {
 		if item.Id == id {
 			return item

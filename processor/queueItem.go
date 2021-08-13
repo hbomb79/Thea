@@ -53,6 +53,7 @@ const (
 	Processing
 	Completed
 	Troubled
+	Cancelled
 )
 
 // QueueItem contains all the information needed to fully
@@ -69,6 +70,15 @@ type QueueItem struct {
 	TitleInfo  *TitleInfo           `json:"title_info"`
 	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
 	Trouble    Trouble              `json:"trouble"`
+}
+
+func NewQueueItem(name string, path string) *QueueItem {
+	return &QueueItem{
+		Name:   name,
+		Path:   path,
+		Status: Pending,
+		Stage:  worker.Title,
+	}
 }
 
 // RaiseTrouble is a method that can be called from
@@ -139,6 +149,20 @@ func (item *QueueItem) FormatTitle() error {
 	// Didn't match either case; return error so that trouble
 	// can be raised by the worker.
 	return TitleFormatError{item, "Failed to match RegExp!"}
+}
+
+// Cancel TODO
+// In order for a queue item to cancel itself, the queue item needs to be
+// able to interact directly with the task that is currently running. This means
+// QueueItem needs a reference to a worker that is currently holding it, and the
+// WorkerTaskMeta interface needs to be adjusted to enforce implementation of a cancel method
+// as cancelling a task will vary based on the task being run.
+func (item *QueueItem) Cancel() {
+	if item.Status == Cancelled {
+		return
+	}
+
+	// TODO cancel item
 }
 
 // TitleInfo contains the information about the import QueueItem

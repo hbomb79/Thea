@@ -20,7 +20,7 @@ type Tpa struct {
 }
 
 func NewTpa() *Tpa {
-	proc := processor.New()
+	proc := processor.NewProcessor()
 
 	return &Tpa{
 		proc:        proc,

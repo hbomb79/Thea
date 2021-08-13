@@ -20,6 +20,7 @@ type TPAConfig struct {
 	Format     FormatterConfig  `yaml:"formatter"`
 	Database   DatabaseConfig   `yaml:"database"`
 	OmdbKey    string           `yaml:"omdb_api_key"`
+	CachePath  string           `yaml:"cache_path"`
 }
 
 // ConcurrentConfig is a subset of the configuration that focuses
@@ -71,7 +72,7 @@ func (config *TPAConfig) LoadFromFile(configPath string) error {
 // processing the queue, and the users configuration
 type Processor struct {
 	Config     *TPAConfig
-	Queue      *ProcessorQueue
+	Queue      *processorQueue
 	WorkerPool *worker.WorkerPool
 	Negotiator Negotiator
 }
@@ -91,15 +92,8 @@ type ProcessorUpdate struct {
 
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
-func New() *Processor {
-	p := &Processor{
-		Queue: &ProcessorQueue{
-			Items: make([]*QueueItem, 0),
-		},
-	}
-
-	p.WorkerPool = worker.NewWorkerPool()
-	return p
+func NewProcessor() *Processor {
+	return &Processor{WorkerPool: worker.NewWorkerPool()}
 }
 
 // Returns the processor provided after setting the Config
@@ -130,30 +124,21 @@ func (p *Processor) PushUpdate(update *ProcessorUpdate) {
 
 // Start will start the workers inside the WorkerPool
 // responsible for the various tasks inside the program
-// This includes: HTTP RESTful API (NYI), user interaction (NYI),
-// import directory polling, title formatting (NYI), OMDB querying (NYI),
-// and the FFMPEG formatting (NYI)
 // This method will wait on the WaitGroup attached to the WorkerPool
 func (p *Processor) Start() error {
+	p.Queue = NewProcessorQueue(p.Config.CachePath)
+
 	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
 	if tickInterval <= 0 {
 		log.Panic("Failed to start PollingWorker - TickInterval is non-positive (make sure 'import_polling_delay' is set in your config)")
 	}
 
 	go func(target <-chan time.Time) {
-		p.PollInputSource()
+		p.SynchroniseQueue()
 		p.WorkerPool.WakeupWorkers(worker.Title)
 	}(time.NewTicker(tickInterval).C)
 
 	// Start some workers in the pool to handle various tasks
-
-	// TODO: This is *incredibly* ugly code.. it makes me
-	// want to cry. I couldn't figure out any other way
-	// to solve this without the Go Generics soon to come.
-	// The problem is that I can't simply pass something
-	// like []*ImportTask to a method that is expecting
-	// a slice like []worker.WorkerTaskMeta as the two
-	// types are different.
 	threads, workers := p.Config.Concurrent, make([]*worker.Worker, 0)
 	for i := 0; i < threads.Title; i++ {
 		workers = append(workers, worker.NewWorker(fmt.Sprintf("Title:%v", i), &TitleTask{proc: p}, worker.Title, make(chan int)))
@@ -172,29 +157,74 @@ func (p *Processor) Start() error {
 	return nil
 }
 
-// PollInputSource will check the source input directory (from p.Config)
-// pass along the files it finds to the p.Queue to be inserted if not present.
-func (p *Processor) PollInputSource() (newItemsFound int, err error) {
-	newItemsFound = 0
-	walkFunc := func(path string, dir fs.DirEntry, err error) error {
+// SynchroniseQueue will first discover all items inside the import directory,
+// and then will injest any that do not already exist in the queue. Any items
+// in the queue that no longer exist in the discovered items will also be cancelled
+// and removed from the queue.
+func (p *Processor) SynchroniseQueue() error {
+	presentItems, err := p.DiscoverItems()
+	if err != nil {
+		return err
+	}
+
+	p.InjestQueue(presentItems)
+
+	p.Queue.Filter(func(queue *processorQueue, key int, item *QueueItem) bool {
+		if _, ok := presentItems[item.Path]; !ok {
+			item.Cancel()
+
+			return false
+		}
+
+		return true
+	})
+
+	p.PruneQueueCache()
+
+	return nil
+}
+
+// DiscoverItems will walk through the import directory and construct a map
+// of all the items inside the import directory (or any nested directories).
+// The key of the map is the path, and the value contains the FileInfo
+func (p *Processor) DiscoverItems() (map[string]fs.FileInfo, error) {
+	presentItems := make(map[string]fs.FileInfo, 0)
+	err := filepath.WalkDir(p.Config.Format.ImportPath, func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
-			log.Panicf("PollInputSource failed - %v\n", err.Error())
+			return err
 		}
 
 		if !dir.IsDir() {
 			v, err := dir.Info()
 			if err != nil {
-				log.Panicf("Failed to get FileInfo for path %v - %v\n", path, err.Error())
+				return err
 			}
 
-			if isNew := p.Queue.HandleFile(path, v); isNew {
-				newItemsFound++
-			}
+			presentItems[path] = v
 		}
 
 		return nil
+	})
+
+	if err != nil {
+		return nil, errors.New("Failed to discover items for injestion: " + err.Error())
 	}
 
-	err = filepath.WalkDir(p.Config.Format.ImportPath, walkFunc)
-	return
+	return presentItems, nil
+}
+
+// InjestQueue will check the input source directory for files, and
+// add them to the Queue
+func (p *Processor) InjestQueue(presentItems map[string]fs.FileInfo) error {
+	for path, info := range presentItems {
+		if e := p.Queue.Push(NewQueueItem(info.Name(), path)); e != nil {
+			fmt.Printf("[Processor] (!) Ignoring injestable item - " + e.Error())
+		}
+	}
+
+	return nil
+}
+
+func (p *Processor) PruneQueueCache() {
+	// TODO
 }

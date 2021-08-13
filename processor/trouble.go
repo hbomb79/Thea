@@ -11,4 +11,5 @@ type Trouble interface {
 	Resolve(map[string]interface{}) error
 	Item() *QueueItem
 	Type() TroubleType
+	ResolutionContext() map[string]interface{}
 }

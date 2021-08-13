@@ -2,6 +2,7 @@ package processor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -96,14 +97,47 @@ func (task *TitleTask) Execute(w *worker.Worker) error {
 	return task.executeTask(w, task.proc, task.processTitle)
 }
 
+// processTroubleState will check if the queue item is troubled, and if so, will
+// query the trouble for information about how the user wishes it to be resolved.
+// This method will return an error if the processing fails. The second return (bool)
+// indicates whether or not the item has been fully processed.
+func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
+	if queueItem.Trouble != nil {
+		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
+			// Check for the mandatory 'info' key.
+			info, ok := trblCtx["info"]
+			if !ok {
+				return errors.New("resolution context is missing 'info' key as is therefore invalid - ignoring context!"), false
+			}
+
+			// Assign the 'info' provided as the items TitleInfo and move on.
+			titleInfo, ok := info.(TitleInfo)
+			if ok {
+				queueItem.TitleInfo = &titleInfo
+				task.advance(queueItem)
+
+				return nil, true
+			}
+
+			return errors.New("resolution contexts 'info' key contains an invalid value! Failed to cast to 'TitleInfo'"), false
+		}
+	}
+
+	return nil, false
+}
+
 // Processes a given queueItem by filtering out irrelevant information from it's
 // title, and finding relevant information such as the season, episode and resolution
-// TODO: Maybe we should be checking file metadata to get accurate resolution
-// and runtime information - this info could also be found in the FormatTask via
-// ffprobe
 func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) error {
-	if err := queueItem.FormatTitle(); err != nil {
-		return err
+	err, isComplete := task.processTroubleState(queueItem)
+	if err != nil {
+		fmt.Printf("[Title Worker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
+	}
+
+	if !isComplete {
+		if err := queueItem.FormatTitle(); err != nil {
+			return err
+		}
 	}
 
 	task.advance(queueItem)

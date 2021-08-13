@@ -52,7 +52,7 @@ const (
 	Pending QueueItemStatus = iota
 	Processing
 	Completed
-	Troubled
+	NeedsResolving
 	Cancelled
 )
 
@@ -81,13 +81,13 @@ func NewQueueItem(name string, path string) *QueueItem {
 	}
 }
 
-// RaiseTrouble is a method that can be called from
+// SetTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
-func (item *QueueItem) RaiseTrouble(trouble Trouble) error {
+func (item *QueueItem) SetTrouble(trouble Trouble) error {
 	fmt.Printf("[Trouble] Raising trouble (%T) for QueueItem (%v)!\n", trouble, item.Path)
 	if item.Trouble == nil {
-		item.Status = Troubled
+		item.Status = NeedsResolving
 		item.Trouble = trouble
 
 		return nil
@@ -96,16 +96,14 @@ func (item *QueueItem) RaiseTrouble(trouble Trouble) error {
 	return errors.New(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble))
 }
 
-// ResetTrouble is used to remove the trouble state from
-// this item, and sets the items status to 'Pending', rather than
-// 'Troubled'
-func (item *QueueItem) ResetTrouble() {
-	if item.Status != Troubled {
+// ClearTrouble is used to remove the trouble state from
+// this item
+func (item *QueueItem) ClearTrouble() {
+	if item.Trouble == nil {
 		return
 	}
 
 	item.Trouble = nil
-	item.Status = Pending
 }
 
 // FormatTitle accepts a string (title) and reformats it

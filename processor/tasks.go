@@ -32,22 +32,10 @@ type baseTask struct {
 	assignedItem *QueueItem
 }
 
-// raiseTrouble is a helper method used to push a new trouble
-// in to the slice for this task
+// raiseTrouble is a helper method used to set a Trouble on
+// the item it's attached to
 func (task *baseTask) raiseTrouble(proc *Processor, trouble Trouble) {
-	trouble.Item().RaiseTrouble(trouble)
-
-	task.notifyTrouble(proc, trouble)
-}
-
-// notifyTrouble sends a ProcessorUpdate to the processor which
-// is likely then pushed along to any connected clients on
-// the web socket
-func (task *baseTask) notifyTrouble(proc *Processor, trouble Trouble) {
-	proc.PushUpdate(&ProcessorUpdate{
-		Title:   "TROUBLE",
-		Context: processorUpdateContext{Trouble: trouble, QueueItem: trouble.Item()},
-	})
+	trouble.Item().SetTrouble(trouble)
 }
 
 // executeTask implements the core worker work/wait loop that
@@ -100,8 +88,11 @@ func (task *TitleTask) Execute(w *worker.Worker) error {
 // processTroubleState will check if the queue item is troubled, and if so, will
 // query the trouble for information about how the user wishes it to be resolved.
 // This method will return an error if the processing fails. The second return (bool)
-// indicates whether or not the item has been fully processed.
+// indicates whether or not the item has been fully processed. Item trouble is cleared
+// when this method returns
 func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
+	defer queueItem.ClearTrouble()
+
 	if queueItem.Trouble != nil {
 		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
 			// Check for the mandatory 'info' key.
@@ -276,6 +267,7 @@ func (task *OmdbTask) Execute(w *worker.Worker) error {
 		if err != nil {
 			fmt.Printf("[OmdbWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
 		}
+
 		if isComplete {
 			return nil
 		}
@@ -287,8 +279,11 @@ func (task *OmdbTask) Execute(w *worker.Worker) error {
 // processTroubleState will check if the queue item is troubled, and if so, will
 // query the trouble for information about how the user wishes it to be resolved.
 // This method will return an error if the processing fails. The second return (bool)
-// indicates whether or not the item has been fully processed.
+// indicates whether or not the item has been fully processed. Trouble is cleared
+// once this method returns.
 func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
+	defer queueItem.ClearTrouble()
+
 	trbl, ok := queueItem.Trouble.(*OmdbTaskError)
 	if ok {
 		return errors.New("items trouble type does not match for this worker"), false
@@ -472,6 +467,7 @@ func (task *FormatTask) Execute(w *worker.Worker) error {
 // format will take the provided queueItem and format the file in to
 // a new format.
 func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
+	queueItem.ClearTrouble()
 	outputFormat := task.proc.Config.Format.TargetFormat
 	ffmpegOverwrite := true
 	ffmpegOpts, ffmpegCfg := &ffmpeg.Options{
@@ -535,4 +531,5 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 func (task *FormatTask) advance(item *QueueItem) {
 	// Release the QueueItem by advancing it to the next pipeline stage
 	task.proc.Queue.AdvanceStage(item)
+	task.proc.WorkerPool.WakeupWorkers(worker.Database)
 }

@@ -86,7 +86,7 @@ func (queue *processorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 	return nil
 }
 
-// AdvanceStage will take the QueueItem this method is attached to,
+// AdvanceStage will take the QueueItem this method is attached to, reset it's trouble state,
 // and set it's stage to the next stage and reset it's status to Pending
 // Note: this method will lock the mutex for protected access to the
 // shared queue.

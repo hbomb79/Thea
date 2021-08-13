@@ -195,6 +195,6 @@ type FormatTaskError struct {
 // that a worker will try this queue item again. Repeated failures likely means the input
 // file is bad.
 func (ex FormatTaskError) Resolve(map[string]interface{}) error {
-	ex.queueItem.ResetTrouble()
+	ex.queueItem.ClearTrouble()
 	return nil
 }

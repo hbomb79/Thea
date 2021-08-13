@@ -99,7 +99,7 @@ func (base *baseTaskError) ProvideResolutionContext(key string, ctx interface{})
 	base.queueItem.Status = Pending
 }
 
-func (base *baseTaskError) ResolutionContext() interface{} {
+func (base *baseTaskError) ResolutionContext() map[string]interface{} {
 	return base.resolutionContext
 }
 

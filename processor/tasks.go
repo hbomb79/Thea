@@ -131,7 +131,7 @@ func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) error {
 	err, isComplete := task.processTroubleState(queueItem)
 	if err != nil {
-		fmt.Printf("[Title Worker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
+		fmt.Printf("[TitleWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
 	}
 
 	if !isComplete {
@@ -271,7 +271,97 @@ func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*Om
 // Execute uses the provided baseTask.executeTask method to run this tasks
 // work function in a work/wait worker loop
 func (task *OmdbTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.find)
+	return task.executeTask(w, task.proc, func(w *worker.Worker, queueItem *QueueItem) error {
+		err, isComplete := task.processTroubleState(queueItem)
+		if err != nil {
+			fmt.Printf("[OmdbWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
+		}
+		if isComplete {
+			return nil
+		}
+
+		return task.find(w, queueItem)
+	})
+}
+
+// processTroubleState will check if the queue item is troubled, and if so, will
+// query the trouble for information about how the user wishes it to be resolved.
+// This method will return an error if the processing fails. The second return (bool)
+// indicates whether or not the item has been fully processed.
+func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
+	trbl, ok := queueItem.Trouble.(*OmdbTaskError)
+	if ok {
+		return errors.New("items trouble type does not match for this worker"), false
+	}
+
+	if trbl != nil {
+		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
+			choice, imdbId, replacementStruct, action := trblCtx["choiceId"], trblCtx["imdbId"], trblCtx["replacementStruct"], trblCtx["action"]
+			if choice != nil {
+				if queueItem.Trouble.Type() != OMDB_MULTIPLE_RESULT_FAILURE {
+					return errors.New("resolution context contains 'choiceId' which is an illegal argument for an error of this type"), false
+				}
+
+				choiceIdFloat, ok := choice.(float64)
+				if !ok {
+					return errors.New("resolution context 'choiceId' key is invalid (not float64)"), false
+				}
+
+				choiceId := int(choiceIdFloat)
+				if choiceId < 0 || choiceId >= len(trbl.choices) {
+					return errors.New("resolution context contains a 'choiceId' that is out-of-bounds for the choices available"), false
+				}
+
+				result, err := task.fetch(trbl.choices[choiceId].ImdbId, queueItem)
+				if err != nil {
+					return err, false
+				}
+
+				queueItem.OmdbInfo = result
+				task.advance(queueItem)
+
+				return nil, true
+			} else if imdbId != nil {
+				id, ok := imdbId.(string)
+				if !ok {
+					return errors.New("resolution context contains invalid 'imdbId' field (not string)"), false
+				}
+
+				result, err := task.fetch(id, queueItem)
+				if err != nil {
+					return err, false
+				}
+
+				queueItem.OmdbInfo = result
+				task.advance(queueItem)
+
+				return nil, true
+			} else if replacementStruct != nil {
+				info, ok := replacementStruct.(OmdbInfo)
+				if !ok {
+					return errors.New("resolution context contains invalid 'replacementStruct' field (not an OmdbInfo struct)"), false
+				}
+
+				queueItem.OmdbInfo = &info
+				task.advance(queueItem)
+
+				return nil, true
+			} else if action != nil {
+				actionVal, ok := action.(string)
+				if !ok {
+					return errors.New("resolution context contains invalid 'action' key (not a string)"), false
+				} else if actionVal != "retry" {
+					return fmt.Errorf("resolution context contains action with value '%s' which is invalid. Only 'retry' is permitted\n", actionVal), false
+				}
+
+				return nil, false
+			} else {
+				return errors.New("resolution context contains none of acceptable fields (choiceId, imdbId, replacementStruct, action)!"), false
+			}
+		}
+	}
+
+	return nil, false
 }
 
 // search will perform a search query to OMDB and will return the result

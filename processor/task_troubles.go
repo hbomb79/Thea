@@ -161,12 +161,12 @@ func (ex *OmdbTaskError) Resolve(args map[string]interface{}) error {
 		if v, ok := args["choiceId"]; ok {
 			vIdx, ok := v.(float64)
 			if !ok {
-				return errors.New("TODO")
+				return errors.New("Unable to resolve OMDB task error - 'choiceId' is not a valid number!")
 			}
 
 			choiceIdx := int(vIdx)
 			if choiceIdx < 0 || choiceIdx > len(ex.choices)-1 {
-				return errors.New("TODO")
+				return errors.New("Unable to resolve OMDB task error - 'choiceId' is out of range!")
 			}
 
 			ex.ProvideResolutionContext("fetchId", ex.choices[choiceIdx])
@@ -191,6 +191,6 @@ type FormatTaskError struct {
 // that a worker will try this queue item again. Repeated failures likely means the input
 // file is bad.
 func (ex FormatTaskError) Resolve(map[string]interface{}) error {
-	ex.queueItem.ClearTrouble()
+	ex.queueItem.Status = Pending
 	return nil
 }

@@ -176,7 +176,7 @@ func (ex *OmdbTaskError) Resolve(args map[string]interface{}) error {
 			return errors.New("Unable to resolve OMDB task error - 'choiceId' is out of range!")
 		}
 
-		ex.ProvideResolutionContext("fetchId", ex.choices[choiceIdx])
+		ex.ProvideResolutionContext("fetchId", ex.choices[choiceIdx].ImdbId)
 		return nil
 	} else {
 		return errors.New("Unable to resolve OMDB task error - arguments provided are invalid! One of 'imdbId, action, choiceId, replacementStruct' was expected.")

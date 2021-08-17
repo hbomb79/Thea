@@ -22,7 +22,7 @@ func NewHttpGateway(proc *processor.Processor) *HttpGateway {
 // httpQueueIndex returns the current processor queue with some information
 // omitted. Full information for each item can be found via HttpQueueGet
 func (httpGateway *HttpGateway) HttpQueueIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := sheriffApiMarshal(httpGateway.proc.Queue, []string{"api"})
+	data, err := sheriffApiMarshal(httpGateway.proc.Queue, "api")
 	if err != nil {
 		JsonMessage(w, err.Error(), http.StatusInternalServerError)
 
@@ -42,8 +42,8 @@ func (httpGateway *HttpGateway) HttpQueueGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	queueItem := queue.FindById(id)
-	if queueItem == nil {
+	queueItem, idx := queue.FindById(id)
+	if queueItem == nil || idx < 0 {
 		JsonMessage(w, "QueueItem ID '"+stringId+"' cannot be found", http.StatusBadRequest)
 		return
 	}
@@ -64,8 +64,8 @@ func (httpGateway *HttpGateway) HttpQueueUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	queueItem := queue.FindById(id)
-	if queueItem == nil {
+	queueItem, idx := queue.FindById(id)
+	if queueItem == nil || idx < 0 {
 		JsonMessage(w, "QueueItem with ID "+fmt.Sprint(id)+" not found", http.StatusNotFound)
 	} else if queue.PromoteItem(queueItem) != nil {
 		JsonMessage(w, "Failed to promote QueueItem #"+stringId+": "+err.Error(), http.StatusInternalServerError)

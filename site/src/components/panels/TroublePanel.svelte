@@ -1,5 +1,5 @@
 <script lang="ts">
-import { onMount, SvelteComponent } from "svelte";
+import { onMount } from "svelte";
 import { commander, dataStream } from "../../commander";
 import type { CommandCallback } from "../../commander";
 import { SocketMessageType } from "../../store";
@@ -24,19 +24,19 @@ export let details:QueueDetails
 let state = ComponentState.INIT
 let troubleDetails:QueueTroubleDetails
 
-interface EmbeddedTroublePanel extends SvelteComponent {
+interface EmbeddedTroublePanel {
     updateState(arg0:QueueDetails):void
 }
 let embeddedPanel:EmbeddedTroublePanel
 
-onMount(() => {
+const getTroubleDetails = () => {
     commander.sendMessage({
         title: "TROUBLE_DETAILS",
         type: SocketMessageType.COMMAND,
         arguments: { id: details.id }
     }, (data:SocketData): boolean => {
         // Wait for reply to message by using a callback.
-        if(data.title == "COMMAND_SUCCESS" && data.type == SocketMessageType.RESPONSE) {
+        if(data.type == SocketMessageType.RESPONSE) {
             troubleDetails = data.arguments.payload
             state = ComponentState.LOADED
         } else {
@@ -45,16 +45,18 @@ onMount(() => {
 
         return true;
     })
+}
+
+onMount(() => {
+    getTroubleDetails()
 
     dataStream.subscribe((data:SocketData) => {
         if(data.type == SocketMessageType.UPDATE) {
-            const updateContext = data.arguments.payload.context
-            if(updateContext) {
-                const item = updateContext.QueueItem as QueueDetails
-                if(!item || item.id != details.id) return;
-
-                // We received an update about this queue item. Ship the trouble (if any)
-                embeddedPanel.updateState(item)
+            const updateContext = data.arguments.context
+            if(updateContext && updateContext.QueueItem.id == details.id) {
+                // Update received for this item, refetch trouble details
+                state = ComponentState.INIT
+                getTroubleDetails()
             }
         }
     })

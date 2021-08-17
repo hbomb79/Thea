@@ -52,7 +52,7 @@ const (
 	Pending QueueItemStatus = iota
 	Processing
 	Completed
-	Troubled
+	NeedsResolving
 	Cancelled
 )
 
@@ -70,25 +70,42 @@ type QueueItem struct {
 	TitleInfo  *TitleInfo           `json:"title_info"`
 	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
 	Trouble    Trouble              `json:"trouble"`
+	Processor  *Processor           `json:"-"`
 }
 
-func NewQueueItem(name string, path string) *QueueItem {
+func NewQueueItem(name string, path string, proc *Processor) *QueueItem {
 	return &QueueItem{
-		Name:   name,
-		Path:   path,
-		Status: Pending,
-		Stage:  worker.Title,
+		Name:      name,
+		Path:      path,
+		Status:    Pending,
+		Stage:     worker.Title,
+		Processor: proc,
 	}
 }
 
-// RaiseTrouble is a method that can be called from
+func (item *QueueItem) SetStatusLine(status string) {
+	item.StatusLine = status
+	item.NotifyUpdate()
+}
+
+func (item *QueueItem) SetStage(stage worker.PipelineStage) {
+	item.Stage = stage
+	item.NotifyUpdate()
+}
+
+func (item *QueueItem) SetStatus(status QueueItemStatus) {
+	item.Status = status
+	item.NotifyUpdate()
+}
+
+// SetTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
-func (item *QueueItem) RaiseTrouble(trouble Trouble) error {
+func (item *QueueItem) SetTrouble(trouble Trouble) error {
 	fmt.Printf("[Trouble] Raising trouble (%T) for QueueItem (%v)!\n", trouble, item.Path)
 	if item.Trouble == nil {
-		item.Status = Troubled
 		item.Trouble = trouble
+		item.SetStatus(NeedsResolving)
 
 		return nil
 	}
@@ -96,16 +113,15 @@ func (item *QueueItem) RaiseTrouble(trouble Trouble) error {
 	return errors.New(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble))
 }
 
-// ResetTrouble is used to remove the trouble state from
-// this item, and sets the items status to 'Pending', rather than
-// 'Troubled'
-func (item *QueueItem) ResetTrouble() {
-	if item.Status != Troubled {
+// ClearTrouble is used to remove the trouble state from
+// this item and notify the procesor of this change
+func (item *QueueItem) ClearTrouble() {
+	if item.Trouble == nil {
 		return
 	}
 
 	item.Trouble = nil
-	item.Status = Pending
+	item.NotifyUpdate()
 }
 
 // FormatTitle accepts a string (title) and reformats it
@@ -163,6 +179,10 @@ func (item *QueueItem) Cancel() {
 	}
 
 	// TODO cancel item
+}
+
+func (item *QueueItem) NotifyUpdate() {
+	item.Processor.UpdateChan <- item.Id
 }
 
 // TitleInfo contains the information about the import QueueItem

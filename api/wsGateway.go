@@ -18,7 +18,7 @@ func NewWsGateway(proc *processor.Processor) *WsGateway {
 
 // ** Websocket API Methods ** //
 func (wsGateway *WsGateway) WsQueueIndex(hub *ws.SocketHub, message *ws.SocketMessage) error {
-	data, err := sheriffApiMarshal(wsGateway.proc.Queue, []string{"api"})
+	data, err := sheriffApiMarshal(wsGateway.proc.Queue, "api")
 	if err != nil {
 		return err
 	}
@@ -28,11 +28,11 @@ func (wsGateway *WsGateway) WsQueueIndex(hub *ws.SocketHub, message *ws.SocketMe
 	// Also set the ID to match any provided by the client
 	// so they can pair this reply with the source request.
 	hub.Send(&ws.SocketMessage{
-		Title:     "COMMAND_SUCCESS",
-		Arguments: map[string]interface{}{"payload": data, "command": message},
-		Type:      ws.Response,
-		Id:        message.Id,
-		Target:    message.Origin,
+		Title:  "COMMAND_SUCCESS",
+		Body:   map[string]interface{}{"payload": data, "command": message},
+		Type:   ws.Response,
+		Id:     message.Id,
+		Target: message.Origin,
 	})
 
 	return nil
@@ -43,22 +43,22 @@ func (wsGateway *WsGateway) WsQueueDetails(hub *ws.SocketHub, message *ws.Socket
 		return err
 	}
 
-	v, ok := message.Arguments["id"].(float64)
+	v, ok := message.Body["id"].(float64)
 	if !ok {
 		return errors.New("failed to vaidate arguments - ID provided is not an integer")
 	}
 
-	queueItem := wsGateway.proc.Queue.FindById(int(v))
-	if queueItem == nil {
+	queueItem, idx := wsGateway.proc.Queue.FindById(int(v))
+	if queueItem == nil || idx < 0 {
 		return errors.New("failed to get queue details - item with matching ID not found")
 	}
 
 	hub.Send(&ws.SocketMessage{
-		Title:     "COMMAND_SUCCESS",
-		Arguments: map[string]interface{}{"payload": queueItem, "command": message},
-		Id:        message.Id,
-		Target:    message.Origin,
-		Type:      ws.Response,
+		Title:  "COMMAND_SUCCESS",
+		Body:   map[string]interface{}{"payload": queueItem, "command": message},
+		Id:     message.Id,
+		Target: message.Origin,
+		Type:   ws.Response,
 	})
 	return nil
 }
@@ -69,9 +69,9 @@ func (wsGateway *WsGateway) WsQueuePromote(hub *ws.SocketHub, message *ws.Socket
 		return err
 	}
 
-	idArg := message.Arguments["id"]
-	queueItem := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
-	if queueItem == nil {
+	idArg := message.Body["id"]
+	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	if queueItem == nil || idx < 0 {
 		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
 	}
 
@@ -81,11 +81,11 @@ func (wsGateway *WsGateway) WsQueuePromote(hub *ws.SocketHub, message *ws.Socket
 	}
 
 	hub.Send(&ws.SocketMessage{
-		Title:     "COMMAND_SUCCESS",
-		Arguments: map[string]interface{}{"payload": queueItem, "command": message},
-		Id:        message.Id,
-		Target:    message.Origin,
-		Type:      ws.Response,
+		Title:  "COMMAND_SUCCESS",
+		Body:   map[string]interface{}{"payload": queueItem, "command": message},
+		Id:     message.Id,
+		Target: message.Origin,
+		Type:   ws.Response,
 	})
 
 	return nil
@@ -97,31 +97,34 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *ws.SocketHub, message *ws.Sock
 		return err
 	}
 
-	idArg := message.Arguments["id"]
-	queueItem := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
-	if queueItem == nil {
+	idArg := message.Body["id"]
+	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	if queueItem == nil || idx < 0 {
 		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
 	} else if queueItem.Trouble == nil {
 		return errors.New(fmt.Sprintf(ERR_FMT, "item has no trouble"))
 	}
 
 	trouble := struct {
+		Message           string                `json:"message"`
 		Type              processor.TroubleType `json:"type"`
 		ExpectedArgs      map[string]string     `json:"expectedArgs"`
-		processor.Trouble `json:"trouble"`
+		AdditionalPayload interface{}           `json:"additionalPayload"`
+		ItemId            int                   `json:"itemId"`
 	}{
+		queueItem.Trouble.Error(),
 		queueItem.Trouble.Type(),
 		queueItem.Trouble.Args(),
-		queueItem.Trouble,
+		queueItem.Trouble.Payload(),
+		queueItem.Id,
 	}
 
-	fmt.Printf("[Payload] Encoding a payload for %#v\n", queueItem.Trouble)
 	hub.Send(&ws.SocketMessage{
-		Title:     "COMMAND_SUCCESS",
-		Arguments: map[string]interface{}{"payload": trouble, "command": message},
-		Id:        message.Id,
-		Target:    message.Origin,
-		Type:      ws.Response,
+		Title:  "COMMAND_SUCCESS",
+		Body:   map[string]interface{}{"payload": trouble, "command": message},
+		Id:     message.Id,
+		Target: message.Origin,
+		Type:   ws.Response,
 	})
 
 	return nil
@@ -134,18 +137,19 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *ws.SocketHub, message *ws.Sock
 		return err
 	}
 
-	idArg := message.Arguments["id"]
-	if item := wsGateway.proc.Queue.FindById(int(idArg.(float64))); item != nil {
-		if err := item.Trouble.Resolve(message.Arguments); err != nil {
+	idArg := message.Body["id"]
+	if item, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64))); item != nil && idx >= 0 {
+		if err := item.Trouble.Resolve(message.Body); err != nil {
 			return errors.New(fmt.Sprintf(ERR_FMT, idArg, err.Error()))
 		}
 
+		wsGateway.proc.WorkerPool.WakeupWorkers(item.Stage)
 		hub.Send(&ws.SocketMessage{
 			Title:  "COMMAND_SUCCESS",
 			Id:     message.Id,
 			Target: message.Origin,
 			Type:   ws.Response,
-			Arguments: map[string]interface{}{
+			Body: map[string]interface{}{
 				"command": message,
 			},
 		})

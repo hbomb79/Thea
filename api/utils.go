@@ -60,7 +60,7 @@ func trimTrailingSlashesMiddleware(next http.Handler) http.Handler {
 // the provided argument using Sheriff to remove
 // items from the struct that aren't exposed to the API (i.e. removes
 // struct fields that lack the `groups:"api"` tag)
-func sheriffApiMarshal(target interface{}, groups []string) (interface{}, error) {
+func sheriffApiMarshal(target interface{}, groups ...string) (interface{}, error) {
 	o := &sheriff.Options{Groups: groups}
 
 	data, err := sheriff.Marshal(o, target)

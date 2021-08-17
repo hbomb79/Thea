@@ -1,13 +1,12 @@
 <script lang="ts">
-import { createEventDispatcher, onMount } from "svelte";
+import { createEventDispatcher } from "svelte";
 import { SocketMessageType } from "../../../store";
 import type { SocketData } from "../../../store";
 
-import type { QueueDetails, QueueTroubleDetails } from "../../QueueItem.svelte";
+import type {  QueueTroubleDetails } from "../../QueueItem.svelte";
 import { QueueTroubleType } from "../../QueueItem.svelte";
 
 export let troubleDetails:QueueTroubleDetails
-export let queueDetails:QueueDetails
 
 const dispatcher = createEventDispatcher()
 enum ComponentState {
@@ -21,26 +20,11 @@ enum ComponentState {
 
 let state = ComponentState.READY
 let err:string = ''
-export function updateState(item:QueueDetails) {
-    if(state != ComponentState.CONFIRMING || item.id != queueDetails.id) return
-
-    //TODO the logic here needs some work. Need to figure out a nice
-    // way to handle a new trouble type (i.e. a trouble exists, but it's
-    // a different type.). Should we tell the user, or maybe detect if it's
-    // 'our' problem, or a trouble from the next stage and react accordingly.
-    if(item.trouble && item.trouble.type == queueDetails.trouble.type) {
-        // The data we received is a trouble state that matches our
-        // current trouble state. Our attempt to resolve didn't work!
-        state = ComponentState.TROUBLE_PERSISTS
-    } else {
-        state = ComponentState.READY
-    }
-}
 
 function resolveChoice(choiceId:number) {
     state = ComponentState.RESOLVING
     dispatcher("try-resolve", {
-        args: {choice: choiceId},
+        args: {choiceId: choiceId},
         cb: (data:SocketData): boolean => {
             if(data.type == SocketMessageType.RESPONSE) {
                 console.log("Successfully resolved trouble state. Waiting for confirmation")
@@ -111,11 +95,11 @@ function resolveChoice(choiceId:number) {
 
 {#if state == ComponentState.READY}
     <h2>OMDB Troubled</h2>
-    <p class="trouble">{troubleDetails.trouble.message}</p>
+    <p class="trouble">{troubleDetails.message}</p>
 
     {#if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE}
         <div class="choices">
-            {#each troubleDetails.trouble.choices as {Title, Year, imdbId, Type}, i}
+            {#each troubleDetails.additionalPayload.choices as {Title, Year, imdbId, Type}, i}
                 <div class="choice choice-{i}" on:click="{() => resolveChoice(i)}">
                     <h2 class="title">{Title}<span class="id">{imdbId}</span></h2>
                     <p>{Type} from {Year}</p>

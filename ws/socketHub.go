@@ -163,10 +163,10 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Send welcome message to this client
 	hub.Send(&SocketMessage{
-		Title:     "CONNECTION_ESTABLISHED",
-		Arguments: map[string]interface{}{"client": id},
-		Target:    &id,
-		Type:      Welcome,
+		Title:  "CONNECTION_ESTABLISHED",
+		Body:   map[string]interface{}{"client": id},
+		Target: &id,
+		Type:   Welcome,
 	})
 
 	// Ensure the client is deregistered once it's read loop closes
@@ -229,11 +229,11 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 
 	replyWithError := func(err string) {
 		hub.Send(&SocketMessage{
-			Title:     "COMMAND_FAILURE",
-			Id:        command.Id,
-			Target:    command.Origin,
-			Arguments: map[string]interface{}{"command": command, "error": err},
-			Type:      ErrorResponse,
+			Title:  "COMMAND_FAILURE",
+			Id:     command.Id,
+			Target: command.Origin,
+			Body:   map[string]interface{}{"command": command, "error": err},
+			Type:   ErrorResponse,
 		})
 	}
 

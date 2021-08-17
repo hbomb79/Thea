@@ -9,6 +9,7 @@ import { onMount } from 'svelte'
 import { commander, dataStream } from '../commander';
 import { SocketMessageType } from '../store';
 import Item from './QueueItem.svelte';
+import type { QueueDetails } from './QueueItem.svelte';
 import type { SocketData } from '../store';
 import type { QueueItem } from './QueueItem.svelte';
 
@@ -40,8 +41,20 @@ onMount(() => {
     });
 
     dataStream.subscribe(data => {
+        // Find the queue item inside the items array and replace it with the new information
+        // we have available! Other sub-components will have to manually listen to this
+        // UPDATE event and launch requests as needed (for trouble details, as an example.)
         if(data.type == SocketMessageType.UPDATE) {
-            //TODO
+            const newItem = data.arguments.context.QueueItem as QueueDetails
+            const idx = items.findIndex(item => item.id == newItem.id)
+
+            if(idx < 0) {
+                items.push(newItem)
+            } else {
+                items[idx] = newItem
+            }
+
+            items = items
         }
     })
 })

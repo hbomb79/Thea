@@ -78,7 +78,8 @@ func (queue *processorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 
 	for _, item := range queue.Items {
 		if item.Stage == stage && item.Status == Pending {
-			item.Status = Processing
+			item.SetStatus(Processing)
+
 			return item
 		}
 	}
@@ -86,7 +87,7 @@ func (queue *processorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 	return nil
 }
 
-// AdvanceStage will take the QueueItem this method is attached to,
+// AdvanceStage will take the QueueItem this method is attached to, reset it's trouble state,
 // and set it's stage to the next stage and reset it's status to Pending
 // Note: this method will lock the mutex for protected access to the
 // shared queue.
@@ -95,16 +96,16 @@ func (queue *processorQueue) AdvanceStage(item *QueueItem) {
 	defer queue.Unlock()
 
 	if item.Stage == worker.Finish {
-		item.Status = Completed
+		item.SetStatus(Completed)
 	} else if item.Stage == worker.Format {
-		item.Stage = worker.Finish
-		item.Status = Completed
+		item.SetStage(worker.Finish)
+		item.SetStatus(Completed)
 
 		// Add this item to the cache to indicate it's complete
 		queue.cache.PushItem(item.Path, true)
 	} else {
-		item.Stage++
-		item.Status = Pending
+		item.SetStage(item.Stage + 1)
+		item.SetStatus(Pending)
 	}
 }
 
@@ -152,20 +153,25 @@ type FilterFn func(*processorQueue, int, *QueueItem) bool
 // returns true, the item is retained. Otherwise, if the callback returns false, the item
 // is ejected from the queue.
 func (queue *processorQueue) Filter(cb FilterFn) {
+	queue.Lock()
+	defer queue.Unlock()
+
 	newItems := make([]*QueueItem, 0)
 	for key, item := range queue.Items {
 		if cb(queue, key, item) {
 			newItems = append(newItems, item)
 		}
 	}
+
+	queue.Items = newItems
 }
 
-func (queue *processorQueue) FindById(id int) *QueueItem {
-	for _, item := range queue.Items {
+func (queue *processorQueue) FindById(id int) (*QueueItem, int) {
+	for idx, item := range queue.Items {
 		if item.Id == id {
-			return item
+			return item, idx
 		}
 	}
 
-	return nil
+	return nil, -1
 }

@@ -65,7 +65,7 @@ func (tpa *Tpa) setupRoutes() {
 func (tpa *Tpa) OnProcessorUpdate(update *processor.ProcessorUpdate) {
 	tpa.socketHub.Send(&ws.SocketMessage{
 		Title: "UPDATE",
-		Arguments: map[string]interface{}{
+		Body: map[string]interface{}{
 			"context": update.Context,
 		},
 		Type: ws.Update,
@@ -86,7 +86,7 @@ func main() {
 	procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml"))
 
 	tpa := NewTpa()
-	tpa.proc.WithConfig(procCfg)
+	tpa.proc.WithConfig(procCfg).WithNegotiator(tpa)
 
 	tpa.Start()
 }

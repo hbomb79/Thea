@@ -2,12 +2,12 @@ package processor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,46 +24,6 @@ const (
 	OMDB_API string = "http://www.omdbapi.com/?%s=%s&apikey=%s"
 )
 
-// toArgsMap takes a given struct and will go through all
-// fields of the provided input and create an output map where
-// each key is the name of the field, and each value is a string
-// representation of the type of the field (e.g. string, int, bool)
-func toArgsMap(in interface{}) (map[string]string, error) {
-	out := make(map[string]string)
-
-	v := reflect.ValueOf(in)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-
-	if v.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("toArgsMap only accepts structs - got %T", v)
-	}
-
-	typ := v.Type()
-	for i := 0; i < v.NumField(); i++ {
-		var typeName string
-
-		fi := typ.Field(i)
-		if v, ok := fi.Tag.Lookup("decode"); ok {
-			if v == "-" {
-				// Field wants to be ignored
-				continue
-			}
-
-			// Field has a tag to specify the decode type. Use that instead
-			typeName = v
-		} else {
-			// Use actual type name
-			typeName = fi.Type.Name()
-		}
-
-		out[fi.Name] = typeName
-	}
-
-	return out, nil
-}
-
 // baseTask is a struct that implements very little functionality, and is used
 // to facilitate the other task types implemented in this file. This struct
 // mainly just handled some repeated code definitions, such as the basic
@@ -72,22 +32,10 @@ type baseTask struct {
 	assignedItem *QueueItem
 }
 
-// raiseTrouble is a helper method used to push a new trouble
-// in to the slice for this task
+// raiseTrouble is a helper method used to set a Trouble on
+// the item it's attached to
 func (task *baseTask) raiseTrouble(proc *Processor, trouble Trouble) {
-	trouble.Item().RaiseTrouble(trouble)
-
-	task.notifyTrouble(proc, trouble)
-}
-
-// notifyTrouble sends a ProcessorUpdate to the processor which
-// is likely then pushed along to any connected clients on
-// the web socket
-func (task *baseTask) notifyTrouble(proc *Processor, trouble Trouble) {
-	proc.PushUpdate(&ProcessorUpdate{
-		Title:   "TROUBLE",
-		Context: processorUpdateContext{Trouble: trouble, QueueItem: trouble.Item()},
-	})
+	trouble.Item().SetTrouble(trouble)
 }
 
 // executeTask implements the core worker work/wait loop that
@@ -137,14 +85,50 @@ func (task *TitleTask) Execute(w *worker.Worker) error {
 	return task.executeTask(w, task.proc, task.processTitle)
 }
 
+// processTroubleState will check if the queue item is troubled, and if so, will
+// query the trouble for information about how the user wishes it to be resolved.
+// This method will return an error if the processing fails. The second return (bool)
+// indicates whether or not the item has been fully processed. Item trouble is cleared
+// when this method returns
+func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
+	defer queueItem.ClearTrouble()
+
+	if queueItem.Trouble != nil {
+		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
+			// Check for the mandatory 'info' key.
+			info, ok := trblCtx["info"]
+			if !ok {
+				return errors.New("resolution context is missing 'info' key as is therefore invalid - ignoring context!"), false
+			}
+
+			// Assign the 'info' provided as the items TitleInfo and move on.
+			titleInfo, ok := info.(TitleInfo)
+			if ok {
+				queueItem.TitleInfo = &titleInfo
+				task.advance(queueItem)
+
+				return nil, true
+			}
+
+			return errors.New("resolution contexts 'info' key contains an invalid value! Failed to cast to 'TitleInfo'"), false
+		}
+	}
+
+	return nil, false
+}
+
 // Processes a given queueItem by filtering out irrelevant information from it's
 // title, and finding relevant information such as the season, episode and resolution
-// TODO: Maybe we should be checking file metadata to get accurate resolution
-// and runtime information - this info could also be found in the FormatTask via
-// ffprobe
 func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) error {
-	if err := queueItem.FormatTitle(); err != nil {
-		return err
+	err, isComplete := task.processTroubleState(queueItem)
+	if err != nil {
+		fmt.Printf("[TitleWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
+	}
+
+	if !isComplete {
+		if err := queueItem.FormatTitle(); err != nil {
+			return err
+		}
 	}
 
 	task.advance(queueItem)
@@ -154,10 +138,7 @@ func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) erro
 // advances the item by advancing the stage of the item, and waking up
 // any sleeping workers in the next stage
 func (task *TitleTask) advance(item *QueueItem) {
-	// Release the QueueItem by advancing it to the next pipeline stage
 	task.proc.Queue.AdvanceStage(item)
-
-	// Wakeup any pipeline workers that are sleeping
 	task.proc.WorkerPool.WakeupWorkers(worker.Omdb)
 }
 
@@ -208,7 +189,7 @@ func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*Om
 	// Check the response by parsing the response, and total results.
 	if !result.Response || result.Count == 0 {
 		// Response from OMDB failed!
-		return nil, &OmdbNoResultError{"Failed to parse OMDB result - response empty", queueItem, task}
+		return nil, &OmdbTaskError{NewBaseTaskError("Failed to parse OMDB result - response empty", queueItem, OMDB_NO_RESULT_FAILURE), nil}
 	}
 
 	items := result.Results
@@ -270,9 +251,9 @@ func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*Om
 
 	// If we still have multiple responses then we need help from the user to decide.
 	if len(items) == 0 {
-		return nil, &OmdbNoResultError{"parse failed: no valid choices remain after filtering", queueItem, task}
+		return nil, &OmdbTaskError{NewBaseTaskError("parse failed: no valid choices remain after filtering", queueItem, OMDB_NO_RESULT_FAILURE), nil}
 	} else if len(items) > 1 {
-		return nil, &OmdbMultipleResultError{"parse failed: multiple choices remain after filtering", queueItem, task, items}
+		return nil, &OmdbTaskError{NewBaseTaskError("parse failed: multiple choices remain after filtering", queueItem, OMDB_MULTIPLE_RESULT_FAILURE), items}
 	}
 
 	return items[0], nil
@@ -281,7 +262,75 @@ func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*Om
 // Execute uses the provided baseTask.executeTask method to run this tasks
 // work function in a work/wait worker loop
 func (task *OmdbTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.find)
+	return task.executeTask(w, task.proc, func(w *worker.Worker, queueItem *QueueItem) error {
+		err, isComplete := task.processTroubleState(queueItem)
+		if err != nil {
+			fmt.Printf("[OmdbWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
+		}
+
+		if isComplete {
+			return nil
+		}
+
+		return task.find(w, queueItem)
+	})
+}
+
+// processTroubleState will check if the queue item is troubled, and if so, will
+// query the trouble for information about how the user wishes it to be resolved.
+// This method will return an error if the processing fails. The second return (bool)
+// indicates whether or not the item has been fully processed. Trouble is cleared
+// once this method returns.
+func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
+	if queueItem.Trouble == nil {
+		return nil, false
+	}
+
+	defer queueItem.ClearTrouble()
+	trbl, ok := queueItem.Trouble.(*OmdbTaskError)
+	if !ok {
+		return fmt.Errorf("items trouble type (%T) does not match for this worker", queueItem.Trouble), false
+	}
+
+	trblCtx := trbl.ResolutionContext()
+	fetchId, omdbStruct, action := trblCtx["fetchId"], trblCtx["omdbStruct"], trblCtx["action"]
+	if fetchId != nil {
+		id, ok := fetchId.(string)
+		if !ok {
+			return errors.New("resolution context contains invalid 'fetchId' field (not string)"), false
+		}
+
+		result, err := task.fetch(id, queueItem)
+		if err != nil {
+			return err, false
+		}
+
+		queueItem.OmdbInfo = result
+		task.advance(queueItem)
+
+		return nil, true
+	} else if omdbStruct != nil {
+		info, ok := omdbStruct.(OmdbInfo)
+		if !ok {
+			return errors.New("resolution context contains invalid 'replacementStruct' field (not an OmdbInfo struct)"), false
+		}
+
+		queueItem.OmdbInfo = &info
+		task.advance(queueItem)
+
+		return nil, true
+	} else if action != nil {
+		actionVal, ok := action.(string)
+		if !ok {
+			return errors.New("resolution context contains invalid 'action' key (not a string)"), false
+		} else if actionVal != "retry" {
+			return fmt.Errorf("resolution context contains action with value '%s' which is invalid. Only 'retry' is permitted\n", actionVal), false
+		}
+
+		return nil, false
+	} else {
+		return errors.New("resolution context contains none of acceptable fields (choiceId, imdbId, replacementStruct, action)!"), false
+	}
 }
 
 // search will perform a search query to OMDB and will return the result
@@ -294,18 +343,18 @@ func (task *OmdbTask) search(w *worker.Worker, queueItem *QueueItem) (*OmdbInfo,
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "s", queueItem.TitleInfo.Title, cfg.OmdbKey))
 	if err != nil {
 		// Request exception
-		return nil, &OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error()), queueItem, task}
+		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("search failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, &OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error()), queueItem, task}
+		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("search failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
 	}
 
 	var searchResult OmdbSearchResult
 	if err = json.Unmarshal(body, &searchResult); err != nil {
-		return nil, &OmdbRequestError{fmt.Sprintf("search failed: %s", err.Error()), queueItem, task}
+		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("search failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
 	}
 
 	resultItem, err := searchResult.parse(queueItem, task)
@@ -331,18 +380,18 @@ func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, err
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "i", imdbId, cfg.OmdbKey))
 	if err != nil {
 		// Request exception
-		return nil, &OmdbRequestError{fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, task}
+		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, &OmdbRequestError{fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, task}
+		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
 	}
 
 	var result OmdbInfo
 	if err = json.Unmarshal(body, &result); err != nil {
-		return nil, &OmdbRequestError{fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, task}
+		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
 	}
 
 	return &result, nil
@@ -392,6 +441,7 @@ func (task *FormatTask) Execute(w *worker.Worker) error {
 // format will take the provided queueItem and format the file in to
 // a new format.
 func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
+	queueItem.ClearTrouble()
 	outputFormat := task.proc.Config.Format.TargetFormat
 	ffmpegOverwrite := true
 	ffmpegOpts, ffmpegCfg := &ffmpeg.Options{
@@ -420,7 +470,7 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 		messageMatcher := regexp.MustCompile(`(?s)message: ({.*})`)
 		groups := messageMatcher.FindStringSubmatch(err.Error())
 		if messageMatcher == nil {
-			return &FormatTaskError{err.Error(), queueItem, task}
+			return &FormatTaskError{NewBaseTaskError(err.Error(), queueItem, FFMPEG_FAILURE)}
 		}
 
 		// ffmpeg error is returned as a JSON encoded string. Unmarshal so we can extract the
@@ -429,12 +479,12 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 		jsonErr := json.Unmarshal([]byte(groups[1]), &out)
 		if jsonErr != nil {
 			// We failed to extract the info.. just use the entire string as our error
-			return &FormatTaskError{groups[1], queueItem, task}
+			return &FormatTaskError{NewBaseTaskError(groups[1], queueItem, FFMPEG_FAILURE)}
 		}
 
 		// Extract the exception from this result
 		ffmpegException := out["error"].(map[string]interface{})
-		return &FormatTaskError{ffmpegException["string"].(string), queueItem, task}
+		return &FormatTaskError{NewBaseTaskError(ffmpegException["string"].(string), queueItem, FFMPEG_FAILURE)}
 	}
 
 	for v := range progress {
@@ -455,4 +505,5 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 func (task *FormatTask) advance(item *QueueItem) {
 	// Release the QueueItem by advancing it to the next pipeline stage
 	task.proc.Queue.AdvanceStage(item)
+	task.proc.WorkerPool.WakeupWorkers(worker.Database)
 }

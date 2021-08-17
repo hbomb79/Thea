@@ -161,6 +161,8 @@ func (queue *processorQueue) Filter(cb FilterFn) {
 			newItems = append(newItems, item)
 		}
 	}
+
+	queue.Items = newItems
 }
 
 func (queue *processorQueue) FindById(id int) *QueueItem {

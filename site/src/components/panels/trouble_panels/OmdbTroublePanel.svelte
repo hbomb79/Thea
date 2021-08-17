@@ -40,7 +40,7 @@ export function updateState(item:QueueDetails) {
 function resolveChoice(choiceId:number) {
     state = ComponentState.RESOLVING
     dispatcher("try-resolve", {
-        args: {choice: choiceId},
+        args: {choiceId: choiceId},
         cb: (data:SocketData): boolean => {
             if(data.type == SocketMessageType.RESPONSE) {
                 console.log("Successfully resolved trouble state. Waiting for confirmation")

@@ -42,8 +42,8 @@ func (httpGateway *HttpGateway) HttpQueueGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	queueItem := queue.FindById(id)
-	if queueItem == nil {
+	queueItem, idx := queue.FindById(id)
+	if queueItem == nil || idx < 0 {
 		JsonMessage(w, "QueueItem ID '"+stringId+"' cannot be found", http.StatusBadRequest)
 		return
 	}
@@ -64,8 +64,8 @@ func (httpGateway *HttpGateway) HttpQueueUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	queueItem := queue.FindById(id)
-	if queueItem == nil {
+	queueItem, idx := queue.FindById(id)
+	if queueItem == nil || idx < 0 {
 		JsonMessage(w, "QueueItem with ID "+fmt.Sprint(id)+" not found", http.StatusNotFound)
 	} else if queue.PromoteItem(queueItem) != nil {
 		JsonMessage(w, "Failed to promote QueueItem #"+stringId+": "+err.Error(), http.StatusInternalServerError)

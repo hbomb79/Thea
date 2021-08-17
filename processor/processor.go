@@ -84,8 +84,9 @@ type Negotiator interface {
 }
 
 type processorUpdateContext struct {
-	QueueItem *QueueItem
-	Trouble   Trouble
+	QueueItem    *QueueItem
+	Trouble      Trouble
+	ItemPosition int
 }
 type ProcessorUpdate struct {
 	Title   string
@@ -255,12 +256,13 @@ func (p *Processor) listenForUpdates() {
 
 func (p *Processor) submitUpdates() {
 	for k := range p.pendingUpdates {
-		queueItem := p.Queue.FindById(k)
+		queueItem, idx := p.Queue.FindById(k)
 		p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{
 			Title: queueItem.StatusLine,
 			Context: processorUpdateContext{
-				QueueItem: queueItem,
-				Trouble:   queueItem.Trouble,
+				QueueItem:    queueItem,
+				ItemPosition: idx,
+				Trouble:      queueItem.Trouble,
 			},
 		})
 

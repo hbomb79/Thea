@@ -48,8 +48,8 @@ func (wsGateway *WsGateway) WsQueueDetails(hub *ws.SocketHub, message *ws.Socket
 		return errors.New("failed to vaidate arguments - ID provided is not an integer")
 	}
 
-	queueItem := wsGateway.proc.Queue.FindById(int(v))
-	if queueItem == nil {
+	queueItem, idx := wsGateway.proc.Queue.FindById(int(v))
+	if queueItem == nil || idx < 0 {
 		return errors.New("failed to get queue details - item with matching ID not found")
 	}
 
@@ -70,8 +70,8 @@ func (wsGateway *WsGateway) WsQueuePromote(hub *ws.SocketHub, message *ws.Socket
 	}
 
 	idArg := message.Body["id"]
-	queueItem := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
-	if queueItem == nil {
+	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	if queueItem == nil || idx < 0 {
 		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
 	}
 
@@ -98,8 +98,8 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *ws.SocketHub, message *ws.Sock
 	}
 
 	idArg := message.Body["id"]
-	queueItem := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
-	if queueItem == nil {
+	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	if queueItem == nil || idx < 0 {
 		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
 	} else if queueItem.Trouble == nil {
 		return errors.New(fmt.Sprintf(ERR_FMT, "item has no trouble"))
@@ -138,7 +138,7 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *ws.SocketHub, message *ws.Sock
 	}
 
 	idArg := message.Body["id"]
-	if item := wsGateway.proc.Queue.FindById(int(idArg.(float64))); item != nil {
+	if item, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64))); item != nil && idx >= 0 {
 		if err := item.Trouble.Resolve(message.Body); err != nil {
 			return errors.New(fmt.Sprintf(ERR_FMT, idArg, err.Error()))
 		}

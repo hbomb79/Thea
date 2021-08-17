@@ -166,12 +166,12 @@ func (queue *processorQueue) Filter(cb FilterFn) {
 	queue.Items = newItems
 }
 
-func (queue *processorQueue) FindById(id int) *QueueItem {
-	for _, item := range queue.Items {
+func (queue *processorQueue) FindById(id int) (*QueueItem, int) {
+	for idx, item := range queue.Items {
 		if item.Id == id {
-			return item
+			return item, idx
 		}
 	}
 
-	return nil
+	return nil, -1
 }

@@ -143,6 +143,7 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *ws.SocketHub, message *ws.Sock
 			return errors.New(fmt.Sprintf(ERR_FMT, idArg, err.Error()))
 		}
 
+		wsGateway.proc.WorkerPool.WakeupWorkers(item.Stage)
 		hub.Send(&ws.SocketMessage{
 			Title:  "COMMAND_SUCCESS",
 			Id:     message.Id,

@@ -96,7 +96,7 @@ func (base *baseTaskError) Type() TroubleType {
 
 func (base *baseTaskError) ProvideResolutionContext(key string, ctx interface{}) {
 	base.resolutionContext[key] = ctx
-	base.queueItem.Status = Pending
+	base.queueItem.SetStatus(Pending)
 }
 
 func (base *baseTaskError) ResolutionContext() map[string]interface{} {
@@ -224,6 +224,6 @@ type FormatTaskError struct {
 // that a worker will try this queue item again. Repeated failures likely means the input
 // file is bad.
 func (ex FormatTaskError) Resolve(map[string]interface{}) error {
-	ex.queueItem.Status = Pending
+	ex.queueItem.SetStatus(Pending)
 	return nil
 }

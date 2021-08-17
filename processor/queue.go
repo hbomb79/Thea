@@ -78,7 +78,8 @@ func (queue *processorQueue) Pick(stage worker.PipelineStage) *QueueItem {
 
 	for _, item := range queue.Items {
 		if item.Stage == stage && item.Status == Pending {
-			item.Status = Processing
+			item.SetStatus(Processing)
+
 			return item
 		}
 	}
@@ -95,16 +96,16 @@ func (queue *processorQueue) AdvanceStage(item *QueueItem) {
 	defer queue.Unlock()
 
 	if item.Stage == worker.Finish {
-		item.Status = Completed
+		item.SetStatus(Completed)
 	} else if item.Stage == worker.Format {
-		item.Stage = worker.Finish
-		item.Status = Completed
+		item.SetStage(worker.Finish)
+		item.SetStatus(Completed)
 
 		// Add this item to the cache to indicate it's complete
 		queue.cache.PushItem(item.Path, true)
 	} else {
-		item.Stage++
-		item.Status = Pending
+		item.SetStage(item.Stage + 1)
+		item.SetStatus(Pending)
 	}
 }
 

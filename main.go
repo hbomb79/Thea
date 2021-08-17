@@ -86,7 +86,7 @@ func main() {
 	procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml"))
 
 	tpa := NewTpa()
-	tpa.proc.WithConfig(procCfg)
+	tpa.proc.WithConfig(procCfg).WithNegotiator(tpa)
 
 	tpa.Start()
 }

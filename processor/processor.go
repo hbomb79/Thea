@@ -71,10 +71,12 @@ func (config *TPAConfig) LoadFromFile(configPath string) error {
 // the queue of items, the pool of workers that are
 // processing the queue, and the users configuration
 type Processor struct {
-	Config     *TPAConfig
-	Queue      *processorQueue
-	WorkerPool *worker.WorkerPool
-	Negotiator Negotiator
+	Config         *TPAConfig
+	Queue          *processorQueue
+	WorkerPool     *worker.WorkerPool
+	Negotiator     Negotiator
+	UpdateChan     chan int
+	pendingUpdates map[int]bool
 }
 
 type Negotiator interface {
@@ -93,7 +95,7 @@ type ProcessorUpdate struct {
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
 func NewProcessor() *Processor {
-	return &Processor{WorkerPool: worker.NewWorkerPool()}
+	return &Processor{WorkerPool: worker.NewWorkerPool(), UpdateChan: make(chan int), pendingUpdates: make(map[int]bool)}
 }
 
 // Returns the processor provided after setting the Config
@@ -112,16 +114,6 @@ func (p *Processor) WithNegotiator(n Negotiator) *Processor {
 	return p
 }
 
-// Called when something has changed with the processor state,
-// and we want our attached Negotiator to be alerted
-func (p *Processor) PushUpdate(update *ProcessorUpdate) {
-	if p.Negotiator == nil {
-		return
-	}
-
-	p.Negotiator.OnProcessorUpdate(update)
-}
-
 // Start will start the workers inside the WorkerPool
 // responsible for the various tasks inside the program
 // This method will wait on the WaitGroup attached to the WorkerPool
@@ -133,10 +125,22 @@ func (p *Processor) Start() error {
 		log.Panic("Failed to start PollingWorker - TickInterval is non-positive (make sure 'import_polling_delay' is set in your config)")
 	}
 
+	go func() {
+		ticker := time.NewTicker(time.Second * 1).C
+		for {
+			select {
+			case _ = <-ticker:
+				p.submitUpdates()
+			}
+		}
+	}()
+
 	go func(target <-chan time.Time) {
 		p.SynchroniseQueue()
 		p.WorkerPool.WakeupWorkers(worker.Title)
 	}(time.NewTicker(tickInterval).C)
+
+	go p.listenForUpdates()
 
 	// Start some workers in the pool to handle various tasks
 	threads, workers := p.Config.Concurrent, make([]*worker.Worker, 0)
@@ -217,7 +221,7 @@ func (p *Processor) DiscoverItems() (map[string]fs.FileInfo, error) {
 // add them to the Queue
 func (p *Processor) InjestQueue(presentItems map[string]fs.FileInfo) error {
 	for path, info := range presentItems {
-		if e := p.Queue.Push(NewQueueItem(info.Name(), path)); e != nil {
+		if e := p.Queue.Push(NewQueueItem(info.Name(), path, p)); e != nil {
 			fmt.Printf("[Processor] (!) Ignoring injestable item - " + e.Error())
 		}
 	}
@@ -227,4 +231,35 @@ func (p *Processor) InjestQueue(presentItems map[string]fs.FileInfo) error {
 
 func (p *Processor) PruneQueueCache() {
 	// TODO
+}
+
+func (p *Processor) listenForUpdates() {
+	if p.Negotiator == nil {
+		fmt.Printf("[Processor] (!) Processor began to listen for updates for transmission, however no Negotiator is attached. Aborting.\n")
+		return
+	}
+
+	for {
+		update, ok := <-p.UpdateChan
+		if !ok {
+			break
+		}
+
+		p.pendingUpdates[update] = true
+	}
+}
+
+func (p *Processor) submitUpdates() {
+	for k := range p.pendingUpdates {
+		queueItem := p.Queue.FindById(k)
+		p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{
+			Title: queueItem.StatusLine,
+			Context: processorUpdateContext{
+				QueueItem: queueItem,
+				Trouble:   queueItem.Trouble,
+			},
+		})
+
+		delete(p.pendingUpdates, k)
+	}
 }

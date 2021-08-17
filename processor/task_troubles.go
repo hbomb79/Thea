@@ -160,22 +160,24 @@ func (ex *OmdbTaskError) Resolve(args map[string]interface{}) error {
 			return nil
 		}
 
-		return errors.New("Unable to resovle OMDB task error - 'action' value of '" + v.(string) + "' is invalid!")
-	} else if ex.troubleType == OMDB_MULTIPLE_RESULT_FAILURE {
-		if v, ok := args["choiceId"]; ok {
-			vIdx, ok := v.(float64)
-			if !ok {
-				return errors.New("Unable to resolve OMDB task error - 'choiceId' is not a valid number!")
-			}
-
-			choiceIdx := int(vIdx)
-			if choiceIdx < 0 || choiceIdx > len(ex.choices)-1 {
-				return errors.New("Unable to resolve OMDB task error - 'choiceId' is out of range!")
-			}
-
-			ex.ProvideResolutionContext("fetchId", ex.choices[choiceIdx])
-			return nil
+		return errors.New("Unable to resolve OMDB task error - 'action' value of '" + v.(string) + "' is invalid!")
+	} else if v, ok := args["choiceId"]; ok {
+		if ex.troubleType != OMDB_MULTIPLE_RESULT_FAILURE {
+			return errors.New("Unable to resolve OMDB task error - 'choiceId' provided is illegal for this OMDB error")
 		}
+
+		vIdx, ok := v.(float64)
+		if !ok {
+			return errors.New("Unable to resolve OMDB task error - 'choiceId' is not a valid number!")
+		}
+
+		choiceIdx := int(vIdx)
+		if choiceIdx < 0 || choiceIdx > len(ex.choices)-1 {
+			return errors.New("Unable to resolve OMDB task error - 'choiceId' is out of range!")
+		}
+
+		ex.ProvideResolutionContext("fetchId", ex.choices[choiceIdx])
+		return nil
 	} else {
 		return errors.New("Unable to resolve OMDB task error - arguments provided are invalid! One of 'imdbId, action, choiceId, replacementStruct' was expected.")
 	}

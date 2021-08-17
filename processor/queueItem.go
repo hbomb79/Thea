@@ -247,10 +247,11 @@ func (sl *StringList) UnmarshalJSON(data []byte) error {
 func (rt *OmdbResponseType) UnmarshalJSON(data []byte) error {
 	t := trimQuotesFromByteSlice(data)
 	switch t {
-	case "False":
-		*rt = false
 	case "True":
 		*rt = true
+	case "False":
+	default:
+		*rt = false
 	}
 
 	return nil

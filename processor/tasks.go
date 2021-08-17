@@ -287,76 +287,73 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 	trbl, ok := queueItem.Trouble.(*OmdbTaskError)
 	if ok {
 		return errors.New("items trouble type does not match for this worker"), false
+	} else if trbl == nil {
+		return nil, false
 	}
 
-	if trbl != nil {
-		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
-			choice, imdbId, replacementStruct, action := trblCtx["choiceId"], trblCtx["imdbId"], trblCtx["replacementStruct"], trblCtx["action"]
-			if choice != nil {
-				if queueItem.Trouble.Type() != OMDB_MULTIPLE_RESULT_FAILURE {
-					return errors.New("resolution context contains 'choiceId' which is an illegal argument for an error of this type"), false
-				}
-
-				choiceIdFloat, ok := choice.(float64)
-				if !ok {
-					return errors.New("resolution context 'choiceId' key is invalid (not float64)"), false
-				}
-
-				choiceId := int(choiceIdFloat)
-				if choiceId < 0 || choiceId >= len(trbl.choices) {
-					return errors.New("resolution context contains a 'choiceId' that is out-of-bounds for the choices available"), false
-				}
-
-				result, err := task.fetch(trbl.choices[choiceId].ImdbId, queueItem)
-				if err != nil {
-					return err, false
-				}
-
-				queueItem.OmdbInfo = result
-				task.advance(queueItem)
-
-				return nil, true
-			} else if imdbId != nil {
-				id, ok := imdbId.(string)
-				if !ok {
-					return errors.New("resolution context contains invalid 'imdbId' field (not string)"), false
-				}
-
-				result, err := task.fetch(id, queueItem)
-				if err != nil {
-					return err, false
-				}
-
-				queueItem.OmdbInfo = result
-				task.advance(queueItem)
-
-				return nil, true
-			} else if replacementStruct != nil {
-				info, ok := replacementStruct.(OmdbInfo)
-				if !ok {
-					return errors.New("resolution context contains invalid 'replacementStruct' field (not an OmdbInfo struct)"), false
-				}
-
-				queueItem.OmdbInfo = &info
-				task.advance(queueItem)
-
-				return nil, true
-			} else if action != nil {
-				actionVal, ok := action.(string)
-				if !ok {
-					return errors.New("resolution context contains invalid 'action' key (not a string)"), false
-				} else if actionVal != "retry" {
-					return fmt.Errorf("resolution context contains action with value '%s' which is invalid. Only 'retry' is permitted\n", actionVal), false
-				}
-
-				return nil, false
-			} else {
-				return errors.New("resolution context contains none of acceptable fields (choiceId, imdbId, replacementStruct, action)!"), false
-			}
+	trblCtx := trbl.ResolutionContext()
+	choice, imdbId, replacementStruct, action := trblCtx["choiceId"], trblCtx["imdbId"], trblCtx["replacementStruct"], trblCtx["action"]
+	if choice != nil {
+		if queueItem.Trouble.Type() != OMDB_MULTIPLE_RESULT_FAILURE {
+			return errors.New("resolution context contains 'choiceId' which is an illegal argument for an error of this type"), false
 		}
-	}
 
-	return nil, false
+		choiceIdFloat, ok := choice.(float64)
+		if !ok {
+			return errors.New("resolution context 'choiceId' key is invalid (not float64)"), false
+		}
+
+		choiceId := int(choiceIdFloat)
+		if choiceId < 0 || choiceId >= len(trbl.choices) {
+			return errors.New("resolution context contains a 'choiceId' that is out-of-bounds for the choices available"), false
+		}
+
+		result, err := task.fetch(trbl.choices[choiceId].ImdbId, queueItem)
+		if err != nil {
+			return err, false
+		}
+
+		queueItem.OmdbInfo = result
+		task.advance(queueItem)
+
+		return nil, true
+	} else if imdbId != nil {
+		id, ok := imdbId.(string)
+		if !ok {
+			return errors.New("resolution context contains invalid 'imdbId' field (not string)"), false
+		}
+
+		result, err := task.fetch(id, queueItem)
+		if err != nil {
+			return err, false
+		}
+
+		queueItem.OmdbInfo = result
+		task.advance(queueItem)
+
+		return nil, true
+	} else if replacementStruct != nil {
+		info, ok := replacementStruct.(OmdbInfo)
+		if !ok {
+			return errors.New("resolution context contains invalid 'replacementStruct' field (not an OmdbInfo struct)"), false
+		}
+
+		queueItem.OmdbInfo = &info
+		task.advance(queueItem)
+
+		return nil, true
+	} else if action != nil {
+		actionVal, ok := action.(string)
+		if !ok {
+			return errors.New("resolution context contains invalid 'action' key (not a string)"), false
+		} else if actionVal != "retry" {
+			return fmt.Errorf("resolution context contains action with value '%s' which is invalid. Only 'retry' is permitted\n", actionVal), false
+		}
+
+		return nil, false
+	} else {
+		return errors.New("resolution context contains none of acceptable fields (choiceId, imdbId, replacementStruct, action)!"), false
+	}
 }
 
 // search will perform a search query to OMDB and will return the result

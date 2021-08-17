@@ -91,10 +91,6 @@ func (base *baseTaskError) Type() TroubleType {
 }
 
 func (base *baseTaskError) ProvideResolutionContext(key string, ctx interface{}) {
-	if base.resolutionContext == nil {
-		base.resolutionContext = make(map[string]interface{})
-	}
-
 	base.resolutionContext[key] = ctx
 	base.queueItem.Status = Pending
 }

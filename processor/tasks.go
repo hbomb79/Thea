@@ -293,7 +293,6 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 	}
 
 	trblCtx := trbl.ResolutionContext()
-	fmt.Printf("[DEBUG] ResolutionContext: %#v\n", trblCtx)
 	fetchId, omdbStruct, action := trblCtx["fetchId"], trblCtx["omdbStruct"], trblCtx["action"]
 	if fetchId != nil {
 		id, ok := fetchId.(string)

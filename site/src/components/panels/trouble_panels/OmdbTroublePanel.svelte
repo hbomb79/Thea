@@ -1,13 +1,12 @@
 <script lang="ts">
-import { createEventDispatcher, onMount } from "svelte";
+import { createEventDispatcher } from "svelte";
 import { SocketMessageType } from "../../../store";
 import type { SocketData } from "../../../store";
 
-import type { QueueDetails, QueueTroubleDetails } from "../../QueueItem.svelte";
+import type {  QueueTroubleDetails } from "../../QueueItem.svelte";
 import { QueueTroubleType } from "../../QueueItem.svelte";
 
 export let troubleDetails:QueueTroubleDetails
-export let queueDetails:QueueDetails
 
 const dispatcher = createEventDispatcher()
 enum ComponentState {
@@ -21,21 +20,6 @@ enum ComponentState {
 
 let state = ComponentState.READY
 let err:string = ''
-export function updateState(item:QueueDetails) {
-    if(state != ComponentState.CONFIRMING || item.id != queueDetails.id) return
-
-    //TODO the logic here needs some work. Need to figure out a nice
-    // way to handle a new trouble type (i.e. a trouble exists, but it's
-    // a different type.). Should we tell the user, or maybe detect if it's
-    // 'our' problem, or a trouble from the next stage and react accordingly.
-    if(item.trouble && item.trouble.type == queueDetails.trouble.type) {
-        // The data we received is a trouble state that matches our
-        // current trouble state. Our attempt to resolve didn't work!
-        state = ComponentState.TROUBLE_PERSISTS
-    } else {
-        state = ComponentState.READY
-    }
-}
 
 function resolveChoice(choiceId:number) {
     state = ComponentState.RESOLVING

@@ -90,7 +90,7 @@ export interface QueueDetails extends QueueItem {
 
 <script lang="ts">
 import { onMount } from "svelte";
-import { commander } from "../commander";
+import { commander, dataStream } from "../commander";
 import { SocketMessageType } from "../store";
 import type { SocketData } from "../store";
 
@@ -131,8 +131,7 @@ enum ComponentState {
 let state = ComponentState.LOADING
 let page = QueueStage.IMPORT
 
-// Get enhanced details of the queue item
-onMount(() => {
+const getQueueDetails = () => {
     commander.sendMessage({
         type: SocketMessageType.COMMAND,
         title: "QUEUE_DETAILS",
@@ -142,16 +141,6 @@ onMount(() => {
             details = response.arguments.payload
             state = ComponentState.COMPLETE
 
-            // TODO REMOVE THIS, for simulating data changing ONLY
-            const original = details.stage;
-            setTimeout(() => {
-                details.stage = 0;
-                const int = setInterval(() => {
-                    details.stage++;
-                    if(details.stage == original) clearInterval(int)
-                }, 500);
-            }, 2000)
-
             return true
         }
 
@@ -160,7 +149,22 @@ onMount(() => {
 
         return false
     })
+}
 
+// Get enhanced details of the queue item
+onMount(() => {
+    getQueueDetails()
+
+    dataStream.subscribe((data:SocketData) => {
+        if(data.type == SocketMessageType.UPDATE) {
+            const updateContext = data.arguments.context
+            if(updateContext && updateContext.QueueItem.id == details.id) {
+                // Update received for this item, refetch trouble details
+                state = ComponentState.LOADING
+                getQueueDetails()
+            }
+        }
+    })
 })
 
 // getStageStr returns a string representing the current stage of this item

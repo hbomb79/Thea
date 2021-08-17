@@ -95,7 +95,11 @@ type ProcessorUpdate struct {
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
 func NewProcessor() *Processor {
-	return &Processor{WorkerPool: worker.NewWorkerPool(), UpdateChan: make(chan int), pendingUpdates: make(map[int]bool)}
+	return &Processor{
+		WorkerPool:     worker.NewWorkerPool(),
+		UpdateChan:     make(chan int),
+		pendingUpdates: make(map[int]bool),
+	}
 }
 
 // Returns the processor provided after setting the Config

@@ -152,6 +152,9 @@ type FilterFn func(*processorQueue, int, *QueueItem) bool
 // returns true, the item is retained. Otherwise, if the callback returns false, the item
 // is ejected from the queue.
 func (queue *processorQueue) Filter(cb FilterFn) {
+	queue.Lock()
+	defer queue.Unlock()
+
 	newItems := make([]*QueueItem, 0)
 	for key, item := range queue.Items {
 		if cb(queue, key, item) {

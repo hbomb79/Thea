@@ -86,6 +86,10 @@ func (base *baseTaskError) Args() map[string]string {
 	return map[string]string{}
 }
 
+func (base *baseTaskError) Payload() map[string]interface{} {
+	return nil
+}
+
 func (base *baseTaskError) Type() TroubleType {
 	return base.troubleType
 }
@@ -177,6 +181,33 @@ func (ex *OmdbTaskError) Resolve(args map[string]interface{}) error {
 	}
 
 	return errors.New("Unable to resolve OMDB task error - unexpected error. Please try again later or check output logs for guidance.")
+}
+
+// Args returns the arguments required to rebuild an OmdbInfo
+// struct for use with the 'replacementStruct' paramater
+// during a resolution
+func (ex *OmdbTaskError) Args() map[string]string {
+	v, err := toArgsMap(OmdbInfo{})
+	if err != nil {
+		panic(err)
+	}
+
+	return v
+}
+
+// Payload returns additional information for this trouble,
+// for an OMDB_MULTIPLE_RESULT_FAILURE, it returns a map
+// with one key (choices) with a value matching the 'choices'
+// stored in this trouble. Any other trouble type will
+// default to returning the baseTaskError Payload
+func (ex *OmdbTaskError) Payload() map[string]interface{} {
+	if ex.Type() != OMDB_MULTIPLE_RESULT_FAILURE {
+		return ex.baseTaskError.Payload()
+	}
+
+	return map[string]interface{}{
+		"choices": ex.choices,
+	}
 }
 
 // FormatTaskError is an error/trouble type that is raised when ffmpeg/ffprobe encounters

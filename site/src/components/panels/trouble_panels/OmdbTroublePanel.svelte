@@ -111,11 +111,11 @@ function resolveChoice(choiceId:number) {
 
 {#if state == ComponentState.READY}
     <h2>OMDB Troubled</h2>
-    <p class="trouble">{troubleDetails.trouble.message}</p>
+    <p class="trouble">{troubleDetails.message}</p>
 
     {#if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE}
         <div class="choices">
-            {#each troubleDetails.trouble.choices as {Title, Year, imdbId, Type}, i}
+            {#each troubleDetails.additionalPayload.choices as {Title, Year, imdbId, Type}, i}
                 <div class="choice choice-{i}" on:click="{() => resolveChoice(i)}">
                     <h2 class="title">{Title}<span class="id">{imdbId}</span></h2>
                     <p>{Type} from {Year}</p>

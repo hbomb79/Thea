@@ -25,19 +25,19 @@ const (
 // send the reply to the websocket attached to the client
 // with the matching UUID
 type SocketMessage struct {
-	Title     string                 `json:"title"`
-	Arguments map[string]interface{} `json:"arguments"`
-	Id        int                    `json:"id"`
-	Type      socketMessageType      `json:"type"`
-	Origin    *uuid.UUID             `json:"-"`
-	Target    *uuid.UUID             `json:"-"`
+	Title  string                 `json:"title"`
+	Body   map[string]interface{} `json:"arguments"`
+	Id     int                    `json:"id"`
+	Type   socketMessageType      `json:"type"`
+	Origin *uuid.UUID             `json:"-"`
+	Target *uuid.UUID             `json:"-"`
 }
 
 func (message *SocketMessage) ValidateArguments(required map[string]string) error {
 	const ERR_FMT = "failed to validate key '%v' with type '%v' - %v"
 
 	for key, value := range required {
-		if v, ok := message.Arguments[key]; ok {
+		if v, ok := message.Body[key]; ok {
 			// get the string interpretation of the
 			// given value - this method is only used to
 			// test for primitve types currently. Perhaps with go

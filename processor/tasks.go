@@ -282,45 +282,23 @@ func (task *OmdbTask) Execute(w *worker.Worker) error {
 // indicates whether or not the item has been fully processed. Trouble is cleared
 // once this method returns.
 func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
-	defer queueItem.ClearTrouble()
-
-	trbl, ok := queueItem.Trouble.(*OmdbTaskError)
-	if ok {
-		return errors.New("items trouble type does not match for this worker"), false
-	} else if trbl == nil {
+	if queueItem.Trouble == nil {
 		return nil, false
 	}
 
+	defer queueItem.ClearTrouble()
+	trbl, ok := queueItem.Trouble.(*OmdbTaskError)
+	if !ok {
+		return fmt.Errorf("items trouble type (%T) does not match for this worker", queueItem.Trouble), false
+	}
+
 	trblCtx := trbl.ResolutionContext()
-	choice, imdbId, replacementStruct, action := trblCtx["choiceId"], trblCtx["imdbId"], trblCtx["replacementStruct"], trblCtx["action"]
-	if choice != nil {
-		if queueItem.Trouble.Type() != OMDB_MULTIPLE_RESULT_FAILURE {
-			return errors.New("resolution context contains 'choiceId' which is an illegal argument for an error of this type"), false
-		}
-
-		choiceIdFloat, ok := choice.(float64)
+	fmt.Printf("[DEBUG] ResolutionContext: %#v\n", trblCtx)
+	fetchId, omdbStruct, action := trblCtx["fetchId"], trblCtx["omdbStruct"], trblCtx["action"]
+	if fetchId != nil {
+		id, ok := fetchId.(string)
 		if !ok {
-			return errors.New("resolution context 'choiceId' key is invalid (not float64)"), false
-		}
-
-		choiceId := int(choiceIdFloat)
-		if choiceId < 0 || choiceId >= len(trbl.choices) {
-			return errors.New("resolution context contains a 'choiceId' that is out-of-bounds for the choices available"), false
-		}
-
-		result, err := task.fetch(trbl.choices[choiceId].ImdbId, queueItem)
-		if err != nil {
-			return err, false
-		}
-
-		queueItem.OmdbInfo = result
-		task.advance(queueItem)
-
-		return nil, true
-	} else if imdbId != nil {
-		id, ok := imdbId.(string)
-		if !ok {
-			return errors.New("resolution context contains invalid 'imdbId' field (not string)"), false
+			return errors.New("resolution context contains invalid 'fetchId' field (not string)"), false
 		}
 
 		result, err := task.fetch(id, queueItem)
@@ -332,8 +310,8 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 		task.advance(queueItem)
 
 		return nil, true
-	} else if replacementStruct != nil {
-		info, ok := replacementStruct.(OmdbInfo)
+	} else if omdbStruct != nil {
+		info, ok := omdbStruct.(OmdbInfo)
 		if !ok {
 			return errors.New("resolution context contains invalid 'replacementStruct' field (not an OmdbInfo struct)"), false
 		}

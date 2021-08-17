@@ -22,7 +22,7 @@ func NewHttpGateway(proc *processor.Processor) *HttpGateway {
 // httpQueueIndex returns the current processor queue with some information
 // omitted. Full information for each item can be found via HttpQueueGet
 func (httpGateway *HttpGateway) HttpQueueIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := sheriffApiMarshal(httpGateway.proc.Queue, []string{"api"})
+	data, err := sheriffApiMarshal(httpGateway.proc.Queue, "api")
 	if err != nil {
 		JsonMessage(w, err.Error(), http.StatusInternalServerError)
 

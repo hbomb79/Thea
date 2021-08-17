@@ -18,7 +18,7 @@ func NewWsGateway(proc *processor.Processor) *WsGateway {
 
 // ** Websocket API Methods ** //
 func (wsGateway *WsGateway) WsQueueIndex(hub *ws.SocketHub, message *ws.SocketMessage) error {
-	data, err := sheriffApiMarshal(wsGateway.proc.Queue, []string{"api"})
+	data, err := sheriffApiMarshal(wsGateway.proc.Queue, "api")
 	if err != nil {
 		return err
 	}

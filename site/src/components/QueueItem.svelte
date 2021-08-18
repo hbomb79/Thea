@@ -66,8 +66,9 @@ export interface QueueOmdbInfo {
 // TODO evaluate if this is needed, or if we can just bundle 'expectedArgs' in
 // with trouble info instead (server side)
 export interface QueueTroubleDetails {
-    trouble:QueueTroubleInfo,
+    message:string,
     expectedArgs:Object,
+    type:QueueTroubleType,
     [key:string]:any
 }
 
@@ -248,6 +249,7 @@ $:isStatActive = function() {
             <h2>
                 {#if details.omdb_info} {details.omdb_info.Title}
                 {:else if details.title_info} {details.title_info.Title}
+                {:else} Title Unavailable
                 {/if}
 
                 {#if details.title_info && details.title_info.Episodic}

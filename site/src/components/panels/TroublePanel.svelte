@@ -12,6 +12,8 @@ import type { QueueDetails, QueueTroubleDetails } from "../QueueItem.svelte";
 import rippleHtml from '../../assets/html/ripple.html';
 
 import OmdbTroublePanel from "./trouble_panels/OmdbTroublePanel.svelte";
+import type { SvelteComponent } from "svelte/internal";
+import ResolutionModal from "../modals/ResolutionModal.svelte";
 
 enum ComponentState {
     INIT,
@@ -23,6 +25,8 @@ enum ComponentState {
 export let details:QueueDetails
 let state = ComponentState.INIT
 let troubleDetails:QueueTroubleDetails
+
+let modal:SvelteComponent = null;
 
 const getTroubleDetails = () => {
     commander.sendMessage({
@@ -75,6 +79,35 @@ function sendResolution(data: SocketDataArguments, cb: CommandCallback) {
 function tryResolve(packet:CustomEvent) {
     sendResolution(packet.detail.args, packet.detail.cb)
 }
+
+function spawnResolutionModal(title:string, fields:Object, cb:(arg0: Object) => void) {
+    if(modal) {
+        modal.$destroy()
+        modal = undefined
+    }
+
+    modal = new ResolutionModal({
+        target: document.body,
+        props: { title: title, fields: fields, cb: cb }
+    })
+
+    modal.$on("close", () => {
+        modal.$destroy()
+        modal = undefined
+    })
+}
+
+function troubleResolutionModalSpawn(packet:CustomEvent) {
+    spawnResolutionModal(packet.detail.title, packet.detail.fields, packet.detail.cb)
+}
+
+function titleResolutionModalSpawn() {
+    if(troubleDetails.type != QueueTroubleType.TITLE_FAILURE) return
+
+    spawnResolutionModal("Title Info", troubleDetails.expectedArgs, (result) => {
+        console.warn(result)
+    })
+}
 </script>
 
 <style lang="scss">
@@ -96,9 +129,16 @@ function tryResolve(packet:CustomEvent) {
         {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
             <!-- A title failure means we need to provide the arguments back to the server that we need to
                  make a new TitleInfo struct -->
-            <p>NYI</p>
+            <h2>Title Formatter Trouble</h2>
+            <p>The title for this item could not be determined from the raw path name. Please provide the title information manually to continue.</p>
+
+            <button on:click={titleResolutionModalSpawn}>Enter Details</button>
+
+            {#each Object.entries(troubleDetails.expectedArgs) as [argName, argType]}
+                <p><span>{argName}</span>{argType}</p>
+            {/each}
         {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
-            <OmdbTroublePanel troubleDetails={troubleDetails} on:try-resolve={tryResolve}/>
+            <OmdbTroublePanel troubleDetails={troubleDetails} on:try-resolve={tryResolve} on:display-modal={troubleResolutionModalSpawn}/>
         {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
             <h2>FFMPEG Troubled</h2>
             <p>NYI</p>

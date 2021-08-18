@@ -24,11 +24,6 @@ export let details:QueueDetails
 let state = ComponentState.INIT
 let troubleDetails:QueueTroubleDetails
 
-interface EmbeddedTroublePanel {
-    updateState(arg0:QueueDetails):void
-}
-let embeddedPanel:EmbeddedTroublePanel
-
 const getTroubleDetails = () => {
     commander.sendMessage({
         title: "TROUBLE_DETAILS",
@@ -103,7 +98,7 @@ function tryResolve(packet:CustomEvent) {
                  make a new TitleInfo struct -->
             <p>NYI</p>
         {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
-            <OmdbTroublePanel bind:this={embeddedPanel} troubleDetails={troubleDetails} queueDetails={details} on:try-resolve={tryResolve}/>
+            <OmdbTroublePanel troubleDetails={troubleDetails} on:try-resolve={tryResolve}/>
         {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
             <h2>FFMPEG Troubled</h2>
             <p>NYI</p>

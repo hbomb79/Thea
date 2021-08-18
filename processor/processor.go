@@ -84,6 +84,8 @@ type Negotiator interface {
 }
 
 type ProcessorUpdate struct {
+	// TODO fix this: including a 'Trouble' here is pointless
+	// as the data is all private. It will always be JSON marhsalled to nothing.
 	QueueItem    *QueueItem
 	Trouble      Trouble
 	ItemPosition int

@@ -460,6 +460,7 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 		Input(queueItem.Path).
 		Output(itemOutputPath).
 		WithOptions(ffmpegOpts).
+		WithContext(&queueItem.CmdContext).
 		Start(ffmpegOpts)
 
 	if err != nil {

@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -61,25 +62,30 @@ const (
 // This includes information found from the file-system, OMDB,
 // and the current processing status/stage
 type QueueItem struct {
-	Id         int                  `json:"id" groups:"api"`
-	Path       string               `json:"path"`
-	Name       string               `json:"name" groups:"api"`
-	Status     QueueItemStatus      `json:"status" groups:"api"`
-	Stage      worker.PipelineStage `json:"stage" groups:"api"`
-	StatusLine string               `json:"statusLine" groups:"api"`
-	TitleInfo  *TitleInfo           `json:"title_info"`
-	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
-	Trouble    Trouble              `json:"trouble"`
-	Processor  *Processor           `json:"-"`
+	Id               int                  `json:"id" groups:"api"`
+	Path             string               `json:"path"`
+	Name             string               `json:"name" groups:"api"`
+	Status           QueueItemStatus      `json:"status" groups:"api"`
+	Stage            worker.PipelineStage `json:"stage" groups:"api"`
+	StatusLine       string               `json:"statusLine" groups:"api"`
+	TitleInfo        *TitleInfo           `json:"title_info"`
+	OmdbInfo         *OmdbInfo            `json:"omdb_info"`
+	Trouble          Trouble              `json:"trouble"`
+	Processor        *Processor           `json:"-"`
+	CmdContext       context.Context      `json:"-"`
+	cmdContextCancel context.CancelFunc   `json:"-"`
 }
 
 func NewQueueItem(name string, path string, proc *Processor) *QueueItem {
+	cmdCtx, cmdCancel := context.WithCancel(context.Background())
 	return &QueueItem{
-		Name:      name,
-		Path:      path,
-		Status:    Pending,
-		Stage:     worker.Title,
-		Processor: proc,
+		Name:             name,
+		Path:             path,
+		Status:           Pending,
+		Stage:            worker.Title,
+		Processor:        proc,
+		CmdContext:       cmdCtx,
+		cmdContextCancel: cmdCancel,
 	}
 }
 
@@ -178,7 +184,9 @@ func (item *QueueItem) Cancel() {
 		return
 	}
 
-	// TODO cancel item
+	// Cancel the context for this item
+	item.Status = Cancelled
+	item.cmdContextCancel()
 }
 
 func (item *QueueItem) NotifyUpdate() {

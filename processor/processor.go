@@ -225,7 +225,7 @@ func (p *Processor) DiscoverItems() (map[string]fs.FileInfo, error) {
 func (p *Processor) InjestQueue(presentItems map[string]fs.FileInfo) error {
 	for path, info := range presentItems {
 		if e := p.Queue.Push(NewQueueItem(info.Name(), path, p)); e != nil {
-			fmt.Printf("[Processor] (!) Ignoring injestable item - " + e.Error())
+			fmt.Printf("[Processor] (!) Ignoring injestable item - %v\n", e.Error())
 		}
 	}
 

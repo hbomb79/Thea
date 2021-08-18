@@ -22,7 +22,7 @@ let err = ''
 function titleResolutionModalSpawn() {
     dispatcher("display-modal", {
         title: "Title Info",
-        description: `<p>We failed to parse the title <b>'${details.name}</b><br>Please manually enter the data below.</p>`,
+        description: `<p>We failed to parse the title <b>'${details.name}</b><br>Please manually enter the data below (leave blank if not applicable).</p>`,
         fields: troubleDetails.expectedArgs,
         cb: (result:Object) => {
             console.warn(result)

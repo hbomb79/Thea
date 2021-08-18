@@ -14,7 +14,6 @@ enum ComponentState {
     READY,
     RESOLVING,
     CONFIRMING,
-    TROUBLE_PERSISTS,
     FAILURE
 }
 
@@ -117,9 +116,6 @@ function resolveChoice(choiceId:number) {
     <span>Sending resolution to server</span>
 {:else if state == ComponentState.CONFIRMING}
     <span>Confirming the trouble is resolved</span>
-{:else if state == ComponentState.TROUBLE_PERSISTS}
-    <span>The resolution was accepted by the server, however the same trouble has occurred again.</span>
-    <span>Please try again later, or check the server logs for guidance</span>
 {:else if state == ComponentState.FAILURE}
     <span>Trouble resolution has failed - please check server logs for assistance</span>
     <p>{err}</p>

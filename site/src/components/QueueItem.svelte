@@ -249,7 +249,7 @@ $:isStatActive = function() {
             <h2>
                 {#if details.omdb_info} {details.omdb_info.Title}
                 {:else if details.title_info} {details.title_info.Title}
-                {:else} Title Unavailable
+                {:else} {details.name}
                 {/if}
 
                 {#if details.title_info && details.title_info.Episodic}

@@ -102,7 +102,7 @@ func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 
 			// Assign the 'info' provided as the items TitleInfo and move on.
 			titleInfo, ok := info.(*TitleInfo)
-			if true {
+			if ok {
 				queueItem.TitleInfo = titleInfo
 				task.advance(queueItem)
 
@@ -126,11 +126,12 @@ func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) erro
 
 	if !isComplete {
 		if err := queueItem.FormatTitle(); err != nil {
-			return err
+			return &TitleTaskError{NewBaseTaskError(err.Error(), queueItem, TITLE_FAILURE)}
 		}
+
+		task.advance(queueItem)
 	}
 
-	task.advance(queueItem)
 	return nil
 }
 

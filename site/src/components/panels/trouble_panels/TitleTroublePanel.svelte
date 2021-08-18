@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createEventDispatcher } from "svelte";
-import { SocketData, SocketMessageType } from "../../../store";
+import { SocketMessageType } from "../../../store";
+import type { SocketData } from "../../../store";
 import type {  QueueDetails, QueueTroubleDetails } from "../../QueueItem.svelte";
 
 export let troubleDetails:QueueTroubleDetails

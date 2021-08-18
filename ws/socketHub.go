@@ -53,7 +53,7 @@ func (hub *SocketHub) Start() {
 		fmt.Printf("[Websocket] (!) Attempting to start socketHub when already running! Ignoring request.\n")
 		return
 	}
-	fmt.Printf("[Websocket] (O) Opening SocketHub!\n")
+	fmt.Printf("[Websocket] (I) Opening SocketHub!\n")
 
 	// Open channels and make clients slice
 	hub.sendCh = make(chan *SocketMessage)
@@ -242,7 +242,7 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 			fmt.Printf("[Websocket] (!!) Handler for command '%v' returned error - %v\n", command.Title, err.Error())
 			replyWithError(err.Error())
 		} else {
-			fmt.Printf("[Websocket] Handler for command '%v' executed successfully\n", command.Title)
+			fmt.Printf("[Websocket] (OK) Handler for command '%v' executed successfully\n", command.Title)
 		}
 
 		return

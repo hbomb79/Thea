@@ -66,7 +66,7 @@ func (tpa *Tpa) OnProcessorUpdate(update *processor.ProcessorUpdate) {
 	tpa.socketHub.Send(&ws.SocketMessage{
 		Title: "UPDATE",
 		Body: map[string]interface{}{
-			"context": update.Context,
+			"context": update,
 		},
 		Type: ws.Update,
 	})

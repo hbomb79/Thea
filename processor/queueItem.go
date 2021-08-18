@@ -67,7 +67,7 @@ type QueueItem struct {
 	Name             string               `json:"name" groups:"api"`
 	Status           QueueItemStatus      `json:"status" groups:"api"`
 	Stage            worker.PipelineStage `json:"stage" groups:"api"`
-	StatusLine       string               `json:"statusLine" groups:"api"`
+	TaskFeedback     string               `json:"taskFeedback" groups:"api"`
 	TitleInfo        *TitleInfo           `json:"title_info"`
 	OmdbInfo         *OmdbInfo            `json:"omdb_info"`
 	Trouble          Trouble              `json:"trouble"`
@@ -89,18 +89,22 @@ func NewQueueItem(name string, path string, proc *Processor) *QueueItem {
 	}
 }
 
-func (item *QueueItem) SetStatusLine(status string) {
-	item.StatusLine = status
+func (item *QueueItem) SetTaskFeedback(status string) {
+	item.TaskFeedback = status
 	item.NotifyUpdate()
 }
 
 func (item *QueueItem) SetStage(stage worker.PipelineStage) {
 	item.Stage = stage
+	item.TaskFeedback = ""
+
 	item.NotifyUpdate()
 }
 
 func (item *QueueItem) SetStatus(status QueueItemStatus) {
 	item.Status = status
+	item.TaskFeedback = ""
+
 	item.NotifyUpdate()
 }
 

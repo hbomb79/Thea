@@ -83,14 +83,10 @@ type Negotiator interface {
 	OnProcessorUpdate(update *ProcessorUpdate)
 }
 
-type processorUpdateContext struct {
+type ProcessorUpdate struct {
 	QueueItem    *QueueItem
 	Trouble      Trouble
 	ItemPosition int
-}
-type ProcessorUpdate struct {
-	Title   string
-	Context processorUpdateContext
 }
 
 // Instantiates a new processor by creating the
@@ -258,12 +254,9 @@ func (p *Processor) submitUpdates() {
 	for k := range p.pendingUpdates {
 		queueItem, idx := p.Queue.FindById(k)
 		p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{
-			Title: queueItem.StatusLine,
-			Context: processorUpdateContext{
-				QueueItem:    queueItem,
-				ItemPosition: idx,
-				Trouble:      queueItem.Trouble,
-			},
+			QueueItem:    queueItem,
+			ItemPosition: idx,
+			Trouble:      queueItem.Trouble,
 		})
 
 		delete(p.pendingUpdates, k)

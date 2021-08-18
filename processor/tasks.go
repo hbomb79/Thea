@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -432,6 +431,14 @@ type FormatTask struct {
 	baseTask
 }
 
+type ffmpegProgress struct {
+	Frames   string
+	Elapsed  string
+	Bitrate  string
+	Progress float64
+	Speed    string
+}
+
 // Execute uses the baseTask.executeTask to run this workers
 // task in a worker loop
 func (task *FormatTask) Execute(w *worker.Worker) error {
@@ -489,10 +496,19 @@ func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
 	}
 
 	for v := range progress {
-		//TODO inform processor of update ticks.. might be worth implementing some form of
-		// rate-limiting here as the output might be quite overwhelming, especially if multiple
-		// instances of this task are running concurrently.
-		log.Printf("[Progress] %#v\n", v)
+		v, err := json.Marshal(ffmpegProgress{
+			v.GetCurrentBitrate(),
+			v.GetCurrentTime(),
+			v.GetCurrentBitrate(),
+			v.GetProgress(),
+			v.GetSpeed(),
+		})
+
+		if err != nil {
+			fmt.Printf("[FfmpegWorker] (!) Failed to marshal struct for ffmpeg progress tick: %v\n", err.Error())
+		} else {
+			queueItem.SetTaskFeedback(string(v))
+		}
 	}
 
 	// Advance our item to the next stage

@@ -55,7 +55,7 @@ func (router *Router) Start(opts *RouterOptions) error {
 		return err
 	}
 
-	fmt.Printf("[HTTP] (O) Starting HTTP router\n")
+	fmt.Printf("[HTTP] (I) Starting HTTP router\n")
 	router.buildRoutes(opts)
 
 	host := fmt.Sprintf("%v:%v", opts.ApiHost, opts.ApiPort)

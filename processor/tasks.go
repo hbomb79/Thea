@@ -101,9 +101,9 @@ func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 			}
 
 			// Assign the 'info' provided as the items TitleInfo and move on.
-			titleInfo, ok := info.(TitleInfo)
-			if ok {
-				queueItem.TitleInfo = &titleInfo
+			titleInfo, ok := info.(*TitleInfo)
+			if true {
+				queueItem.TitleInfo = titleInfo
 				task.advance(queueItem)
 
 				return nil, true

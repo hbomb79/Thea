@@ -225,15 +225,15 @@ func (tInfo *TitleInfo) OutputPath() string {
 // a file structure, and also to store the information inside
 // of a cache file or a database.
 type OmdbInfo struct {
-	Genre       StringList
+	Genre       StringList `decode:"string"`
 	Title       string
 	Description string `json:"plot"`
 	ReleaseYear int
 	Runtime     string
 	ImdbId      string
 	Type        string
-	PosterUrl   string `json:"poster"`
-	Response    OmdbResponseType
+	PosterUrl   string           `json:"poster"`
+	Response    OmdbResponseType `decode:"bool"`
 	Error       string
 }
 

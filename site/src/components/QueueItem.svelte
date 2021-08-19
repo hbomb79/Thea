@@ -279,8 +279,6 @@ onMount(() => {
         if(data.type == SocketMessageType.UPDATE) {
             const updateContext = data.arguments.context
             if(updateContext && updateContext.QueueItem && updateContext.QueueItem.id == details.id) {
-                // Update received for this item, refetch trouble details
-                state = ComponentState.LOADING
                 getQueueDetails()
             }
         }

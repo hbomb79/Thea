@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from "svelte";
-import { commander } from "../../commander";
+import { commander, dataStream } from "../../commander";
 import { SocketMessageType } from "../../store";
 
 import type { SocketData } from "../../store";
@@ -19,6 +19,8 @@ enum ComponentState {
     LOADING,
     LOADED,
     RESOLVING,
+    CONFIRMING,
+    FAILURE,
     ERR
 }
 
@@ -53,6 +55,7 @@ const getTroubleDetails = () => {
 function sendResolution(packet:CustomEvent) {
     const { args, cb } = packet.detail
 
+    state = ComponentState.RESOLVING
     commander.sendMessage({
         title: "TROUBLE_RESOLVE",
         type: SocketMessageType.COMMAND,
@@ -60,7 +63,10 @@ function sendResolution(packet:CustomEvent) {
             id: details.id,
             ...args
         }
-    }, cb)
+    }, function() {
+        state = ComponentState.CONFIRMING
+        return cb(...arguments)
+    })
 }
 
 function spawnResolutionModal(packet:CustomEvent) {
@@ -80,7 +86,18 @@ function spawnResolutionModal(packet:CustomEvent) {
     })
 }
 
-onMount( getTroubleDetails )
+onMount(() => {
+    getTroubleDetails()
+
+    dataStream.subscribe((data) => {
+        if(data.type == SocketMessageType.UPDATE) {
+            const updateContext = data.arguments.context
+            if(updateContext && updateContext.QueueItem?.id == details.id) {
+                getTroubleDetails()
+            }
+        }
+    })
+})
 </script>
 
 <style lang="scss">
@@ -112,6 +129,14 @@ onMount( getTroubleDetails )
     {:else if state == ComponentState.LOADING}
         <p>Fetching trouble resolution</p>
         {@html rippleHtml}
+    {:else if state == ComponentState.RESOLVING || state == ComponentState.CONFIRMING}
+            <h2>Resolving trouble</h2>
+            <p>
+                Please wait while we process that request:
+                {#if state == ComponentState.CONFIRMING}
+                <b>Verifying that resolution solved the problem</b>
+                {/if}
+            </p>
     {:else}
         <span class="err">Failed to fetch trouble resolution</span>
     {/if}

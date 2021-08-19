@@ -139,8 +139,12 @@ func (p *Processor) Start() error {
 	}()
 
 	go func(target <-chan time.Time) {
-		p.SynchroniseQueue()
-		p.WorkerPool.WakeupWorkers(worker.Title)
+		for {
+			p.SynchroniseQueue()
+			p.WorkerPool.WakeupWorkers(worker.Title)
+
+			<-target
+		}
 	}(time.NewTicker(tickInterval).C)
 
 	go p.listenForUpdates()

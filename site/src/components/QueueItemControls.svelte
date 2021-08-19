@@ -19,6 +19,9 @@ let controlItems = new Array(3)
 let currentControl: Action = Action.NONE
 
 onMount(() => {
+    controlItems.forEach((item: HTMLElement) => {
+        item.addEventListener("mouseleave", resetSelection)
+    })
 })
 
 export function resetSelection() {

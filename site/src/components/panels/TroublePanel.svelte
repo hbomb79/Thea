@@ -1,9 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
-import { commander, dataStream } from "../../commander";
-import type { CommandCallback } from "../../commander";
+import { commander } from "../../commander";
 import { SocketMessageType } from "../../store";
-import type { SocketDataArguments } from "../../store";
 
 import type { SocketData } from "../../store";
 import { QueueTroubleType } from "../QueueItem.svelte";
@@ -31,9 +29,6 @@ let troubleDetails:QueueTroubleDetails
 let modal:SvelteComponent = null;
 
 const getTroubleDetails = () => {
-    console.trace("Getting trouble details!")
-    troubleDetails = null
-
     commander.sendMessage({
         title: "TROUBLE_DETAILS",
         type: SocketMessageType.COMMAND,
@@ -85,27 +80,7 @@ function spawnResolutionModal(packet:CustomEvent) {
     })
 }
 
-onMount(() => {
-    getTroubleDetails()
-
-    // TODO Determine if this is needed - it's causing repeat
-    // requests for trouble details as this component is often
-    // destroyed/recreated when ever a trouble is updated due to the
-    // server emitting an UPDATE packet (and the client therefore
-    // refetching QueueDetails).
-
-    // dataStream.subscribe((data:SocketData) => {
-    //     if(data.type == SocketMessageType.UPDATE) {
-    //         const updateContext = data.arguments.context
-    //         if(updateContext && updateContext.QueueItem.id == details.id && troubleDetails) {
-    //             // Update received for this item, refetch trouble details
-    //             state = ComponentState.LOADING
-    //             getTroubleDetails()
-    //         }
-    //     }
-    // })
-})
-
+onMount( getTroubleDetails )
 </script>
 
 <style lang="scss">

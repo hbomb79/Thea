@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"log"
 	"sync"
 )
 
@@ -59,8 +58,6 @@ func (pool *WorkerPool) WakeupWorkers(stage PipelineStage) {
 // While doing this, the WorkerPool's mutex is locked.
 func (pool *WorkerPool) CloseWorkers() {
 	for _, w := range pool.workers {
-		if err := w.Close(); err != nil {
-			log.Panicf("failed to close WorkerPool, a worker(%v) gave an error: %v\n", w.label, err.Error())
-		}
+		w.Close()
 	}
 }

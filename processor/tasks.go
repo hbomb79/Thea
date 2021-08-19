@@ -15,8 +15,6 @@ import (
 	"github.com/hbomb79/TPA/worker"
 )
 
-type taskFn func(*worker.Worker, *QueueItem) error
-
 const (
 	// The URL used to query OMDB. First %s is the query type (s for seach, t for title, i for id),
 	// second %s is the term to use for the above query. Third %s is the api key.
@@ -27,15 +25,9 @@ const (
 // to facilitate the other task types implemented in this file. This struct
 // mainly just handled some repeated code definitions, such as the basic
 // work/wait worker loop, and raising and notifying troubles
-type baseTask struct {
-	assignedItem *QueueItem
-}
+type baseTask struct{}
 
-// raiseTrouble is a helper method used to set a Trouble on
-// the item it's attached to
-func (task *baseTask) raiseTrouble(proc *Processor, trouble Trouble) {
-	trouble.Item().SetTrouble(trouble)
-}
+type taskFn func(*worker.Worker, *QueueItem) error
 
 // executeTask implements the core worker work/wait loop that
 // searches for work to do - and if some work is available, the
@@ -50,11 +42,19 @@ func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn) 
 				break inner
 			}
 
-			if err := fn(w, item); err != nil {
+			err := fn(w, item)
+			if item.Status == Cancelling {
+				// Item wants to cancel and is waiting for us to finish... we've finished
+				// with this task so mark it as fully cancelled.
+				item.SetStatus(Cancelled)
+			}
+
+			if err != nil {
 				e, ok := err.(Trouble)
 				if ok {
 					// Error implements the trouble interface so raise a trouble
-					task.raiseTrouble(proc, e)
+					item.SetTrouble(e)
+
 					continue
 				}
 

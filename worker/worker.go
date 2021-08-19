@@ -87,11 +87,9 @@ func (worker *Worker) WakeupChan() WorkerWakeupChan {
 
 // Close() closes the Worker by closing the WakeChan.
 // Note that this does not interupt currently running
-// goroutines. TODO implement a way to forcefully
-// close goroutines.
-func (worker *Worker) Close() error {
+// goroutines.
+func (worker *Worker) Close() {
 	close(worker.wakeupChan)
-	return nil
 }
 
 // sleep puts a worker to sleep until it's wakeupChan is
@@ -104,7 +102,7 @@ func (worker *Worker) Sleep() (isAlive bool) {
 	if _, isAlive = <-worker.wakeupChan; isAlive {
 		worker.currentStatus = Working
 	} else {
-		log.Printf("Wakup channel for worker '%v' has been closed - worker is exiting\n", worker.label)
+		log.Printf("Wakeup channel for worker '%v' has been closed - worker is exiting\n", worker.label)
 		worker.currentStatus = Finished
 	}
 

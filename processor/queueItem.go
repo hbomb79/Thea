@@ -54,6 +54,7 @@ const (
 	Processing
 	Completed
 	NeedsResolving
+	Cancelling
 	Cancelled
 )
 
@@ -96,15 +97,15 @@ func (item *QueueItem) SetTaskFeedback(status string) {
 
 func (item *QueueItem) SetStage(stage worker.PipelineStage) {
 	item.Stage = stage
-	item.TaskFeedback = ""
 
+	item.SetTaskFeedback("")
 	item.NotifyUpdate()
 }
 
 func (item *QueueItem) SetStatus(status QueueItemStatus) {
 	item.Status = status
-	item.TaskFeedback = ""
 
+	item.SetTaskFeedback("")
 	item.NotifyUpdate()
 }
 
@@ -115,12 +116,17 @@ func (item *QueueItem) SetTrouble(trouble Trouble) error {
 	fmt.Printf("[Trouble] Raising trouble (%T) for QueueItem (%v)!\n", trouble, item.Path)
 	if item.Trouble == nil {
 		item.Trouble = trouble
-		item.SetStatus(NeedsResolving)
+
+		// If the item is cancelled/cancelling, we don't want to override that status
+		// with 'NeedsResolving'.
+		if item.Status != Cancelling && item.Status != Cancelled {
+			item.SetStatus(NeedsResolving)
+		}
 
 		return nil
 	}
 
-	return errors.New(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Path, trouble))
+	return errors.New(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Id, trouble))
 }
 
 // ClearTrouble is used to remove the trouble state from
@@ -177,20 +183,26 @@ func (item *QueueItem) FormatTitle() error {
 	return TitleFormatError{item, "Failed to match RegExp!"}
 }
 
-// Cancel TODO
-// In order for a queue item to cancel itself, the queue item needs to be
-// able to interact directly with the task that is currently running. This means
-// QueueItem needs a reference to a worker that is currently holding it, and the
-// WorkerTaskMeta interface needs to be adjusted to enforce implementation of a cancel method
-// as cancelling a task will vary based on the task being run.
-func (item *QueueItem) Cancel() {
-	if item.Status == Cancelled {
-		return
+// Cancel will cancel an item that is currently pending by setting it's status to cancelled.
+// If the item is currently in progress, it's command context will be cancelled, and it's
+// status will be set to Cancelling. Once the running task finishes, the items
+// state will be updated to Cancelled.
+func (item *QueueItem) Cancel() error {
+	switch item.Status {
+	case Cancelled:
+	case Cancelling:
+		return errors.New("cannot cancel item because it's already cancelled")
+	case Pending:
+	case NeedsResolving:
+		item.SetStatus(Cancelled)
+	case Completed:
+		return errors.New("cannot cancel item as it's already completed")
+	case Processing:
+		item.SetStatus(Cancelling)
 	}
 
-	// Cancel the context for this item
-	item.Status = Cancelled
 	item.cmdContextCancel()
+	return nil
 }
 
 func (item *QueueItem) NotifyUpdate() {

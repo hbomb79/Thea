@@ -56,14 +56,14 @@ const getTroubleDetails = () => {
 // A callback must be provided, and is passed to the send command to enable
 // feedback from the server.
 function sendResolution(packet:CustomEvent) {
-    const { data, cb } = packet.detail
+    const { args, cb } = packet.detail
 
     commander.sendMessage({
         title: "TROUBLE_RESOLVE",
         type: SocketMessageType.COMMAND,
         arguments: {
             id: details.id,
-            ...data
+            ...args
         }
     }, cb)
 }

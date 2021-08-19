@@ -45,7 +45,17 @@ const onSelect = (ev:MouseEvent) => {
     currentControl = action
     controlItems.forEach((item) => {
         if(item == controlItems[currentControl]) {
-            item.style.width = `${controlSpans[action].offsetWidth + 26}px`
+            const span = controlSpans[action]
+
+            item.style.width = `${span.offsetWidth + 26}px`
+
+            span.style.transitionProperty = 'opacity'
+            span.style.right = `-${span.offsetWidth/2}px`
+
+            setTimeout(() => {
+                span.style.transitionProperty = 'right,opacity'
+                span.style.right = "8px"
+            }, 20)
         } else {
             item.style.width = `1.3rem`
         }

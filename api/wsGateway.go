@@ -88,6 +88,7 @@ func (wsGateway *WsGateway) WsQueuePromote(hub *ws.SocketHub, message *ws.Socket
 		Type:   ws.Response,
 	})
 
+	wsGateway.proc.UpdateChan <- queueItem.Id
 	return nil
 }
 

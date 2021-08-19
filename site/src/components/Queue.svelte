@@ -21,8 +21,7 @@ enum ComponentState {
 
 let state = ComponentState.INDEXING
 let items:QueueList = []
-onMount(() => {
-    // As soon as this 
+const getQueueIndex = () => {
     commander.sendMessage({
         title: "QUEUE_INDEX",
         type: SocketMessageType.COMMAND
@@ -39,22 +38,32 @@ onMount(() => {
 
         return false
     });
+}
+
+onMount(() => {
+    getQueueIndex()
 
     dataStream.subscribe(data => {
-        // Find the queue item inside the items array and replace it with the new information
-        // we have available! Other sub-components will have to manually listen to this
-        // UPDATE event and launch requests as needed (for trouble details, as an example.)
         if(data.type == SocketMessageType.UPDATE) {
-            const newItem = data.arguments.context.QueueItem as QueueDetails
+            const update = data.arguments.context
+            const newItem = update.QueueItem as QueueDetails
+
+            // Check if the item position mismatches our current position
             const idx = items.findIndex(item => item.id == newItem.id)
-
-            if(idx < 0) {
-                items.push(newItem)
+            if(idx != update.ItemPosition) {
+                // The position for this item has changed.. likely due to a item promotion.
+                // Update the order of the queue - to do this we should
+                // simply re-query the server for an up-to-date queue index.
+                getQueueIndex()
             } else {
-                items[idx] = newItem
+                if(idx < 0) {
+                    // New item
+                    items.push(newItem)
+                } else {
+                    // An existing item has had an in-place update.
+                    items[idx] = newItem
+                }
             }
-
-            items = items
         }
     })
 })

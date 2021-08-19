@@ -129,40 +129,6 @@
                 }
             }
         }
-
-        .controls {
-            position: absolute;
-            right: 4px;
-            top: 50%;
-            font-size: 0;
-            transform: translate(0, -50%);
-
-            span {
-                display: inline-block;
-                padding: 6px;
-                background: #eee;
-                margin: 0 4px;
-                border-radius: 4px;
-                cursor: pointer;
-                border: solid 1px #e3e3e3;
-
-                :global(svg) {
-                    width: 0.8rem;
-                    height: 0.8rem;
-                    padding: 4px;
-                    fill: grey;
-                    display: inline-block;
-                }
-
-                &.promote {
-                    transform: rotate(-90deg);
-                }
-
-                &:hover {
-                    background: #cecece;
-                }
-            }
-        }
     }
 
     main {

@@ -98,16 +98,13 @@ import type { SocketData } from "../store";
 import rippleHtml from '../assets/html/ripple.html';
 import pendingHtml from '../assets/html/ellipsis.html';
 
-import pauseSvg from '../assets/pause.svg';
-import advanceSvg from '../assets/advance.svg';
-import cancelSvg from '../assets/cancel.svg';
-
 import OverviewPanel from "./panels/OverviewPanel.svelte";
 import TitlePanel from "./panels/TitlePanel.svelte";
 import OmdbPanel from "./panels/OmdbPanel.svelte";
 import FfmpegPanel from "./panels/FfmpegPanel.svelte";
 import DatabasePanel from "./panels/DatabasePanel.svelte";
 import TroublePanel from './panels/TroublePanel.svelte';
+import QueueItemControls, { Control } from './QueueItemControls.svelte';
 
 // The queueInfo we're wanting to display from the parent component.
 export let queueInfo:QueueItem
@@ -192,12 +189,46 @@ function getStatusStr(status:number): string {
 }
 
 function promoteItem() {
+    commander.sendMessage({
+        type: SocketMessageType.COMMAND,
+        title: "QUEUE_PROMOTE",
+        arguments: {
+            id: details.id
+        }
+    }, (reply: SocketData): boolean => {
+        console.log(reply)
+        if(reply.type == SocketMessageType.ERR_RESPONSE) {
+            alert(`Failed to promote item: ${reply.title}: ${reply.arguments.error}`)
+            return false
+        }
+
+        console.log("Successfully promoted item!")
+        return false
+    })
 }
 
 function pauseItem() {
 }
 
 function cancelItem() {
+}
+
+function handleItemAction(event: CustomEvent) {
+    const action = event.detail as Control
+    switch(action) {
+        case Control.PROMOTE:
+            promoteItem()
+            break
+        case Control.PAUSE:
+            pauseItem()
+            break
+        case Control.CANCEL:
+            cancelItem()
+            break
+        case Control.NONE:
+        default:
+            console.warn(`Unknown item action ${action}`)
+    }
 }
 
 // handleStatClick will switch the component page to the TROUBLE
@@ -268,11 +299,7 @@ $:isStatActive = function() {
             <span class:active="{page == QueueStage.FFMPEG}" class="panel-item" on:click="{() => page = QueueStage.FFMPEG}">FFmpeg</span>
             <span class:active="{page == QueueStage.DB}" class="panel-item" on:click="{() => page = QueueStage.DB}">DB</span>
 
-            <div class="controls">
-                <span class="pause" on:click="{pauseItem}">{@html pauseSvg}</span>
-                <span class="cancel" on:click="{cancelItem}">{@html cancelSvg}</span>
-                <span class="promote" on:click="{promoteItem}">{@html advanceSvg}</span>
-            </div>
+            <QueueItemControls on:queue-control={handleItemAction}/>
         </div>
         <main>
             <!-- We have a few cases here:

@@ -15,21 +15,25 @@ import OmdbTroublePanel from "./trouble_panels/OmdbTroublePanel.svelte";
 import type { SvelteComponent } from "svelte/internal";
 import ResolutionModal from "../modals/ResolutionModal.svelte";
 import TitleTroublePanel from "./trouble_panels/TitleTroublePanel.svelte";
+import FormatTroublePanel from "./trouble_panels/FormatTroublePanel.svelte";
 
 enum ComponentState {
-    INIT,
+    LOADING,
     LOADED,
     RESOLVING,
     ERR
 }
 
 export let details:QueueDetails
-let state = ComponentState.INIT
+let state = ComponentState.LOADING
 let troubleDetails:QueueTroubleDetails
 
 let modal:SvelteComponent = null;
 
 const getTroubleDetails = () => {
+    console.trace("Getting trouble details!")
+    troubleDetails = null
+
     commander.sendMessage({
         title: "TROUBLE_DETAILS",
         type: SocketMessageType.COMMAND,
@@ -47,26 +51,13 @@ const getTroubleDetails = () => {
     })
 }
 
-onMount(() => {
-    getTroubleDetails()
-
-    dataStream.subscribe((data:SocketData) => {
-        if(data.type == SocketMessageType.UPDATE) {
-            const updateContext = data.arguments.context
-            if(updateContext && updateContext.QueueItem.id == details.id) {
-                // Update received for this item, refetch trouble details
-                state = ComponentState.INIT
-                getTroubleDetails()
-            }
-        }
-    })
-})
-
 // sendResolution will attempt to send a trouble resolution command to the server
 // by appending the given data to the message using the spread syntax.
 // A callback must be provided, and is passed to the send command to enable
 // feedback from the server.
-function sendResolution(data: SocketDataArguments, cb: CommandCallback) {
+function sendResolution(packet:CustomEvent) {
+    const { data, cb } = packet.detail
+
     commander.sendMessage({
         title: "TROUBLE_RESOLVE",
         type: SocketMessageType.COMMAND,
@@ -77,13 +68,7 @@ function sendResolution(data: SocketDataArguments, cb: CommandCallback) {
     }, cb)
 }
 
-function tryResolve(packet:CustomEvent) {
-    sendResolution(packet.detail.args, packet.detail.cb)
-}
-
 function spawnResolutionModal(packet:CustomEvent) {
-    const {title, description, fields, cb} = packet.detail
-
     if(modal) {
         modal.$destroy()
         modal = undefined
@@ -91,7 +76,7 @@ function spawnResolutionModal(packet:CustomEvent) {
 
     modal = new ResolutionModal({
         target: document.body,
-        props: { title: title, fields: fields, description: description, cb: cb }
+        props: { ...packet.detail }
     })
 
     modal.$on("close", () => {
@@ -99,6 +84,28 @@ function spawnResolutionModal(packet:CustomEvent) {
         modal = undefined
     })
 }
+
+onMount(() => {
+    getTroubleDetails()
+
+    // TODO Determine if this is needed - it's causing repeat
+    // requests for trouble details as this component is often
+    // destroyed/recreated when ever a trouble is updated due to the
+    // server emitting an UPDATE packet (and the client therefore
+    // refetching QueueDetails).
+
+    // dataStream.subscribe((data:SocketData) => {
+    //     if(data.type == SocketMessageType.UPDATE) {
+    //         const updateContext = data.arguments.context
+    //         if(updateContext && updateContext.QueueItem.id == details.id && troubleDetails) {
+    //             // Update received for this item, refetch trouble details
+    //             state = ComponentState.LOADING
+    //             getTroubleDetails()
+    //         }
+    //     }
+    // })
+})
+
 </script>
 
 <style lang="scss">
@@ -107,7 +114,7 @@ function spawnResolutionModal(packet:CustomEvent) {
 .tile.trouble {
     padding: 1rem;
 
-    h2 {
+    :global(h2) {
         margin: 0;
         color: #5e5e5e;
     }
@@ -118,17 +125,16 @@ function spawnResolutionModal(packet:CustomEvent) {
 <div class="tile trouble">
     {#if state == ComponentState.LOADED}
         {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
-            <TitleTroublePanel details={details} troubleDetails={troubleDetails} on:display-modal={spawnResolutionModal} on:try-resolve={tryResolve}/>
+            <TitleTroublePanel details={details} troubleDetails={troubleDetails} on:display-modal={spawnResolutionModal} on:try-resolve={sendResolution}/>
         {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
-            <OmdbTroublePanel troubleDetails={troubleDetails} on:try-resolve={tryResolve} on:display-modal={spawnResolutionModal}/>
+            <OmdbTroublePanel troubleDetails={troubleDetails} on:try-resolve={sendResolution} on:display-modal={spawnResolutionModal}/>
         {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
-            <h2>FFMPEG Troubled</h2>
-            <p>NYI</p>
+            <FormatTroublePanel details={details} troubleDetails={troubleDetails} on:try-resolve={sendResolution}/>
         {:else}
             <h2>Unknown trouble</h2>
             <p>We don't have a known resolution for this trouble case. Please check server logs for guidance.</p>
         {/if}
-    {:else if state == ComponentState.INIT}
+    {:else if state == ComponentState.LOADING}
         <p>Fetching trouble resolution</p>
         {@html rippleHtml}
     {:else}

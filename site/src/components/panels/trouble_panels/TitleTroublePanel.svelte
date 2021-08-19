@@ -25,7 +25,7 @@ function titleResolutionModalSpawn() {
         description: `<p>We failed to parse the title <b>'${details.name}</b><br>Please manually enter the data below (leave blank if not applicable).</p>`,
         fields: troubleDetails.expectedArgs,
         cb: (result:Object) => {
-            console.warn(result)
+            state = ComponentState.RESOLVING
             dispatcher("try-resolve", {
                 args: result,
                 cb: (reply:SocketData): boolean => {

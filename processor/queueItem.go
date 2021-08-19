@@ -72,7 +72,7 @@ type QueueItem struct {
 	TitleInfo        *TitleInfo           `json:"title_info"`
 	OmdbInfo         *OmdbInfo            `json:"omdb_info"`
 	Trouble          Trouble              `json:"trouble"`
-	Processor        *Processor           `json:"-"`
+	processor        *Processor           `json:"-"`
 	CmdContext       context.Context      `json:"-"`
 	cmdContextCancel context.CancelFunc   `json:"-"`
 }
@@ -84,7 +84,7 @@ func NewQueueItem(name string, path string, proc *Processor) *QueueItem {
 		Path:             path,
 		Status:           Pending,
 		Stage:            worker.Title,
-		Processor:        proc,
+		processor:        proc,
 		CmdContext:       cmdCtx,
 		cmdContextCancel: cmdCancel,
 	}
@@ -104,6 +104,15 @@ func (item *QueueItem) SetStage(stage worker.PipelineStage) {
 
 func (item *QueueItem) SetStatus(status QueueItemStatus) {
 	item.Status = status
+
+	if item.Status == Cancelled {
+		// Item has been cancelled and has wrapped up what it was doing
+		// Remove this item from the queue, mark it in the queue cache
+		// so we don't re-ingest it later
+		queue := item.processor.Queue
+		queue.Remove(item)
+		queue.cache.PushItem(item.Path, "cancelled")
+	}
 
 	item.SetTaskFeedback("")
 	item.NotifyUpdate()
@@ -205,8 +214,12 @@ func (item *QueueItem) Cancel() error {
 	return nil
 }
 
+func (item *QueueItem) Pause() error {
+	return errors.New("NYI")
+}
+
 func (item *QueueItem) NotifyUpdate() {
-	item.Processor.UpdateChan <- item.Id
+	item.processor.UpdateChan <- item.Id
 }
 
 // TitleInfo contains the information about the import QueueItem

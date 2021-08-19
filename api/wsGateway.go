@@ -63,7 +63,7 @@ func (wsGateway *WsGateway) WsQueueDetails(hub *ws.SocketHub, message *ws.Socket
 	return nil
 }
 
-func (wsGateway *WsGateway) WsQueuePromote(hub *ws.SocketHub, message *ws.SocketMessage) error {
+func (wsGateway *WsGateway) WsItemPromote(hub *ws.SocketHub, message *ws.SocketMessage) error {
 	const ERR_FMT = "failed to promote queue item - %v"
 	if err := message.ValidateArguments(map[string]string{"id": "number"}); err != nil {
 		return err
@@ -80,6 +80,7 @@ func (wsGateway *WsGateway) WsQueuePromote(hub *ws.SocketHub, message *ws.Socket
 		return errors.New(fmt.Sprintf(ERR_FMT, err.Error()))
 	}
 
+	wsGateway.proc.UpdateChan <- queueItem.Id
 	hub.Send(&ws.SocketMessage{
 		Title:  "COMMAND_SUCCESS",
 		Body:   map[string]interface{}{"payload": queueItem, "command": message},
@@ -88,7 +89,62 @@ func (wsGateway *WsGateway) WsQueuePromote(hub *ws.SocketHub, message *ws.Socket
 		Type:   ws.Response,
 	})
 
-	wsGateway.proc.UpdateChan <- queueItem.Id
+	return nil
+}
+
+func (wsGateway *WsGateway) WsItemPause(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	const ERR_FMT = "failed to pause queue item - %v"
+	if err := message.ValidateArguments(map[string]string{"id": "number"}); err != nil {
+		return err
+	}
+
+	idArg := message.Body["id"]
+	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	if queueItem == nil || idx < 0 {
+		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
+	}
+
+	err := queueItem.Pause()
+	if err != nil {
+		return errors.New(fmt.Sprintf(ERR_FMT, err.Error()))
+	}
+
+	hub.Send(&ws.SocketMessage{
+		Title:  "COMMAND_SUCCESS",
+		Body:   map[string]interface{}{"payload": queueItem, "command": message},
+		Id:     message.Id,
+		Target: message.Origin,
+		Type:   ws.Response,
+	})
+
+	return nil
+}
+
+func (wsGateway *WsGateway) WsItemCancel(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	const ERR_FMT = "failed to cancel queue item - %v"
+	if err := message.ValidateArguments(map[string]string{"id": "number"}); err != nil {
+		return err
+	}
+
+	idArg := message.Body["id"]
+	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	if queueItem == nil || idx < 0 {
+		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
+	}
+
+	err := queueItem.Cancel()
+	if err != nil {
+		return errors.New(fmt.Sprintf(ERR_FMT, err.Error()))
+	}
+
+	hub.Send(&ws.SocketMessage{
+		Title:  "COMMAND_SUCCESS",
+		Body:   map[string]interface{}{"payload": queueItem, "command": message},
+		Id:     message.Id,
+		Target: message.Origin,
+		Type:   ws.Response,
+	})
+
 	return nil
 }
 

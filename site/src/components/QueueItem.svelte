@@ -90,7 +90,7 @@ export interface QueueDetails extends QueueItem {
 </script>
 
 <script lang="ts">
-import { onMount } from "svelte";
+import { onMount, SvelteComponent } from "svelte";
 import { commander, dataStream } from "../commander";
 import { SocketMessageType } from "../store";
 import type { SocketData } from "../store";
@@ -104,7 +104,7 @@ import OmdbPanel from "./panels/OmdbPanel.svelte";
 import FfmpegPanel from "./panels/FfmpegPanel.svelte";
 import DatabasePanel from "./panels/DatabasePanel.svelte";
 import TroublePanel from './panels/TroublePanel.svelte';
-import QueueItemControls, { Control } from './QueueItemControls.svelte';
+import QueueItemControls, { Action } from './QueueItemControls.svelte';
 
 // The queueInfo we're wanting to display from the parent component.
 export let queueInfo:QueueItem
@@ -128,6 +128,7 @@ enum ComponentState {
 // The initial state/page of the component
 let state = ComponentState.LOADING
 let page = QueueStage.IMPORT
+let controlsPanel:QueueItemControls = null
 
 const getQueueDetails = () => {
     commander.sendMessage({
@@ -148,22 +149,6 @@ const getQueueDetails = () => {
         return false
     })
 }
-
-// Get enhanced details of the queue item
-onMount(() => {
-    getQueueDetails()
-
-    dataStream.subscribe((data:SocketData) => {
-        if(data.type == SocketMessageType.UPDATE) {
-            const updateContext = data.arguments.context
-            if(updateContext && updateContext.QueueItem.id == details.id) {
-                // Update received for this item, refetch trouble details
-                state = ComponentState.LOADING
-                getQueueDetails()
-            }
-        }
-    })
-})
 
 // getStageStr returns a string representing the current stage of this item
 function getStageStr(stage:number): string {
@@ -188,44 +173,72 @@ function getStatusStr(status:number): string {
     }
 }
 
-function promoteItem() {
+function sendCommand(command: string, successCallback: (arg0: SocketData) => void, errorCallback: (arg0: SocketData) => void) {
     commander.sendMessage({
         type: SocketMessageType.COMMAND,
-        title: "QUEUE_PROMOTE",
-        arguments: {
-            id: details.id
-        }
+        title: command,
+        arguments: { id: details.id }
     }, (reply: SocketData): boolean => {
-        console.log(reply)
         if(reply.type == SocketMessageType.ERR_RESPONSE) {
-            alert(`Failed to promote item: ${reply.title}: ${reply.arguments.error}`)
-            return false
+            errorCallback(reply)
+        } else {
+            successCallback(reply)
         }
 
-        console.log("Successfully promoted item!")
         return false
     })
 }
 
+function promoteItem() {
+    sendCommand(
+        "PROMOTE_ITEM",
+        (successData) => {
+            console.log("Promotion success!")
+        },
+        (errData) => {
+            alert(`Failed to promote item: ${errData.title}: ${errData.arguments.error}`)
+        }
+    )
+}
+
 function pauseItem() {
+    sendCommand(
+        "PAUSE_ITEM",
+        (successData) => {
+            console.log("Pause success!")
+        },
+        (errData) => {
+            alert(`Failed to pause item: ${errData.title}: ${errData.arguments.error}`)
+        }
+    )
 }
 
 function cancelItem() {
+    sendCommand(
+        "CANCEL_ITEM",
+        (successData) => {
+            console.log("Cancellation success!")
+        },
+        (errData) => {
+            alert(`Failed to cancel item: ${errData.title}: ${errData.arguments.error}`)
+        }
+    )
 }
 
 function handleItemAction(event: CustomEvent) {
-    const action = event.detail as Control
+    console.log(event)
+    const action = event.detail as Action
     switch(action) {
-        case Control.PROMOTE:
+        case Action.PROMOTE:
             promoteItem()
             break
-        case Control.PAUSE:
+        case Action.PAUSE:
             pauseItem()
             break
-        case Control.CANCEL:
+        case Action.CANCEL:
             cancelItem()
             break
-        case Control.NONE:
+        case Action.NONE:
         default:
             console.warn(`Unknown item action ${action}`)
     }
@@ -257,6 +270,23 @@ $:stat = function() {
 $:isStatActive = function() {
     return <number>page == details.stage
 }
+
+// Get enhanced details of the queue item
+onMount(() => {
+    getQueueDetails()
+
+    dataStream.subscribe((data:SocketData) => {
+        if(data.type == SocketMessageType.UPDATE) {
+            const updateContext = data.arguments.context
+            if(updateContext && updateContext.QueueItem && updateContext.QueueItem.id == details.id) {
+                // Update received for this item, refetch trouble details
+                state = ComponentState.LOADING
+                getQueueDetails()
+            }
+        }
+    })
+})
+
 </script>
 
 <style lang="scss">
@@ -299,7 +329,7 @@ $:isStatActive = function() {
             <span class:active="{page == QueueStage.FFMPEG}" class="panel-item" on:click="{() => page = QueueStage.FFMPEG}">FFmpeg</span>
             <span class:active="{page == QueueStage.DB}" class="panel-item" on:click="{() => page = QueueStage.DB}">DB</span>
 
-            <QueueItemControls on:queue-control={handleItemAction}/>
+            <QueueItemControls bind:this={controlsPanel} on:queue-control={handleItemAction}/>
         </div>
         <main>
             <!-- We have a few cases here:

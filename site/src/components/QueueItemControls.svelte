@@ -1,22 +1,31 @@
 <script lang="ts" context="module">
-export enum Control {
+export enum Action {
+    NONE,
     PAUSE,
     CANCEL,
     PROMOTE,
-    NONE
 }
 </script>
 <script lang="ts">
 import pauseSvg from '../assets/pause.svg';
 import advanceSvg from '../assets/advance.svg';
 import cancelSvg from '../assets/cancel.svg';
-import { createEventDispatcher } from 'svelte';
+import { createEventDispatcher, onMount } from 'svelte';
 
 const dispatch = createEventDispatcher()
+
 let controlSpans = new Array(3)
 let controlItems = new Array(3)
+let currentControl: Action = Action.NONE
 
-let currentControl:Control = Control.NONE
+onMount(() => {
+})
+
+export function resetSelection() {
+    currentControl = Action.NONE
+    controlItems.forEach((item) => item.style.width = `1.3rem`)
+}
+
 const onSelect = (ev:MouseEvent) => {
     const target = ev.currentTarget as HTMLElement
     const action = Number(target.dataset.action)
@@ -38,6 +47,9 @@ const onSelect = (ev:MouseEvent) => {
             item.style.width = `1.3rem`
         }
     })
+
+    ev.stopPropagation()
+    ev.preventDefault()
 }
 </script>
 
@@ -101,16 +113,16 @@ const onSelect = (ev:MouseEvent) => {
 </style>
 
 <div class="controls">
-    <span class="pause control" bind:this={controlItems[Control.PAUSE]} data-action={Control.PAUSE} class:active={currentControl == Control.PAUSE} on:click={onSelect}>
+    <span class="pause control" bind:this={controlItems[Action.PAUSE]} data-action={Action.PAUSE} class:active={currentControl == Action.PAUSE} on:click={onSelect}>
         {@html pauseSvg}
-        <span bind:this={controlSpans[Control.PAUSE]}>Pause?</span>
+        <span bind:this={controlSpans[Action.PAUSE]}>Pause</span>
     </span>
-    <span class="cancel control" bind:this={controlItems[Control.CANCEL]} data-action={Control.CANCEL} class:active={currentControl == Control.CANCEL} on:click={onSelect}>
+    <span class="cancel control" bind:this={controlItems[Action.CANCEL]} data-action={Action.CANCEL} class:active={currentControl == Action.CANCEL} on:click={onSelect}>
         {@html cancelSvg}
-        <span bind:this={controlSpans[Control.CANCEL]}>Cancel?</span>
+        <span bind:this={controlSpans[Action.CANCEL]}>Cancel</span>
     </span>
-    <span class="promote control" bind:this={controlItems[Control.PROMOTE]} data-action={Control.PROMOTE} class:active={currentControl == Control.PROMOTE} on:click={onSelect}>
+    <span class="promote control" bind:this={controlItems[Action.PROMOTE]} data-action={Action.PROMOTE} class:active={currentControl == Action.PROMOTE} on:click={onSelect}>
         {@html advanceSvg}
-        <span bind:this={controlSpans[Control.PROMOTE]}>Promote?</span>
+        <span bind:this={controlSpans[Action.PROMOTE]}>Promote</span>
     </span>
 </div>

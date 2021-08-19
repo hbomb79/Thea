@@ -67,6 +67,19 @@ func (queue *processorQueue) Push(item *QueueItem) error {
 	return nil
 }
 
+func (queue *processorQueue) Remove(item *QueueItem) error {
+	queue.Lock()
+	defer queue.Unlock()
+
+	item, idx := queue.FindById(item.Id)
+	if item == nil || idx < 0 {
+		return errors.New("cannot remove: does not exist in queue")
+	}
+
+	queue.Items = append(queue.Items[:idx], queue.Items[idx+1:len(queue.Items)]...)
+	return nil
+}
+
 // Pick will search through the queue items looking for the first
 // QueueItem that has the stage and status we're looking for.
 // This is how workers should query the work pool for new tasks
@@ -102,7 +115,7 @@ func (queue *processorQueue) AdvanceStage(item *QueueItem) {
 		item.SetStatus(Completed)
 
 		// Add this item to the cache to indicate it's complete
-		queue.cache.PushItem(item.Path, true)
+		queue.cache.PushItem(item.Path, "completed")
 	} else {
 		item.SetStage(item.Stage + 1)
 		item.SetStatus(Pending)

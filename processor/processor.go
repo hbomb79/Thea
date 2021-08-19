@@ -89,6 +89,7 @@ type ProcessorUpdate struct {
 	QueueItem    *QueueItem
 	Trouble      Trouble
 	ItemPosition int
+	ItemId       int
 }
 
 // Instantiates a new processor by creating the
@@ -259,11 +260,16 @@ func (p *Processor) listenForUpdates() {
 func (p *Processor) submitUpdates() {
 	for k := range p.pendingUpdates {
 		queueItem, idx := p.Queue.FindById(k)
-		p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{
-			QueueItem:    queueItem,
-			ItemPosition: idx,
-			Trouble:      queueItem.Trouble,
-		})
+		if queueItem == nil || idx < 0 {
+			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QueueItem: nil, ItemPosition: -1, Trouble: nil, ItemId: k})
+		} else {
+			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{
+				QueueItem:    queueItem,
+				ItemPosition: idx,
+				Trouble:      queueItem.Trouble,
+				ItemId:       k,
+			})
+		}
 
 		delete(p.pendingUpdates, k)
 	}

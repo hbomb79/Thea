@@ -48,9 +48,23 @@ onMount(() => {
             const update = data.arguments.context
             const newItem = update.QueueItem as QueueDetails
 
-            // Check if the item position mismatches our current position
-            const idx = items.findIndex(item => item.id == newItem.id)
-            if(idx != update.ItemPosition) {
+            const idx = items.findIndex(item => item.id == update.ItemId)
+            if( update.ItemPosition < 0 || !newItem ) {
+                // Item has been removed from queue! Find the item
+                // in the queue with the ID that matches the one removed
+                // and pull it from the list
+                if(idx < 0) {
+                    console.warn("Failed to find item inside of list for removal. Forcing refresh!")
+                    getQueueIndex()
+
+                    return
+                }
+
+                items.splice(idx, 1)
+                // Svelte reactivity requires re-assignment of an array if it's modified using
+                // a mutating method like 'splice'
+                items = items
+            } else if(idx != update.ItemPosition) {
                 // The position for this item has changed.. likely due to a item promotion.
                 // Update the order of the queue - to do this we should
                 // simply re-query the server for an up-to-date queue index.

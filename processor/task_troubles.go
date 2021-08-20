@@ -105,19 +105,19 @@ func (base *baseTaskError) ResolutionContext() map[string]interface{} {
 	return base.resolutionContext
 }
 
-func (base *baseTaskError) MarshalJSON() ([]byte, error) {
+func marshalToJson(trouble Trouble) ([]byte, error) {
 	res := struct {
 		Message      string                 `json:"message"`
 		ExpectedArgs map[string]string      `json:"expected_args"`
 		Type         int                    `json:"type"`
-		Payload      map[string]interface{} `json:"additional_payload"`
+		Payload      map[string]interface{} `json:"payload"`
 		ItemId       int                    `json:"item_id"`
 	}{
-		base.Error(),
-		base.Args(),
-		base.Type(),
-		base.Payload(),
-		base.Item().Id,
+		trouble.Error(),
+		trouble.Args(),
+		trouble.Type(),
+		trouble.Payload(),
+		trouble.Item().Id,
 	}
 
 	return json.Marshal(res)
@@ -155,6 +155,10 @@ func (ex TitleTaskError) Resolve(args map[string]interface{}) error {
 
 	ex.ProvideResolutionContext("info", &result)
 	return nil
+}
+
+func (ex *TitleTaskError) MarshalJSON() ([]byte, error) {
+	return marshalToJson(ex)
 }
 
 type OmdbTaskError struct {
@@ -235,6 +239,10 @@ func (ex *OmdbTaskError) Payload() map[string]interface{} {
 	}
 }
 
+func (ex *OmdbTaskError) MarshalJSON() ([]byte, error) {
+	return marshalToJson(ex)
+}
+
 // FormatTaskError is an error/trouble type that is raised when ffmpeg/ffprobe encounters
 // an error. The only real solution to this is to retry because an error of this type
 // indicates that a glitch occurred, or that the input file is malformed.
@@ -249,4 +257,8 @@ type FormatTaskError struct {
 func (ex FormatTaskError) Resolve(map[string]interface{}) error {
 	ex.queueItem.SetStatus(Pending)
 	return nil
+}
+
+func (ex *FormatTaskError) MarshalJSON() ([]byte, error) {
+	return marshalToJson(ex)
 }

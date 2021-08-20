@@ -1,9 +1,8 @@
 <script lang="ts">
 import { createEventDispatcher } from "svelte";
 import DynamicForm from "../../DynamicForm.svelte";
-import type { QueueDetails, QueueTroubleDetails } from "../../QueueItem.svelte";
+import type { QueueDetails } from "../../QueueItem.svelte";
 
-export let troubleDetails: QueueTroubleDetails
 export let queueDetails: QueueDetails
 
 const dispatcher = createEventDispatcher()
@@ -56,5 +55,5 @@ export function selectedResolver(): string {
         Fill out the form below to resolve this problem, <i>you can leave a field blank if it's not applicable (e.g. episode number for a movie)</i>
     </p>
 
-    <DynamicForm on:submitted={(event) => resolveTitle(event.detail)} fields={troubleDetails.expectedArgs}></DynamicForm>
+    <DynamicForm on:submitted={(event) => resolveTitle(event.detail)} fields={queueDetails.trouble.expected_args}></DynamicForm>
 {/if}

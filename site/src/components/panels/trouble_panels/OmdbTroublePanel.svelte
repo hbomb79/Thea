@@ -2,11 +2,10 @@
 import { createEventDispatcher, onMount } from "svelte";
 import { readable } from "svelte/store";
 import DynamicForm from "../../DynamicForm.svelte";
-import type { QueueTroubleDetails } from "../../QueueItem.svelte";
+import type { QueueDetails, QueueTroubleDetails } from "../../QueueItem.svelte";
 import { QueueTroubleType } from "../../QueueItem.svelte";
 
-export let troubleDetails:QueueTroubleDetails
-
+export let queueDetails: QueueDetails
 const dispatcher = createEventDispatcher()
 
 let currentResolver = ""
@@ -15,6 +14,7 @@ const validResolvers = [
     ["Manual", 'struct'],
 ]
 
+$: troubleDetails = queueDetails.trouble
 onMount(() => {
     if(troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE) {
         validResolvers.unshift(["Choose", "choice"])

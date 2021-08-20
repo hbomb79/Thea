@@ -5,7 +5,9 @@ export enum QueueStatus {
     PENDING,
     PROCESSING,
     COMPLETED,
-    TROUBLED
+    NEEDS_RESOLVING,
+    CANCELLING,
+    CANCELLED,
 }
 
 export enum QueueStage {
@@ -13,7 +15,7 @@ export enum QueueStage {
     TITLE,
     OMDB,
     FFMPEG,
-    DB, //TODO Implement in Go server
+    DB,
     FINISH
 }
 
@@ -63,21 +65,12 @@ export interface QueueOmdbInfo {
     Genre: string[]
 }
 
-// TODO evaluate if this is needed, or if we can just bundle 'expectedArgs' in
-// with trouble info instead (server side)
 export interface QueueTroubleDetails {
-    message:string,
-    expectedArgs:Object,
-    type:QueueTroubleType,
-    [key:string]:any
-}
-
-// QueueTroubleInfo is the information regarding a trouble
-// state from the Go server
-export interface QueueTroubleInfo {
     message: string
-    type:QueueTroubleType
-    [key:string]:any
+    expected_args: Object
+    type: QueueTroubleType
+    payload: Object
+    item_id: number
 }
 
 // QueueDetails is a single interface that extends the definition
@@ -85,12 +78,12 @@ export interface QueueTroubleInfo {
 export interface QueueDetails extends QueueItem {
     title_info: QueueTitleInfo
     omdb_info:  QueueOmdbInfo
-    trouble: QueueTroubleInfo
+    trouble: QueueTroubleDetails
 }
 </script>
 
 <script lang="ts">
-import { onMount, SvelteComponent } from "svelte";
+import { onMount } from "svelte";
 import { commander, dataStream } from "../commander";
 import { SocketMessageType } from "../store";
 import type { SocketData } from "../store";
@@ -111,7 +104,7 @@ export let queueInfo:QueueItem
 
 // The enhanced version of the above queueInfo, populated after the component
 // has been mounted by commander (QUEUE_DETAILS websocket command)
-let details:QueueDetails = null
+let queueDetails:QueueDetails = null
 
 // The state of this component, affected by the websocket
 // packets that we're receiving from commander.
@@ -138,13 +131,13 @@ const getQueueDetails = () => {
         arguments: {id: queueInfo.id}
     }, (response:SocketData): boolean => {
         if(response.type == SocketMessageType.RESPONSE) {
-            details = response.arguments.payload
+            queueDetails = response.arguments.payload
             state = ComponentState.COMPLETE
 
             return true
         }
 
-        details = null
+        queueDetails = null
         state = ComponentState.ERR
 
         return false
@@ -154,13 +147,13 @@ const getQueueDetails = () => {
 // getStageStr returns a string representing the current stage of this item
 function getStageStr(stage:number): string {
     switch(stage) {
-        //TODO add case for DB stage
         case 0: return "IO Poller"
         case 1: return "Title Formatter"
         case 2: return "OMDB Querying"
         case 3: return "Formatter"
         case 4: return "DB Committer"
-        case 4: return "Finished"
+        case 5: return "Finished"
+        default: return "UNKNOWN"
     }
 }
 
@@ -171,6 +164,9 @@ function getStatusStr(status:number): string {
         case 1: return "Working"
         case 2: return "Completed"
         case 3: return "<b>Troubled</b>"
+        case 4: return "<i>Cancelling</i>"
+        case 5: return "Cancelled"
+        default: return "UNKNOWN"
     }
 }
 
@@ -178,7 +174,7 @@ function sendCommand(command: string, successCallback: (arg0: SocketData) => voi
     commander.sendMessage({
         type: SocketMessageType.COMMAND,
         title: command,
-        arguments: { id: details.id }
+        arguments: { id: queueDetails.id }
     }, (reply: SocketData): boolean => {
         if(reply.type == SocketMessageType.ERR_RESPONSE) {
             errorCallback(reply)
@@ -254,7 +250,7 @@ function openDiagnosticsPanel(event: MouseEvent) {
 
     troubleModal = new TroublePanel({
         target: document.body,
-        props: { details: details }
+        props: { queueDetails: queueDetails }
     })
 
     troubleModal.$on("close", () => {
@@ -267,7 +263,7 @@ function openDiagnosticsPanel(event: MouseEvent) {
 // page IF the queue item is currently troubled.
 // If it's not troubled, the page is set to the page for the current stage
 function handleStatClick():void {
-    page = details.stage
+    page = queueDetails.stage
 }
 
 // handleStageClick will set the page to the event detail
@@ -280,14 +276,14 @@ function handleStageClick(event:CustomEvent) {
 // stat is a dynamic binding method for Svelte that will live update
 // the status text based on the stage and status of the item
 $:stat = function() {
-    return getStageStr(details.stage) + ": " + getStatusStr(details.status)
+    return getStageStr(queueDetails.stage) + ": " + getStatusStr(queueDetails.status)
 }
 
 // isStatActive is a dynamic svelte binding to test if the status
 // button for this component should be marked 'active'. Is active
 // if the stage is troubled AND we're viewing the trouble.
 $:isStatActive = function() {
-    return <number>page == details.stage
+    return <number>page == queueDetails.stage
 }
 
 // Get enhanced details of the queue item
@@ -297,7 +293,7 @@ onMount(() => {
     dataStream.subscribe((data:SocketData) => {
         if(data.type == SocketMessageType.UPDATE) {
             const updateContext = data.arguments.context
-            if(updateContext && updateContext.QueueItem && updateContext.QueueItem.id == details.id) {
+            if(updateContext && updateContext.QueueItem && updateContext.QueueItem.id == queueDetails.id) {
                 getQueueDetails()
             }
         }
@@ -321,17 +317,17 @@ onMount(() => {
         </main>
     </div>
 {:else if state == ComponentState.COMPLETE}
-    <div class="item" class:trouble="{details.trouble}">
+    <div class="item" class:trouble="{queueDetails.trouble}">
         <div class="header">
-            <span class="id">#{details.id}</span>
+            <span class="id">#{queueDetails.id}</span>
             <h2>
-                {#if details.omdb_info} {details.omdb_info.Title}
-                {:else if details.title_info} {details.title_info.Title}
-                {:else} {details.name}
+                {#if queueDetails.omdb_info} {queueDetails.omdb_info.Title}
+                {:else if queueDetails.title_info} {queueDetails.title_info.Title}
+                {:else} {queueDetails.name}
                 {/if}
 
-                {#if details.title_info && details.title_info.Episodic}
-                    <span class="season">S{details.title_info.Season}E{details.title_info.Episode}</span>
+                {#if queueDetails.title_info && queueDetails.title_info.Episodic}
+                    <span class="season">S{queueDetails.title_info.Season}E{queueDetails.title_info.Episode}</span>
                 {/if}
             </h2>
 
@@ -349,35 +345,29 @@ onMount(() => {
             <QueueItemControls bind:this={controlsPanel} on:queue-control={handleItemAction}/>
         </div>
         <main>
-            <!-- We have a few cases here:
-            1: The page we're viewing is not yet started
-            2: the page we're viewing is complete
-            3: the page we're viewing is in progress
-            4: the page we're viewing is troubled
-            -->
-            {#if details.stage == page && details.status != QueueStatus.COMPLETED && details.status != QueueStatus.PROCESSING}
+            {#if queueDetails.stage == page && queueDetails.status != QueueStatus.COMPLETED && queueDetails.status != QueueStatus.PROCESSING}
                 <!-- We're viewing the page representing the current stage -->
-                {#if details.status == QueueStatus.TROUBLED}
+                {#if queueDetails.status == QueueStatus.NEEDS_RESOLVING}
                     <!-- Stage is troubled. Show the trouble panel -->
                     <div class="troubled tile">
                         <h2>Stage Troubled</h2>
                         <p>This stage has experienced an error that can be resolved via the diagnostics panel.</p>
                         <button on:click|preventDefault={openDiagnosticsPanel}>Open Diagnostics Panel</button>
                     </div>
-                {:else if details.status == QueueStatus.PENDING}
+                {:else if queueDetails.status == QueueStatus.PENDING}
                     <div class="pending tile">
-                        <h2>This stage is enqueued</h2>
-                        <span>All {getStageStr(details.stage)} are busy with other items - once it's this items turn, it's progress will appear here.</span>
+                        <h2>This stage is queued</h2>
+                        <span>All {getStageStr(queueDetails.stage)} are busy with other items - once it's this items turn, it's progress will appear here.</span>
                         {@html pendingHtml}
                     </div>
                 {/if}
-            {:else if details.stage >= page || page == QueueStage.IMPORT || details.status == QueueStatus.PROCESSING}
+            {:else if queueDetails.stage >= page || page == QueueStage.IMPORT || queueDetails.status == QueueStatus.PROCESSING}
                 {#if page == QueueStage.IMPORT}
-                    <OverviewPanel details={details} on:spinner-click="{handleStatClick}" on:stage-click="{handleStageClick}"/>
+                    <OverviewPanel details={queueDetails} on:spinner-click="{handleStatClick}" on:stage-click="{handleStageClick}"/>
                 {:else if page == QueueStage.TITLE}
-                    <TitlePanel details={details}/>
+                    <TitlePanel details={queueDetails}/>
                 {:else if page == QueueStage.OMDB}
-                    <OmdbPanel details={details}/>
+                    <OmdbPanel details={queueDetails}/>
                 {:else if page == QueueStage.FFMPEG}
                     <FfmpegPanel/>
                 {:else if page == QueueStage.DB}

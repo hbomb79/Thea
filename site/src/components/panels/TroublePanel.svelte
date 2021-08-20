@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { commander, dataStream } from "../../commander";
-import { SocketMessageType, SocketPacketType } from "../../store";
+import { SocketMessageType } from "../../store";
 
 import type { SocketData } from "../../store";
 import { QueueTroubleType } from "../QueueItem.svelte";
@@ -10,7 +10,7 @@ import type { QueueDetails, QueueTroubleDetails } from "../QueueItem.svelte";
 import rippleHtml from '../../assets/html/ripple.html';
 
 import OmdbTroublePanel from "./trouble_panels/OmdbTroublePanel.svelte";
-import { createEventDispatcher, SvelteComponent } from "svelte/internal";
+import { createEventDispatcher } from "svelte/internal";
 import TitleTroublePanel from "./trouble_panels/TitleTroublePanel.svelte";
 import FormatTroublePanel from "./trouble_panels/FormatTroublePanel.svelte";
 
@@ -23,8 +23,7 @@ interface EmbeddedPanel {
 }
 
 enum ComponentState {
-    LOADING,
-    LOADED,
+    MAIN,
     RESOLVING,
     CONFIRMING,
     RESOLVED,
@@ -33,54 +32,16 @@ enum ComponentState {
     ERR
 }
 
-export let details: QueueDetails
+export let queueDetails: QueueDetails
 
 const dispatch = createEventDispatcher()
 
-let state = ComponentState.LOADING
-let troubleDetails: QueueTroubleDetails
+let state = ComponentState.MAIN
+let troubleDetails: QueueTroubleDetails = queueDetails.trouble
 let failureDetails = ""
 
 let embeddedPanel: EmbeddedPanel = null
 let embeddedPanelResolver = ""
-
-const getTroubleDetails = () => {
-    commander.sendMessage({
-        title: "TROUBLE_DETAILS",
-        type: SocketMessageType.COMMAND,
-        arguments: { id: details.id }
-    }, (data: SocketData): boolean => {
-        if(data.type == SocketMessageType.RESPONSE) {
-            const trbl = data.arguments.payload as QueueTroubleDetails
-
-            if(troubleDetails) {
-                if(state == ComponentState.CONFIRMING) {
-                    if(trbl && trbl.type == troubleDetails.type) {
-                        state = ComponentState.PERSISTS
-                    } else {
-                        state = ComponentState.RESOLVED
-                    }
-                }
-            } else {
-                state = ComponentState.LOADED
-            }
-
-            troubleDetails = data.arguments.payload
-        } else {
-            if(troubleDetails && state == ComponentState.CONFIRMING) {
-                state = ComponentState.RESOLVED
-
-                return true
-            }
-
-            state = ComponentState.ERR
-        }
-
-        return true;
-    })
-}
-
-let confirmTimeout
 
 // sendResolution will attempt to send a trouble resolution command to the server
 // by appending the given data to the message using the spread syntax.
@@ -94,7 +55,7 @@ function sendResolution(packet:CustomEvent) {
         title: "TROUBLE_RESOLVE",
         type: SocketMessageType.COMMAND,
         arguments: {
-            id: details.id,
+            id: queueDetails.id,
             ...args
         }
     }, function(data: SocketData) {
@@ -114,7 +75,7 @@ function updateEmbeddedPanelResolver() {
 }
 
 function resetPanel() {
-    state = ComponentState.LOADED
+    state = ComponentState.MAIN
 
     // requestAnimationFrame because 'embeddedPanel' will
     // not exist as it's only present when state is LOADED.
@@ -124,17 +85,9 @@ function resetPanel() {
 }
 
 onMount(() => {
-    getTroubleDetails()
-
     dataStream.subscribe((data) => {
         if(data.type == SocketMessageType.UPDATE) {
-            const updateContext = data.arguments.context
-            if(!troubleDetails || !updateContext || !updateContext.QueueItem) return
-
-            const item = updateContext.QueueItem as QueueDetails
-            if(item.id != details.id) return
-
-            getTroubleDetails()
+            // TODO
         }
     })
 })
@@ -170,7 +123,7 @@ onMount(() => {
 
 <!-- Template -->
 <div class="modal-backdrop" on:click="{() => dispatch('close')}"></div>
-<div class="item modal trouble" class:trouble="{details.trouble}">
+<div class="item modal trouble">
     <div class="header">
         <h2>Trouble Diagnostics</h2>
     </div>
@@ -184,15 +137,13 @@ onMount(() => {
         </div>
     {/if}
     <main>
-        {#if state == ComponentState.LOADING}
-            <div class="spinner"> {@html rippleHtml} </div>
-        {:else if state == ComponentState.LOADED}
+        {#if state == ComponentState.MAIN}
             {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
-                <TitleTroublePanel bind:this={embeddedPanel} queueDetails={details} troubleDetails={troubleDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+                <TitleTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
             {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
-                <OmdbTroublePanel bind:this={embeddedPanel} troubleDetails={troubleDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+                <OmdbTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
             {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
-                <FormatTroublePanel bind:this={embeddedPanel} troubleDetails={troubleDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+                <FormatTroublePanel bind:this={embeddedPanel} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
             {:else}
                 <h2>Unknown trouble</h2>
                 <p>We don't have a known resolution for this trouble case. Please check server logs for guidance.</p>

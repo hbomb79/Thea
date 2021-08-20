@@ -1,8 +1,5 @@
 <script lang="ts">
 import { createEventDispatcher } from "svelte";
-import type { QueueTroubleDetails } from "../../QueueItem.svelte";
-
-export let troubleDetails:QueueTroubleDetails
 
 const dispatcher = createEventDispatcher()
 

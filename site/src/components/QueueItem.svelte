@@ -67,9 +67,9 @@ export interface QueueOmdbInfo {
 
 export interface QueueTroubleDetails {
     message: string
-    expected_args: Object
+    expected_args: any
     type: QueueTroubleType
-    payload: Object
+    payload: any
     item_id: number
 }
 
@@ -250,6 +250,10 @@ function openDiagnosticsPanel(event: MouseEvent) {
 
     troubleModal = new TroublePanel({
         target: document.body,
+        // NOTE this prop is NOT reactive... this is actually
+        // a good thing as it allows the embedded panel to
+        // catch changes in the dataStream (subscribing for updates)
+        // and compare the new data with it's current data.
         props: { queueDetails: queueDetails }
     })
 
@@ -286,7 +290,9 @@ $:isStatActive = function() {
     return <number>page == queueDetails.stage
 }
 
-// Get enhanced details of the queue item
+// Get enhanced details of the queue item. If this information changes
+// we'll be notified by the server via an 'UPDATE' packet, which we
+// can use for all the information
 onMount(() => {
     getQueueDetails()
 
@@ -294,7 +300,7 @@ onMount(() => {
         if(data.type == SocketMessageType.UPDATE) {
             const updateContext = data.arguments.context
             if(updateContext && updateContext.QueueItem && updateContext.QueueItem.id == queueDetails.id) {
-                getQueueDetails()
+                queueDetails = updateContext.QueueItem
             }
         }
     })

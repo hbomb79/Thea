@@ -113,9 +113,9 @@ onMount(() => {
     {:else if state == ComponentState.COMPLETE}
         <div class="wrapper">
             <span class="subtitle">Queue <span style="font-weight: 300;">({items.length})</span></span>
-            {#each items as item (item.id)}
+            {#each items as queueInfo (queueInfo.id)}
                 <!-- QueueItem is aliased to Item to avoid naming conflict -->
-                <Item queueInfo={item} />
+                <Item {queueInfo} />
             {/each}
         </div>
     {:else}

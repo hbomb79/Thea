@@ -60,6 +60,9 @@ func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn) 
 
 				// Unhandled exception!
 				return err
+			} else {
+				// Task finished successfully. Clear the trouble
+				item.ClearTrouble()
 			}
 		}
 
@@ -90,8 +93,6 @@ func (task *TitleTask) Execute(w *worker.Worker) error {
 // indicates whether or not the item has been fully processed. Item trouble is cleared
 // when this method returns
 func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
-	defer queueItem.ClearTrouble()
-
 	if queueItem.Trouble != nil {
 		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
 			// Check for the mandatory 'info' key.
@@ -286,7 +287,6 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 		return nil, false
 	}
 
-	defer queueItem.ClearTrouble()
 	trbl, ok := queueItem.Trouble.(*OmdbTaskError)
 	if !ok {
 		return fmt.Errorf("items trouble type (%T) does not match for this worker", queueItem.Trouble), false
@@ -449,7 +449,6 @@ func (task *FormatTask) Execute(w *worker.Worker) error {
 // format will take the provided queueItem and format the file in to
 // a new format.
 func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
-	queueItem.ClearTrouble()
 	outputFormat := task.proc.Config.Format.TargetFormat
 	ffmpegOverwrite := true
 	ffmpegOpts, ffmpegCfg := &ffmpeg.Options{

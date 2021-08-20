@@ -130,7 +130,7 @@ func (p *Processor) Start() error {
 	}
 
 	go func() {
-		ticker := time.NewTicker(time.Second * 1).C
+		ticker := time.NewTicker(time.Millisecond * 500).C
 		for {
 			select {
 			case _ = <-ticker:

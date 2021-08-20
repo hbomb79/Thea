@@ -59,18 +59,20 @@ export let details:QueueDetails;
 }
 </style>
 
-<div class="title-info tile">
-    <section class="status">
-        <StageIcon details={details} stageIndex={1}/>
-    </section>
-    <section class="view">
-        <div class="props">
-            {#each Object.entries(details.title_info) as value}
-                <div class="prop">
-                    <span class="name"><b>{value[0]}</b></span>
-                    <span>{value[1]}</span>
-                </div>
-            {/each}
-        </div>
-    </section>
-</div>
+{#if details.title_info}
+    <div class="title-info tile">
+        <section class="status">
+            <StageIcon details={details} stageIndex={1}/>
+        </section>
+        <section class="view">
+            <div class="props">
+                {#each Object.entries(details.title_info) as value}
+                    <div class="prop">
+                        <span class="name"><b>{value[0]}</b></span>
+                        <span>{value[1]}</span>
+                    </div>
+                {/each}
+            </div>
+        </section>
+    </div>
+{/if}

@@ -121,21 +121,15 @@ func (item *QueueItem) SetStatus(status QueueItemStatus) {
 // SetTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
-func (item *QueueItem) SetTrouble(trouble Trouble) error {
+func (item *QueueItem) SetTrouble(trouble Trouble) {
 	fmt.Printf("[Trouble] Raising trouble (%T) for QueueItem (%v)!\n", trouble, item.Path)
-	if item.Trouble == nil {
-		item.Trouble = trouble
+	item.Trouble = trouble
 
-		// If the item is cancelled/cancelling, we don't want to override that status
-		// with 'NeedsResolving'.
-		if item.Status != Cancelling && item.Status != Cancelled {
-			item.SetStatus(NeedsResolving)
-		}
-
-		return nil
+	// If the item is cancelled/cancelling, we don't want to override that status
+	// with 'NeedsResolving'.
+	if item.Status != Cancelling && item.Status != Cancelled {
+		item.SetStatus(NeedsResolving)
 	}
-
-	return errors.New(fmt.Sprintf("Failed to raise trouble state for item(%v) as a trouble state already exists: %#v\n", item.Id, trouble))
 }
 
 // ClearTrouble is used to remove the trouble state from

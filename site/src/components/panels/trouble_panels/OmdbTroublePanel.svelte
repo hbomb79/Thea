@@ -1,8 +1,7 @@
 <script lang="ts">
 import { createEventDispatcher, onMount } from "svelte";
-import { readable } from "svelte/store";
 import DynamicForm from "../../DynamicForm.svelte";
-import type { QueueDetails, QueueTroubleDetails } from "../../QueueItem.svelte";
+import type { QueueDetails } from "../../QueueItem.svelte";
 import { QueueTroubleType } from "../../QueueItem.svelte";
 
 export let queueDetails: QueueDetails
@@ -123,7 +122,7 @@ export function selectedResolver(): string {
     <p class="trouble">Our search through OMDB resulted in multiple options. Pick the correct one below.<br>If none are correct, you can provide an IMDB id or provide the item details manually using the navigation above.</p>
 
     <div class="choices">
-        {#each troubleDetails.additionalPayload.choices as {Title, Year, imdbId, Type}, i}
+        {#each troubleDetails.payload.choices as {Title, Year, imdbId, Type}, i}
             <div class="choice choice-{i}" on:click="{() => resolveChoice(i)}">
                 <h2 class="title">{Title}<span class="id">{imdbId}</span></h2>
                 <p>{Type} from {Year}</p>
@@ -146,5 +145,5 @@ export function selectedResolver(): string {
     <p>
         If this item doesn't exist in OMDBs database yet, you can instead provide all the details manually below.
     </p>
-    <DynamicForm fields={troubleDetails.expectedArgs} on:submitted={(event) => resolveWithForm(event.detail)}/>
+    <DynamicForm fields={troubleDetails.expected_args} on:submitted={(event) => resolveWithForm(event.detail)}/>
 {/if}

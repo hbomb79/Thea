@@ -158,14 +158,21 @@ onMount(() => {
     overflow: hidden;
     border-color: red;
     border-width: 1px;
+    top: 10%;
+    margin: 0;
+    max-height: 85%;
+    display: flex;
+    flex-direction: column;
+    transform: translate(-50%, 0);
 
     .header {
         background: #f75e5e;
         align-items: center;
+        flex-shrink: 0;
 
         h2 {
             color: #890101;
-            padding-left:1rem;
+            padding-left: 1rem;
         }
 
         .close {
@@ -192,6 +199,7 @@ onMount(() => {
 
     main {
         padding: 1rem 2rem;
+        overflow-y: auto;
 
         @import "../../styles/trouble.scss";
     }

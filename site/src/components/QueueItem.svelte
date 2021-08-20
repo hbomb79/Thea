@@ -311,6 +311,16 @@ onMount(() => {
 <style lang="scss">
 @use '../styles/global.scss';
 @use '../styles/queueItem.scss';
+
+.resolving {
+    width: 80%;
+        margin: 0 auto;
+        background: linear-gradient(326deg , #d9b6ea5f, #bfd9ff5f);
+        border: solid 1px #a99dfb;
+        border-radius: 3px;
+        padding: 0rem;
+        color: #5e6495;
+    }
 </style>
 
 <!-- Template -->
@@ -362,8 +372,13 @@ onMount(() => {
                     </div>
                 {:else if queueDetails.status == QueueStatus.PENDING}
                     <div class="pending tile">
+                        {#if queueDetails.trouble}
+                            <div class="resolving">
+                                <p class="sub">This item has trouble resolution data attached and is waiting for confirmation of item progress</p>
+                            </div>
+                        {/if}
                         <h2>This stage is queued</h2>
-                        <span>All {getStageStr(queueDetails.stage)} are busy with other items - once it's this items turn, it's progress will appear here.</span>
+                        <span>All workers for this stage are busy with other items - progress will appear here once a worker is available.</span>
                         {@html pendingHtml}
                     </div>
                 {/if}

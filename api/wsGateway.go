@@ -162,23 +162,9 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *ws.SocketHub, message *ws.Sock
 		return errors.New(fmt.Sprintf(ERR_FMT, "item has no trouble"))
 	}
 
-	trouble := struct {
-		Message           string                `json:"message"`
-		Type              processor.TroubleType `json:"type"`
-		ExpectedArgs      map[string]string     `json:"expectedArgs"`
-		AdditionalPayload interface{}           `json:"additionalPayload"`
-		ItemId            int                   `json:"itemId"`
-	}{
-		queueItem.Trouble.Error(),
-		queueItem.Trouble.Type(),
-		queueItem.Trouble.Args(),
-		queueItem.Trouble.Payload(),
-		queueItem.Id,
-	}
-
 	hub.Send(&ws.SocketMessage{
 		Title:  "COMMAND_SUCCESS",
-		Body:   map[string]interface{}{"payload": trouble, "command": message},
+		Body:   map[string]interface{}{"payload": queueItem.Trouble, "command": message},
 		Id:     message.Id,
 		Target: message.Origin,
 		Type:   ws.Response,

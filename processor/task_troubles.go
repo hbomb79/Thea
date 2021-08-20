@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -102,6 +103,24 @@ func (base *baseTaskError) ProvideResolutionContext(key string, ctx interface{})
 
 func (base *baseTaskError) ResolutionContext() map[string]interface{} {
 	return base.resolutionContext
+}
+
+func (base *baseTaskError) MarshalJSON() ([]byte, error) {
+	res := struct {
+		Message      string                 `json:"message"`
+		ExpectedArgs map[string]string      `json:"expected_args"`
+		Type         int                    `json:"type"`
+		Payload      map[string]interface{} `json:"additional_payload"`
+		ItemId       int                    `json:"item_id"`
+	}{
+		base.Error(),
+		base.Args(),
+		base.Type(),
+		base.Payload(),
+		base.Item().Id,
+	}
+
+	return json.Marshal(res)
 }
 
 // TitleTaskError is an error raised during the processing of the

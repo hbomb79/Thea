@@ -153,32 +153,31 @@ onMount(() => {
 @use "../../styles/global.scss";
 @use "../../styles/modal.scss";
 
+.modal-backdrop {
+    display: none;
+}
 .modal.trouble {
-    width: 70%;
-    overflow: hidden;
-    border-color: red;
+    border-color: #ffc6c6;
     border-width: 1px;
-    top: 10%;
     margin: 0;
-    max-height: 85%;
-    display: flex;
     flex-direction: column;
-    transform: translate(-50%, 0);
+    position: initial;
+    transform: none;
 
     .header {
-        background: #f75e5e;
+        background: #ffc6c6;
         align-items: center;
         flex-shrink: 0;
 
         h2 {
-            color: #890101;
+            color: #ff7a7a;
             padding-left: 1rem;
         }
 
         .close {
             padding: 0.5rem;
             margin-right: 0.5rem;
-            background: #f75e5e;
+            background: #ffc6c6;
             transition: background 150ms;
             border-radius: 4px;
             font-size: 0;
@@ -192,14 +191,40 @@ onMount(() => {
             :global(svg) {
                 width: 1rem;
                 height: 1rem;
-                fill: #890101;
+                fill: #ff7979;
+            }
+        }
+    }
+
+    .panel {
+        background: #ffebeb;
+
+        .panel-item {
+            box-shadow: 0px 3px 6px -5px #909090;
+            background-color: #ffc6c6;
+            color: #ff6060;
+            border: 2px solid #ffc6c6;
+
+            &:hover {
+                background-color: #f99191;
+                color: #ffebeb;
+                border-color: #f99191;
+            }
+
+            &.active {
+                background-color: #ff9a9a;
+                color: white;
+                border-color: #ffc6c6;
+            }
+
+            &:before {
+                content: none;
             }
         }
     }
 
     main {
         padding: 1rem 2rem;
-        overflow-y: auto;
 
         @import "../../styles/trouble.scss";
     }

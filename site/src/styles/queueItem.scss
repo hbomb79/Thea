@@ -1,6 +1,9 @@
 @use "tile.scss";
 
 .item {
+    h2 {
+        margin-top: 0;
+    }
     .header {
         /* Ocupy all remaining width of the flexbox */
         .id {
@@ -58,8 +61,6 @@
         }
 
         .tile.pending {
-            padding: 1rem;
-
             h2 {
                 color: #9681e2;
             }

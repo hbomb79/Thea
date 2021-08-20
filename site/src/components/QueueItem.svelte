@@ -314,7 +314,7 @@ onMount(() => {
 
 .resolving {
     width: 80%;
-        margin: 0 auto;
+        margin: 0 auto 2rem auto;
         background: linear-gradient(326deg , #d9b6ea5f, #bfd9ff5f);
         border: solid 1px #a99dfb;
         border-radius: 3px;

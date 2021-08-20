@@ -129,6 +129,7 @@ enum ComponentState {
 let state = ComponentState.LOADING
 let page = QueueStage.IMPORT
 let controlsPanel:QueueItemControls = null
+let troubleModal:TroublePanel = null
 
 const getQueueDetails = () => {
     commander.sendMessage({
@@ -244,6 +245,24 @@ function handleItemAction(event: CustomEvent) {
     }
 }
 
+function openDiagnosticsPanel(event: MouseEvent) {
+    event.stopPropagation()
+
+    if(troubleModal) {
+        troubleModal.$destroy()
+    }
+
+    troubleModal = new TroublePanel({
+        target: document.body,
+        props: { details: details }
+    })
+
+    troubleModal.$on("close", () => {
+        troubleModal.$destroy()
+        troubleModal = undefined
+    })
+}
+
 // handleStatClick will switch the component page to the TROUBLE
 // page IF the queue item is currently troubled.
 // If it's not troubled, the page is set to the page for the current stage
@@ -340,7 +359,11 @@ onMount(() => {
                 <!-- We're viewing the page representing the current stage -->
                 {#if details.status == QueueStatus.TROUBLED}
                     <!-- Stage is troubled. Show the trouble panel -->
-                    <TroublePanel details={details}/>
+                    <div class="troubled tile">
+                        <h2>Stage Troubled</h2>
+                        <p>This stage has experienced an error that can be resolved via the diagnostics panel.</p>
+                        <button on:click|preventDefault={openDiagnosticsPanel}>Open Diagnostics Panel</button>
+                    </div>
                 {:else if details.status == QueueStatus.PENDING}
                     <div class="pending tile">
                         <h2>This stage is enqueued</h2>

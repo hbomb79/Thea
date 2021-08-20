@@ -1,66 +1,60 @@
 <script lang="ts">
 import { createEventDispatcher } from "svelte";
-import { SocketMessageType } from "../../../store";
-import type { SocketData } from "../../../store";
-import type {  QueueDetails, QueueTroubleDetails } from "../../QueueItem.svelte";
+import DynamicForm from "../../DynamicForm.svelte";
+import type { QueueDetails, QueueTroubleDetails } from "../../QueueItem.svelte";
 
-export let troubleDetails:QueueTroubleDetails
-export let details:QueueDetails
+export let troubleDetails: QueueTroubleDetails
+export let queueDetails: QueueDetails
 
 const dispatcher = createEventDispatcher()
-enum ComponentState {
-    INIT,
-    READY,
-    RESOLVING,
-    CONFIRMING,
-    FAILURE
+
+let currentResolver = ""
+const validResolvers = [
+    ["Manual", 'struct'],
+]
+
+function resolveTitle(titleInfo: Object) {
+    dispatcher("try-resolve", { args: titleInfo })
 }
 
-let state = ComponentState.READY
-let err = ''
+export function getHeader(): string {
+    return `Title Parser Trouble`
+}
 
-function titleResolutionModalSpawn() {
-    dispatcher("display-modal", {
-        title: "Title Info",
-        description: `<p>We failed to parse the title <b>'${details.name}</b><br>Please manually enter the data below (leave blank if not applicable).</p>`,
-        fields: troubleDetails.expectedArgs,
-        cb: (result:Object) => {
-            state = ComponentState.RESOLVING
-            dispatcher("try-resolve", {
-                args: result,
-                cb: (reply:SocketData): boolean => {
-                    if(reply.type == SocketMessageType.RESPONSE) {
-                        console.log("Successfully resolved trouble state. Waiting for confirmation")
-                        state = ComponentState.CONFIRMING
+export function getBody(): string {
+    return "TITLE_FAILURE"
+}
 
-                        return true
-                    }
+export function listResolvers() {
+    return validResolvers
+}
 
-                    console.warn("Failed to resolve trouble state")
-                    state = ComponentState.FAILURE
-                    err = `${reply.title}: ${reply.arguments.error}`
+export function selectResolver(resolver: string) {
+    const idx = validResolvers.findIndex(([_, key]) => key == resolver)
 
-                    return false
-                }
-            })
-        }
-    })
+    currentResolver = idx > -1 ? resolver : ""
+    dispatcher("selection-change")
+}
+
+export function selectedResolver(): string {
+    return currentResolver
 }
 </script>
 
 <style lang="scss">
-
+@use "../../../styles/trouble.scss";
 </style>
 
-{#if state == ComponentState.READY}
-    <h2>Title Formatter Troubled</h2>
-    <p class="trouble">{troubleDetails.message}</p>
-    <button on:click={titleResolutionModalSpawn}>Provide Title Info</button>
-{:else if state == ComponentState.RESOLVING}
-    <span>Sending resolution to server</span>
-{:else if state == ComponentState.CONFIRMING}
-    <span>Confirming the trouble is resolved</span>
-{:else if state == ComponentState.FAILURE}
-    <span>Trouble resolution has failed - please check server logs for assistance</span>
-    <p>{err}</p>
+{#if currentResolver == "struct"}
+    <h2>TitleInfo Struct</h2>
+    <p class="sub">Provide TitleInfo manually</p>
+
+    <p>
+        The processor was unable to parse information from this filename<br>
+        <code>{queueDetails.name}</code>
+        <br><br>
+        Fill out the form below to resolve this problem, <i>you can leave a field blank if it's not applicable (e.g. episode number for a movie)</i>
+    </p>
+
+    <DynamicForm on:submitted={(event) => resolveTitle(event.detail)} fields={troubleDetails.expectedArgs}></DynamicForm>
 {/if}

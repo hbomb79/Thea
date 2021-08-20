@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/mitchellh/mapstructure"
 )
@@ -129,6 +130,10 @@ func (ex TitleTaskError) Resolve(args map[string]interface{}) error {
 		return err
 	}
 
+	if strings.TrimSpace(result.Title) == "" {
+		return errors.New("TitleInfo 'Title' cannot be empty!")
+	}
+
 	ex.ProvideResolutionContext("info", &result)
 	return nil
 }
@@ -147,6 +152,7 @@ type OmdbTaskError struct {
 func (ex *OmdbTaskError) Resolve(args map[string]interface{}) error {
 	if v, ok := args["imdbId"]; ok {
 		ex.ProvideResolutionContext("fetchId", v)
+		return nil
 	} else if v, ok := args["replacementStruct"]; ok {
 		if vStruct, ok := v.(OmdbInfo); ok {
 			ex.ProvideResolutionContext("omdbStruct", vStruct)
@@ -181,8 +187,6 @@ func (ex *OmdbTaskError) Resolve(args map[string]interface{}) error {
 	} else {
 		return errors.New("Unable to resolve OMDB task error - arguments provided are invalid! One of 'imdbId, action, choiceId, replacementStruct' was expected.")
 	}
-
-	return errors.New("Unable to resolve OMDB task error - unexpected error. Please try again later or check output logs for guidance.")
 }
 
 // Args returns the arguments required to rebuild an OmdbInfo

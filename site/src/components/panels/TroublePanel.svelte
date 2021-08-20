@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { commander, dataStream } from "../../commander";
-import { SocketMessageType } from "../../store";
+import { SocketMessageType, SocketPacketType } from "../../store";
 
 import type { SocketData } from "../../store";
 import { QueueTroubleType } from "../QueueItem.svelte";
@@ -10,37 +10,69 @@ import type { QueueDetails, QueueTroubleDetails } from "../QueueItem.svelte";
 import rippleHtml from '../../assets/html/ripple.html';
 
 import OmdbTroublePanel from "./trouble_panels/OmdbTroublePanel.svelte";
-import type { SvelteComponent } from "svelte/internal";
-import ResolutionModal from "../modals/ResolutionModal.svelte";
+import { createEventDispatcher, SvelteComponent } from "svelte/internal";
 import TitleTroublePanel from "./trouble_panels/TitleTroublePanel.svelte";
 import FormatTroublePanel from "./trouble_panels/FormatTroublePanel.svelte";
+
+interface EmbeddedPanel {
+    selectResolver(arg0: string): void
+    selectedResolver(): string
+    listResolvers(): string[][]
+    getHeader(): string
+    getBody(): string
+}
 
 enum ComponentState {
     LOADING,
     LOADED,
     RESOLVING,
     CONFIRMING,
+    RESOLVED,
     FAILURE,
+    PERSISTS,
     ERR
 }
 
-export let details:QueueDetails
-let state = ComponentState.LOADING
-let troubleDetails:QueueTroubleDetails
+export let details: QueueDetails
 
-let modal:SvelteComponent = null;
+const dispatch = createEventDispatcher()
+
+let state = ComponentState.LOADING
+let troubleDetails: QueueTroubleDetails
+let failureDetails = ""
+
+let embeddedPanel: EmbeddedPanel = null
+let embeddedPanelResolver = ""
 
 const getTroubleDetails = () => {
     commander.sendMessage({
         title: "TROUBLE_DETAILS",
         type: SocketMessageType.COMMAND,
         arguments: { id: details.id }
-    }, (data:SocketData): boolean => {
-        // Wait for reply to message by using a callback.
+    }, (data: SocketData): boolean => {
         if(data.type == SocketMessageType.RESPONSE) {
+            const trbl = data.arguments.payload as QueueTroubleDetails
+
+            if(troubleDetails) {
+                if(state == ComponentState.CONFIRMING) {
+                    if(trbl && trbl.type == troubleDetails.type) {
+                        state = ComponentState.PERSISTS
+                    } else {
+                        state = ComponentState.RESOLVED
+                    }
+                }
+            } else {
+                state = ComponentState.LOADED
+            }
+
             troubleDetails = data.arguments.payload
-            state = ComponentState.LOADED
         } else {
+            if(troubleDetails && state == ComponentState.CONFIRMING) {
+                state = ComponentState.RESOLVED
+
+                return true
+            }
+
             state = ComponentState.ERR
         }
 
@@ -48,12 +80,14 @@ const getTroubleDetails = () => {
     })
 }
 
+let confirmTimeout
+
 // sendResolution will attempt to send a trouble resolution command to the server
 // by appending the given data to the message using the spread syntax.
 // A callback must be provided, and is passed to the send command to enable
 // feedback from the server.
 function sendResolution(packet:CustomEvent) {
-    const { args, cb } = packet.detail
+    const args = packet.detail.args
 
     state = ComponentState.RESOLVING
     commander.sendMessage({
@@ -63,26 +97,29 @@ function sendResolution(packet:CustomEvent) {
             id: details.id,
             ...args
         }
-    }, function() {
-        state = ComponentState.CONFIRMING
-        return cb(...arguments)
+    }, function(data: SocketData) {
+        if(data.type == SocketMessageType.RESPONSE) {
+            state = ComponentState.CONFIRMING
+        } else {
+            state = ComponentState.FAILURE
+            failureDetails = `Server rejected resolution with error: <b>${data.arguments.error}</b>`
+        }
+            
+        return true
     })
 }
 
-function spawnResolutionModal(packet:CustomEvent) {
-    if(modal) {
-        modal.$destroy()
-        modal = undefined
-    }
+function updateEmbeddedPanelResolver() {
+    embeddedPanelResolver = embeddedPanel.selectedResolver()
+}
 
-    modal = new ResolutionModal({
-        target: document.body,
-        props: { ...packet.detail }
-    })
+function resetPanel() {
+    state = ComponentState.LOADED
 
-    modal.$on("close", () => {
-        modal.$destroy()
-        modal = undefined
+    // requestAnimationFrame because 'embeddedPanel' will
+    // not exist as it's only present when state is LOADED.
+    requestAnimationFrame(() => {
+        if(embeddedPanel) embeddedPanel.selectResolver(embeddedPanelResolver)
     })
 }
 
@@ -92,52 +129,114 @@ onMount(() => {
     dataStream.subscribe((data) => {
         if(data.type == SocketMessageType.UPDATE) {
             const updateContext = data.arguments.context
-            if(updateContext && updateContext.QueueItem?.id == details.id) {
-                getTroubleDetails()
-            }
+            if(!troubleDetails || !updateContext || !updateContext.QueueItem) return
+
+            const item = updateContext.QueueItem as QueueDetails
+            if(item.id != details.id) return
+
+            getTroubleDetails()
         }
     })
 })
+
 </script>
 
 <style lang="scss">
 @use "../../styles/global.scss";
+@use "../../styles/modal.scss";
 
-.tile.trouble {
-    padding: 1rem;
+.modal.trouble {
+    width: 70%;
+    overflow: hidden;
+    border-color: red;
+    border-width: 1px;
 
-    :global(h2) {
-        margin: 0;
-        color: #5e5e5e;
+    .header {
+        background: #f75e5e;
+
+        h2 {
+            color: #890101;
+        }
+    }
+
+    main {
+        padding: 1rem 2rem;
+
+        @import "../../styles/trouble.scss";
     }
 }
+
 </style>
 
 <!-- Template -->
-<div class="tile trouble">
-    {#if state == ComponentState.LOADED}
-        {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
-            <TitleTroublePanel details={details} troubleDetails={troubleDetails} on:display-modal={spawnResolutionModal} on:try-resolve={sendResolution}/>
-        {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
-            <OmdbTroublePanel troubleDetails={troubleDetails} on:try-resolve={sendResolution} on:display-modal={spawnResolutionModal}/>
-        {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
-            <FormatTroublePanel details={details} troubleDetails={troubleDetails} on:try-resolve={sendResolution}/>
-        {:else}
-            <h2>Unknown trouble</h2>
-            <p>We don't have a known resolution for this trouble case. Please check server logs for guidance.</p>
-        {/if}
-    {:else if state == ComponentState.LOADING}
-        <p>Fetching trouble resolution</p>
-        {@html rippleHtml}
-    {:else if state == ComponentState.RESOLVING || state == ComponentState.CONFIRMING}
+<div class="modal-backdrop" on:click="{() => dispatch('close')}"></div>
+<div class="item modal trouble" class:trouble="{details.trouble}">
+    <div class="header">
+        <h2>Trouble Diagnostics</h2>
+    </div>
+
+    {#if embeddedPanel}
+        <div class="panel">
+            <span class="panel-item" on:click={() => embeddedPanel.selectResolver("")} class:active={embeddedPanelResolver == ""}>Details</span>
+            {#each embeddedPanel.listResolvers() as [display, key]}
+                <span class="panel-item" class:active={embeddedPanelResolver == key} on:click="{() => embeddedPanel.selectResolver(key)}">{display}</span>
+            {/each}
+        </div>
+    {/if}
+    <main>
+        {#if state == ComponentState.LOADING}
+            <div class="spinner"> {@html rippleHtml} </div>
+        {:else if state == ComponentState.LOADED}
+            {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
+                <TitleTroublePanel bind:this={embeddedPanel} queueDetails={details} troubleDetails={troubleDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+            {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
+                <OmdbTroublePanel bind:this={embeddedPanel} troubleDetails={troubleDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+            {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
+                <FormatTroublePanel bind:this={embeddedPanel} troubleDetails={troubleDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+            {:else}
+                <h2>Unknown trouble</h2>
+                <p>We don't have a known resolution for this trouble case. Please check server logs for guidance.</p>
+            {/if}
+
+            {#if embeddedPanelResolver == "" && embeddedPanel}
+                <h2>{embeddedPanel.getHeader()}</h2>
+                <p class="sub">{@html embeddedPanel.getBody()}</p>
+
+                <p><code><b>Error: </b>{troubleDetails.message}</code><br><br><i>Select an option above to begin resolving</i></p>
+            {/if}
+        {:else if state == ComponentState.RESOLVING || state == ComponentState.CONFIRMING}
             <h2>Resolving trouble</h2>
-            <p>
-                Please wait while we process that request:
-                {#if state == ComponentState.CONFIRMING}
-                <b>Verifying that resolution solved the problem</b>
+            <p class="sub">
+                {#if state == ComponentState.RESOLVING}
+                Waiting for server
+                {:else}
+                Verifying item progression
                 {/if}
             </p>
-    {:else}
-        <span class="err">Failed to fetch trouble resolution</span>
-    {/if}
+            <p>
+                Please wait while we process that request. This could take a few seconds.
+            </p>
+        {:else if state == ComponentState.RESOLVED}
+            <h2>Trouble Resolved</h2>
+            <p>This trouble has been resolved. You can now close this modal.</p>
+
+            <button on:click|preventDefault={() => dispatch("close")}>Close</button>
+        {:else if state == ComponentState.PERSISTS}
+            <h2>Trouble Persists</h2>
+            <p>
+                The server accepted our resolution data, however the trouble was re-raised by the server.<br>
+                <i>Check server logs for more information, or contact server administrator for further assistance</i>
+            </p>
+
+            <button on:click|preventDefault={resetPanel}>Back</button>
+        {:else if state == ComponentState.FAILURE}
+            <h2>Trouble Resolution Rejected</h2>
+            <p>{@html failureDetails}</p>
+
+            <button on:click|preventDefault={resetPanel}>Back</button>
+        {:else}
+            <span class="err">Failed to fetch trouble resolution</span>
+        {/if}
+    </main>
 </div>
+

@@ -1,48 +1,74 @@
 <script lang="ts">
-import { createEventDispatcher } from "svelte";
-import { SocketMessageType } from "../../../store";
-import type { SocketData } from "../../../store";
-
-import type {  QueueTroubleDetails } from "../../QueueItem.svelte";
+import { createEventDispatcher, onMount } from "svelte";
+import { readable } from "svelte/store";
+import DynamicForm from "../../DynamicForm.svelte";
+import type { QueueTroubleDetails } from "../../QueueItem.svelte";
 import { QueueTroubleType } from "../../QueueItem.svelte";
 
 export let troubleDetails:QueueTroubleDetails
 
 const dispatcher = createEventDispatcher()
-enum ComponentState {
-    INIT,
-    READY,
-    RESOLVING,
-    CONFIRMING,
-    FAILURE
-}
 
-let state = ComponentState.READY
-let err:string = ''
+let currentResolver = ""
+const validResolvers = [
+    ["IMDB ID", 'imdb'],
+    ["Manual", 'struct'],
+]
+
+onMount(() => {
+    if(troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE) {
+        validResolvers.unshift(["Choose", "choice"])
+    }
+})
 
 function resolveChoice(choiceId:number) {
-    state = ComponentState.RESOLVING
     dispatcher("try-resolve", {
-        args: {choiceId: choiceId},
-        cb: (data:SocketData): boolean => {
-            if(data.type == SocketMessageType.RESPONSE) {
-                console.log("Successfully resolved trouble state. Waiting for confirmation")
-                state = ComponentState.CONFIRMING
-
-                return true
-            }
-
-            console.warn("Failed to resolve trouble state")
-            state = ComponentState.FAILURE
-            err = `${data.title}: ${data.arguments.error}`
-
-            return false
-        }
+        args: {choiceId: choiceId}
     })
+}
+
+function resolveWithForm(result: Object){
+    dispatcher("try-resolve", {
+        args: result
+    })
+}
+
+export function getHeader(): string {
+    return `OMDB API query result exception`
+}
+
+export function getBody(): string {
+    switch(troubleDetails.type) {
+        case QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE:
+            return `OMDB_MULTIPLE_RESULT_FAILURE`
+        case QueueTroubleType.OMDB_NO_RESULT_FAILURE:
+            return "OMDB_NO_RESULT_FAILURE"
+        case QueueTroubleType.OMDB_REQUEST_FAILURE:
+        default:
+            return "OMDB_REQUEST_FAILURE"
+    }
+
+}
+
+export function listResolvers(): string[][] {
+    return validResolvers
+}
+
+export function selectResolver(resolver: string) {
+    const idx = listResolvers().findIndex(([_, key]) => key == resolver)
+
+    currentResolver = idx > -1 ? resolver : ""
+    dispatcher("selection-change")
+}
+
+export function selectedResolver(): string {
+    return currentResolver
 }
 </script>
 
 <style lang="scss">
+@use "../../../styles/trouble.scss";
+
 .choices {
     display: flex;
     flex-direction: row;
@@ -92,31 +118,33 @@ function resolveChoice(choiceId:number) {
 }
 </style>
 
-{#if state == ComponentState.READY}
-    <h2>OMDB Troubled</h2>
-    <p class="trouble">{troubleDetails.message}</p>
+{#if currentResolver == "choice"}
+    <h2>Choose Option</h2>
+    <p class="trouble">Our search through OMDB resulted in multiple options. Pick the correct one below.<br>If none are correct, you can provide an IMDB id or provide the item details manually using the navigation above.</p>
 
-    {#if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE}
-        <div class="choices">
-            {#each troubleDetails.additionalPayload.choices as {Title, Year, imdbId, Type}, i}
-                <div class="choice choice-{i}" on:click="{() => resolveChoice(i)}">
-                    <h2 class="title">{Title}<span class="id">{imdbId}</span></h2>
-                    <p>{Type} from {Year}</p>
-                </div>
-            {/each}
-        </div>
-    {:else if troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
-        <!--TODO-->
-    {:else if troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE}
-        <!--TODO-->
-    {:else}
-        <!--TODO-->
-    {/if}
-{:else if state == ComponentState.RESOLVING}
-    <span>Sending resolution to server</span>
-{:else if state == ComponentState.CONFIRMING}
-    <span>Confirming the trouble is resolved</span>
-{:else if state == ComponentState.FAILURE}
-    <span>Trouble resolution has failed - please check server logs for assistance</span>
-    <p>{err}</p>
+    <div class="choices">
+        {#each troubleDetails.additionalPayload.choices as {Title, Year, imdbId, Type}, i}
+            <div class="choice choice-{i}" on:click="{() => resolveChoice(i)}">
+                <h2 class="title">{Title}<span class="id">{imdbId}</span></h2>
+                <p>{Type} from {Year}</p>
+            </div>
+        {/each}
+    </div>
+{:else if currentResolver == "imdb"}
+    <h2>IMDB ID</h2>
+    <p class="sub">Provide ImdbID</p>
+
+    <p>
+        Search IMDB for the entry that best describes this item and provide the ID here.<br>
+        The processor will retry this item with the new ImdbID once a worker is available to do so.
+    </p>
+
+    <DynamicForm fields={{imdbId: "string"}} on:submitted={(event) => resolveWithForm(event.detail)}/>
+{:else if currentResolver == "struct"}
+    <h2>OmdbInfo Struct</h2>
+    <p class="sub">Provide information manually</p>
+    <p>
+        If this item doesn't exist in OMDBs database yet, you can instead provide all the details manually below.
+    </p>
+    <DynamicForm fields={troubleDetails.expectedArgs} on:submitted={(event) => resolveWithForm(event.detail)}/>
 {/if}

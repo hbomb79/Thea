@@ -20,8 +20,6 @@ main {
     width: 100%;
     height: 100%;
 
-    overflow-y: scroll;
-
     transition: right global.$statusPanelAnimTime ease-out;
     display: flex;
     align-items: flex-start;

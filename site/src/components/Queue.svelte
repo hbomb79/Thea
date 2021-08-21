@@ -12,6 +12,7 @@ import Item from './QueueItem.svelte';
 import type { QueueDetails } from './QueueItem.svelte';
 import type { SocketData } from '../store';
 import type { QueueItem } from './QueueItem.svelte';
+import QueueItemMini from './QueueItemMini.svelte';
 
 enum ComponentState {
     INDEXING,
@@ -21,6 +22,7 @@ enum ComponentState {
 
 let state = ComponentState.INDEXING
 let items:QueueList = []
+export let minified = false
 const getQueueIndex = () => {
     commander.sendMessage({
         title: "QUEUE_INDEX",
@@ -85,28 +87,12 @@ onMount(() => {
 </script>
 
 <style lang="scss">
-.queue {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-}
+
 .wrapper {
-    width: 80%;
+    width: 90%;
     min-width: 780px;
     margin: 0 auto;
     max-width: 950px;
-
-    .subtitle {
-        margin: 2rem auto -1rem auto;
-        padding-left: 1rem;
-        display: block;
-        text-align: left;
-        font-weight: 500;
-        color: #8c91b9;
-        text-transform: uppercase;
-    }
 }
 
 </style>
@@ -118,13 +104,17 @@ onMount(() => {
             <span>Spinning up...</span>
         </div>
     {:else if state == ComponentState.COMPLETE}
-        <div class="wrapper">
-            <span class="subtitle">Queue <span style="font-weight: 300;">({items.length})</span></span>
+        {#if minified}
             {#each items as queueInfo (queueInfo.id)}
-                <!-- QueueItem is aliased to Item to avoid naming conflict -->
-                <Item {queueInfo} />
+                <QueueItemMini {queueInfo} />
             {/each}
-        </div>
+        {:else}
+            <div class="wrapper">
+                {#each items as queueInfo (queueInfo.id)}
+                    <Item {queueInfo} />
+                {/each}
+            </div>
+        {/if}
     {:else}
         <div><span>Fail</span></div>
     {/if}

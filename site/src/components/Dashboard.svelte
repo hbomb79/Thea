@@ -2,6 +2,7 @@
 import { onMount } from "svelte";
 import Queue from "./Queue.svelte";
 
+import healthSvg from '../assets/health.svg';
 
 const optionElements = new Array(3)
 const options = ["Home", "Queue", "Settings"]
@@ -16,10 +17,6 @@ onMount(() => {
 
 
 <style lang="scss">
-:root(body) {
-    padding: 0;
-}
-
 .dashboard {
     position: relative;
     width: 100%;
@@ -31,10 +28,12 @@ onMount(() => {
         bottom: 4rem;
         left: 4rem;
         right: 4rem;
-        background: #ffffff3f;
+        background: linear-gradient(122deg, #ffffffc7, #ffffff45);
         border: solid 1px #c4b8db;
-        border-radius: 4px;
+        border-radius: 10px;
         box-shadow: 0px 0px 3px #0000000f;
+        overflow: hidden;
+
         .sidebar {
             width: 250px;
             height: 100%;
@@ -45,12 +44,11 @@ onMount(() => {
             h2 {
                 color: #9184c5;
                 text-align: left;
-                padding: 2rem 0 2rem 2rem;
+                padding: 2rem 0 1rem 2rem;
                 margin: 0;
             }
 
             .options {
-
                 .option {
                     padding: 1rem 2rem;
                     margin: 1rem;
@@ -58,6 +56,7 @@ onMount(() => {
                     border-radius: 8px;
                     cursor: pointer;
                     background: #ffffff00;
+                    color: #9aa1d3;
 
                     transition: all 150ms ease-in-out;
                     transition-property: background, border-top-right-radius, border-bottom-right-radius, margin-right;
@@ -68,9 +67,11 @@ onMount(() => {
 
                     &.active {
                         background: linear-gradient( 326deg , #d9b6ea52, #bfd9ff6b);
-                        margin-right:0;
+                        margin-right: 0;
                         border-top-right-radius: 0;
                         border-bottom-right-radius: 0;
+                        font-weight: 500;
+                        color: #9285c5;
                     }
                 }
             }
@@ -82,7 +83,7 @@ onMount(() => {
                 text-align: center;
                 width: 100%;
 
-                color: #5e5e5e;
+                color: #988cc9;
             }
         }
 
@@ -95,8 +96,8 @@ onMount(() => {
             display: flex;
             flex-direction: row;
             padding: 3rem;
-            align-items: center;
-            justify-content: space-around;
+            align-items: flex-start;
+            justify-content: space-between;
             overflow-y: auto;
             &::-webkit-scrollbar {
                 width: 12px;
@@ -114,7 +115,7 @@ onMount(() => {
             }
 
             .column {
-                height: 90%;
+                height: 100%;
                 text-align: left;
                 width: 30%;
                 display: flex;
@@ -141,27 +142,59 @@ onMount(() => {
                     }
                 }
 
-                .tile.status .content {
-                    background: none;
-                    display: flex;
-                    flex-direction: row;
-                    justify-content: space-between;
-                    box-shadow: none;
+                .tile.overview {
+                    margin-bottom: 2rem;
 
-                    .mini-tile {
-                        width: 8rem;
-                        height: 8rem;
-                        padding: 1rem;
+                    .content {
+                        height: 180px;
+                        background: linear-gradient(324deg, #ed17d3a1, #42c0dd);
+                        position: relative;
+
+                        h2 {
+                            padding: 2rem 0 0 2rem;
+                            color: white;
+                            margin-bottom: 0;
+                            font-size: 2rem;
+                        }
+
+                        p {
+                            margin: 0 0 0 2rem;
+                            color: #edf2fe;
+                            font-size: 1.1rem;
+                        }
+
+                        :global(svg) {
+                            height: 100px;
+                            fill: white;
+                            position: absolute;
+                            right: 2.8rem;
+                            top: 2.4rem;
+                            width: auto;
+                        }
+                    }
+                }
+
+                .tile.status {
+                    margin-bottom: 2rem;
+
+                    .content {
+                        background: none;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: space-between;
+                        box-shadow: none;
+
+                        .mini-tile {
+                            width: 8rem;
+                            height: 8rem;
+                            padding: 1rem;
+                        }
                     }
                 }
 
                 .tile.queue {
                     display: flex;
                     flex-direction: column;
-
-                    .content {
-                        flex-grow: 1;
-                    }
                 }
             }
         }
@@ -188,8 +221,15 @@ onMount(() => {
         <div class="tiles">
             {#if selectionOption == 0}
                 <div class="column main">
+                    <div class="tile overview">
+                        <div class="content">
+                            <h2>System Health</h2>
+                            <p>All systems healthy</p>
+
+                            {@html healthSvg}
+                        </div>
+                    </div>
                     <div class="tile status">
-                        <h2 class="header">Status</h2>
                         <div class="content">
                             <div class="mini-tile format"></div>
                             <div class="mini-tile complete"></div>
@@ -198,7 +238,7 @@ onMount(() => {
                     </div>
                     <div class="tile workers">
                         <h2 class="header">Workers</h2>
-                        <div class="content">
+                        <div class="content" style="min-height:230px;">
 
                         </div>
                     </div>
@@ -207,17 +247,12 @@ onMount(() => {
                     <div class="tile queue">
                         <h2 class="header">Queue</h2>
                         <div class="content">
-                            <div class="data">
-                                <p>Joker</p>
-                                <p>1917</p>
-                                <p>WandaVision</p>
-                                <p>Rick and Morty</p>
-                            </div>
+                            <Queue minified={true}/>
                         </div>
                     </div>
                 </div>
             {:else if selectionOption == 1}
-                <Queue/>
+                <Queue minified={false}/>
             {/if}
         </div>
     </div>

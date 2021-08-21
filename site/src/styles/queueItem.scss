@@ -7,7 +7,7 @@
     .header {
         /* Ocupy all remaining width of the flexbox */
         .id {
-            color: #a0a0a0;
+            color: #8c91b9;
             align-self: center;
             padding-left: 11px;
             font-size: 0.9rem;
@@ -16,42 +16,6 @@
 
         h2 .season {
             font-weight: 300;
-        }
-
-        .status {
-            display: inline-block;
-            height: fit-content;
-            align-self: center;
-            margin-right: 8px;
-            font-style: italic;
-            color: #6d6d6d;
-            font-size: 0.8rem;
-            padding: 4px 8px;
-            cursor: pointer;
-            border-radius: 4px;
-
-            transition: background-color 150ms ease-in-out;
-
-            &:hover:not(.active), &.active {
-                background-color: #e2e0e0;
-            }
-            &:hover.active {
-                background-color: #d0cdcd;
-            }
-
-            span {
-                height: 24px;
-                display: inline-block;
-                line-height: 24px;
-            }
-
-            :global(svg) {
-                width: 21px;
-                height: 21px;
-                float: right;
-                margin-left: 8px;
-                fill: #ff6a6a;
-            }
         }
     }
 

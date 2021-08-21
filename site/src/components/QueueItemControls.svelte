@@ -69,25 +69,27 @@ const onSelect = (ev:MouseEvent) => {
 <style lang="scss">
 .controls {
     position: absolute;
-    right: 4px;
-    top: 50%;
+    right: -56px;
     font-size: 0;
-    transform: translate(0, -50%);
+    display: flex;
+    flex-direction: column-reverse;
+    background: #f3f5fe;
+    top: 52px;
+    padding: 5px 3px;
+    border-radius: 4px;
+    transition: opacity 250ms ease-in-out;
+    opacity: 0;
 
     span.control {
         display: inline-block;
         padding: 6px;
-        background: #eee;
-        margin: 0 4px;
+        margin: 3px 4px;
         border-radius: 4px;
         overflow: hidden;
         cursor: pointer;
-        border: solid 1px #e3e3e3;
-
         transition: all 250ms ease-in-out;
         transition-property: width;
         width: 1.3rem;
-
         position: relative;
 
         &.active span {

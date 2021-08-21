@@ -356,10 +356,10 @@ onMount(() => {
             position: absolute;
             width: 100%;
             backface-visibility: hidden;
-            background: #f1effc;
+            background: #f3f5fe;
             border-radius: 4px;
             overflow: hidden;
-            border: solid 1px #d4cbe5;
+            border: solid 1px #9184c52e;
         }
 
         .item-front {
@@ -368,6 +368,10 @@ onMount(() => {
 
         .item-backside {
             transform: rotateX(180deg);
+        }
+
+        &:not(.flipped):hover :global(.controls) {
+            opacity: 1;
         }
     }
 }
@@ -385,6 +389,7 @@ onMount(() => {
 {:else if state == ComponentState.COMPLETE}
     <div class="item-wrapper">
         <div class="item" class:flipped={troubleModal} bind:this={domItem} class:trouble="{queueDetails.trouble}">
+            <QueueItemControls bind:this={controlsPanel} on:queue-control={handleItemAction}/>
             <div class="item-front" bind:this={domItemFront}>
                 <div class="header">
                     <span class="id">#{queueDetails.id}</span>
@@ -398,20 +403,16 @@ onMount(() => {
                             <span class="season">S{queueDetails.title_info.Season}E{queueDetails.title_info.Episode}</span>
                         {/if}
                     </h2>
-
-                    <div class="status" on:click="{handleStatClick}" class:active="{isStatActive()}">
-                        <span>{@html stat()}</span>
+                </div>
+                {#if page != QueueStage.IMPORT}
+                    <div class="panel">
+                        <span class="panel-item" on:click="{() => page = QueueStage.IMPORT}">Overview</span>
+                        <span class:active="{page == QueueStage.TITLE}" class="panel-item" on:click="{() => page = QueueStage.TITLE}">Title</span>
+                        <span class:active="{page == QueueStage.OMDB}" class="panel-item" on:click="{() => page = QueueStage.OMDB}">OMDB</span>
+                        <span class:active="{page == QueueStage.FFMPEG}" class="panel-item" on:click="{() => page = QueueStage.FFMPEG}">FFmpeg</span>
+                        <span class:active="{page == QueueStage.DB}" class="panel-item" on:click="{() => page = QueueStage.DB}">DB</span>
                     </div>
-                </div>
-                <div class="panel">
-                    <span class:active="{page == QueueStage.IMPORT}" class="panel-item" on:click="{() => page = QueueStage.IMPORT}">Overview</span>
-                    <span class:active="{page == QueueStage.TITLE}" class="panel-item" on:click="{() => page = QueueStage.TITLE}">Title</span>
-                    <span class:active="{page == QueueStage.OMDB}" class="panel-item" on:click="{() => page = QueueStage.OMDB}">OMDB</span>
-                    <span class:active="{page == QueueStage.FFMPEG}" class="panel-item" on:click="{() => page = QueueStage.FFMPEG}">FFmpeg</span>
-                    <span class:active="{page == QueueStage.DB}" class="panel-item" on:click="{() => page = QueueStage.DB}">DB</span>
-
-                    <QueueItemControls bind:this={controlsPanel} on:queue-control={handleItemAction}/>
-                </div>
+                {/if}
                 <main>
                     {#if queueDetails.stage == page && queueDetails.status != QueueStatus.COMPLETED && queueDetails.status != QueueStatus.PROCESSING}
                         <!-- We're viewing the page representing the current stage -->

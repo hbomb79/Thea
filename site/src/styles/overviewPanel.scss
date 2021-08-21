@@ -13,7 +13,7 @@
         cursor: pointer;
 
         /* ha nice */
-        background: radial-gradient(white 50%, transparent 69% 100%);
+        background: radial-gradient(#f1effc 50%, transparent 69% 100%);
         position: relative;
 
         transition: box-shadow 200ms ease-out, transform 50ms ease-in-out;
@@ -56,7 +56,7 @@
         }
 
         &:hover {
-            background: white;
+            background: #f1effc;
             :global(svg) {
                 fill: black;
             }
@@ -116,7 +116,7 @@
         &.trouble {
             transition: all 200ms ease-in-out;
             transition-property: background-color, box-shadow;
-            background-color: white;
+            background-color: #f1effc;
             box-shadow: 0px 0px 0px 0px transparent;
             border-radius: 6px;
             cursor: pointer;

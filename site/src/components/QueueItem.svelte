@@ -297,6 +297,7 @@ $:isStatActive = function() {
 function resizeFlipContainer() {
     requestAnimationFrame(resizeFlipContainer)
 
+    if(!domItem) return
     const newHeight = domItem.classList.contains("flipped") ? domItemBack.offsetHeight : domItemFront.offsetHeight
     domItem.style.height = `${newHeight}px`
 }
@@ -355,7 +356,10 @@ onMount(() => {
             position: absolute;
             width: 100%;
             backface-visibility: hidden;
-            background: white;
+            background: #f1effc;
+            border-radius: 4px;
+            overflow: hidden;
+            border: solid 1px #d4cbe5;
         }
 
         .item-front {

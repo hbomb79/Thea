@@ -85,6 +85,13 @@ onMount(() => {
 </script>
 
 <style lang="scss">
+.queue {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
 .wrapper {
     width: 80%;
     min-width: 780px;

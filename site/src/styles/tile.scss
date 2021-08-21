@@ -1,6 +1,5 @@
 .item {
-    background: white;
-    box-shadow: 0px 0px 6px -3px #4b494c;
+    background: none;
     max-width: 950px;
     border-radius: 2px;
     margin: 2rem auto;
@@ -10,9 +9,7 @@
         /* Ocupy all remaining width of the flexbox */
         width: 100%;
         text-align: left;
-        overflow: hidden;
-        box-shadow: 0px 0px 5px -3px black;
-        background: #eee;
+        background: white;
 
         display: flex;
         justify-content: space-between;
@@ -29,10 +26,11 @@
     }
 
     .panel {
-        background: #f5f5f5;
+        background: #ffffff5c;
         padding: 0 1rem;
         text-align: left;
         position: relative;
+        border-bottom: solid 1px #e0e3fc;
 
         .panel-item {
             padding: 6px 14px;

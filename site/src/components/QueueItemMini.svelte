@@ -95,7 +95,10 @@ $troubleColour: #f76c6c;
         }
         70% {
             transform: scale(1);
-            box-shadow: 0 0 10px rgba($color: $color, $alpha: 0)
+            box-shadow: 0 0 10px rgba($color: $color, $alpha: 0.6);
+        }
+        90% {
+            box-shadow: 0 0 15px rgba($color: $color, $alpha: 0);
         }
         100% {
             transform: scale(0.9);

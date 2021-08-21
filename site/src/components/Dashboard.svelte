@@ -1,10 +1,12 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import Queue from "./Queue.svelte";
+import ProgressBar from 'progressbar.js'
 
 import healthSvg from '../assets/health.svg';
 
 const optionElements = new Array(3)
+let domCompleted:HTMLElement
 const options = ["Home", "Queue", "Settings"]
 let selectionOption = 0
 
@@ -12,6 +14,31 @@ onMount(() => {
     optionElements.forEach((item: HTMLElement, index) => {
         item.addEventListener("click", () => selectionOption = index)
     })
+
+    var bar = new ProgressBar.Circle(domCompleted, {
+      color: '#aaa',
+      strokeWidth: 4,
+      trailWidth: 1,
+      easing: 'easeInOut',
+      duration: 1400,
+      text: {
+        autoStyleContainer: false
+      },
+      from: { color: '#aaa', width: 1 },
+      to: { color: '#333', width: 4 },
+      // Set default step function for all animate calls
+      step: function(state, circle) {
+        circle.path.setAttribute('stroke', state.color);
+        circle.path.setAttribute('stroke-width', state.width);
+
+          circle.setText('7/10');
+      }
+    });
+
+    bar.text.style.fontFamily = '"Raleway", Helvetica, sans-serif';
+    bar.text.style.fontSize = '1rem';
+
+    bar.animate(0.7);
 })
 </script>
 
@@ -33,6 +60,8 @@ onMount(() => {
         border-radius: 10px;
         box-shadow: 0px 0px 3px #0000000f;
         overflow: hidden;
+        max-width: 1400px;
+        margin: 0 auto;
 
         .sidebar {
             width: 250px;
@@ -135,7 +164,7 @@ onMount(() => {
                     }
 
                     .content, .content .mini-tile {
-                        background: #ffffff94;
+                        background: #ffffff;
                         padding: 0;
                         border-radius: 4px;
                         box-shadow: 0px 0px 3px #0000000f;
@@ -153,7 +182,7 @@ onMount(() => {
                         h2 {
                             padding: 2rem 0 0 2rem;
                             color: white;
-                            margin-bottom: 0;
+                            margin: 0;
                             font-size: 2rem;
                         }
 
@@ -185,9 +214,31 @@ onMount(() => {
                         box-shadow: none;
 
                         .mini-tile {
-                            width: 8rem;
-                            height: 8rem;
+                            width: 40%;
+                            height: 6rem;
                             padding: 1rem;
+                            display: flex;
+                            flex-direction: row;
+
+                            .main {
+                                width: 35%;
+                                height: 100%;
+                                flex-grow: 0;
+                                display: flex;
+                                flex-direction: column;
+                                justify-content: center;
+
+                                .progress {
+                                    position: relative;
+                                    flex-grow: 0;
+                                }
+                            }
+
+                            .tag {
+                                flex-grow: 1;
+                                align-self: center;
+                                text-align: center;
+                            }
                         }
                     }
                 }
@@ -222,6 +273,7 @@ onMount(() => {
             {#if selectionOption == 0}
                 <div class="column main">
                     <div class="tile overview">
+                        <h2 class="header">Overview</h2>
                         <div class="content">
                             <h2>System Health</h2>
                             <p>All systems healthy</p>
@@ -231,9 +283,16 @@ onMount(() => {
                     </div>
                     <div class="tile status">
                         <div class="content">
-                            <div class="mini-tile format"></div>
-                            <div class="mini-tile complete"></div>
-                            <div class="mini-tile trouble"></div>
+                            <div class="mini-tile complete">
+                                <div class="main">
+                                    <div class="progress" bind:this={domCompleted}></div>
+                                </div>
+                                <p class="tag">Items Complete</p>
+                            </div>
+                            <div class="mini-tile trouble">
+                                <div class="main"></div>
+                                <p class="tag">Need Assistance</p>
+                            </div>
                         </div>
                     </div>
                     <div class="tile workers">

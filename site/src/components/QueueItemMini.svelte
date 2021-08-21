@@ -6,6 +6,7 @@ import type { SocketData } from "../store";
 
 import rippleHtml from '../assets/html/ripple.html';
 import type { QueueItem, QueueDetails } from "./QueueItem.svelte";
+import { QueueStatus } from "./QueueItem.svelte";
 
 // The queueInfo we're wanting to display from the parent component.
 export let queueInfo:QueueItem
@@ -45,6 +46,21 @@ const getQueueDetails = () => {
     })
 }
 
+const getStatusClass = () => {
+    switch(queueDetails.status) {
+        case QueueStatus.PENDING:
+            return "pending"
+        case QueueStatus.PROCESSING:
+            return "processing"
+        case QueueStatus.CANCELLING:
+            return "cancelling"
+        case QueueStatus.CANCELLED:
+            return "cancelled"
+        case QueueStatus.NEEDS_RESOLVING:
+            return "troubled"
+    }
+}
+
 // Get enhanced details of the queue item. If this information changes
 // we'll be notified by the server via an 'UPDATE' packet, which we
 // can use for all the information
@@ -66,11 +82,59 @@ onMount(() => {
 <style lang="scss">
 @use '../styles/global.scss';
 
+$pendingColour: #cabdff;
+$processingColour: #39d3fd96;
+$cancelledColour: #ffc297;
+$troubleColour: #f76c6c;
+
+@mixin pulse-keyframe($color) {
+    @keyframes pulse {
+        0% {
+            transform: scale(0.9);
+            box-shadow: 0 0 0 $color;
+        }
+        70% {
+            transform: scale(1);
+            box-shadow: 0 0 10px rgba($color: $color, $alpha: 0)
+        }
+        100% {
+            transform: scale(0.9);
+        }
+    }
+}
+
 p {
     padding: 1rem;
     border-bottom: solid 1px #cec9e7;
     margin: 0rem;
     color: #615a7c;
+
+    .status {
+        background: #39d3fd96;
+        height: 12px;
+        width: 12px;
+        display: inline-block;
+        border-radius: 100%;
+        margin-right: 8px;
+
+        &.pending {
+            background: $pendingColour;
+        }
+        &.processing {
+            background: $processingColour;
+        }
+        &.cancelling, &.cancelled {
+            background: $cancelledColour;
+            @include pulse-keyframe($cancelledColour);
+            animation: pulse infinite 2s;
+        }
+        &.troubled {
+            background: $troubleColour;
+            @include pulse-keyframe($troubleColour);
+            animation: pulse infinite 2s;
+        }
+
+    }
 }
 </style>
 
@@ -82,7 +146,10 @@ p {
             {@html rippleHtml}
         </main>
     {:else if state == ComponentState.COMPLETE}
-        <p>{queueDetails.omdb_info?.Title || queueDetails.title_info?.Title || queueDetails.name}</p>
+        <p>
+            <span class={`status ${getStatusClass()}`}></span>
+            <span class="name">{queueDetails.omdb_info?.Title || queueDetails.title_info?.Title || queueDetails.name}</span>
+        </p>
     {:else}
         <div class="header">
             <h2>Failed to load</h2>

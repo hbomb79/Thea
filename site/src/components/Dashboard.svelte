@@ -117,7 +117,7 @@ onMount(() => {
             .column {
                 height: 100%;
                 text-align: left;
-                width: 30%;
+                width: 35%;
                 display: flex;
                 flex-direction: column;
 

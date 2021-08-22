@@ -87,10 +87,10 @@ export interface QueueDetails extends QueueItem {
 // it's perfecrtly capable of being instantiated multiple times.
 export class QueueManager {
     private _items: QueueItem[] = []
-    private _details: QueueDetails[] = []
+    private _details: Map<number, QueueDetails> = new Map()
 
     itemIndex: Writable<QueueItem[]>
-    itemDetails: Writable<QueueDetails[]>
+    itemDetails: Writable<Map<number, QueueDetails>>
 
     constructor() {
         dataStream.subscribe((data: SocketData) => {
@@ -120,12 +120,22 @@ export class QueueManager {
     // will scan the itemDetails store for missing, or out of date
     // information.
     hydrateDetails(newData: QueueItem[]) {
-        // Find any items that we're missing details for, or that no longer exist
-        const purgedDetails = this._details.filter((item) => newData.findIndex((i) => i.id == item.id) > -1)
-        const missingItems = newData.filter((item) => purgedDetails.findIndex((i) => i.id == item.id) < 0)
-
+        // Find any items that we're missing details for
+        const missingItems = newData.filter((item) => !this._details.has(item.id))
         missingItems.forEach((item) => this.requestDetails(item.id))
-        this.itemDetails.set(purgedDetails)
+
+        // Find invalid details (details that no longer have a coresponding entry in the index)
+        const invalidDetails = []
+        this._details.forEach((item, key) => {
+            if(newData.findIndex((i) => item.id == i.id) < 0) {
+                // Item no longer exists in new details, this entry must be removed
+                invalidDetails.push(key)
+            }
+        })
+
+        // Remove invalid details from the _details
+        invalidDetails.forEach((key) => this._details.delete(key))
+        this.itemDetails.set(this._details)
     }
 
     requestIndex() {
@@ -183,8 +193,6 @@ export class QueueManager {
             }
 
             this._items.splice(idx, 1)
-            // Svelte reactivity requires re-assignment of an array if it's modified using
-            // a mutating method like 'splice'
             this.itemIndex.set(this._items)
         } else if(idx != update.ItemPosition) {
             // The position for this item has changed.. likely due to a item promotion.

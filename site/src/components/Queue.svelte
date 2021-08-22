@@ -3,7 +3,7 @@ import Item from './QueueItem.svelte';
 import type { QueueDetails, QueueItem } from '../queue';
 
 export let queueIndex: QueueItem[] = []
-export let queueDetails: QueueDetails[] = []
+export let queueDetails: Map<number, QueueDetails> = null
 </script>
 
 <style lang="scss">

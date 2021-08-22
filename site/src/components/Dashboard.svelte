@@ -16,16 +16,16 @@ const comp = {
 }
 
 let queue = new QueueManager()
-
-let details: QueueDetails[]
-let index: QueueItem[]
-queue.itemDetails.subscribe((v) => details = v)
-queue.itemIndex.subscribe((v) => index = v)
+let details: Map<number, QueueDetails> = null
+let index: QueueItem[] = []
 
 onMount(() => {
     comp.optionElements.forEach((item: HTMLElement, index) => {
         item.addEventListener("click", () => comp.selectionOption = index)
     })
+
+    queue.itemDetails.subscribe((v) => details = v)
+    queue.itemIndex.subscribe((v) => index = v)
 })
 </script>
 

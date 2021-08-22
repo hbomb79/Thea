@@ -2,9 +2,10 @@
 import { QueueStatus } from "../queue";
 import type { QueueDetails } from "../queue";
 
-export let queueDetails:QueueDetails
+
+export let details: QueueDetails = null;
 const getStatusClass = () => {
-    switch(queueDetails.status) {
+    switch(details.status) {
         case QueueStatus.PENDING:
             return "pending"
         case QueueStatus.PROCESSING:
@@ -19,14 +20,15 @@ const getStatusClass = () => {
 }
 </script>
 
-<style lang="scss">
-@use '../styles/global.scss';
 
-p {
+<style lang="scss">
+@use "../styles/global.scss";
+.item {
     padding: 1rem;
     border-bottom: solid 1px #cec9e7;
     margin: 0rem;
     color: #615a7c;
+    text-align: left;
 
     .status {
         background: #39d3fd96;
@@ -57,12 +59,17 @@ p {
 }
 </style>
 
-<!-- Template -->
-<div>
-    {#if queueDetails}
-        <p>
-            <span class={`status ${getStatusClass()}`}></span>
-            <span class="name">{queueDetails.omdb_info?.Title || queueDetails.title_info?.Title || queueDetails.name}</span>
-        </p>
-    {/if}
-</div>
+{#if details}
+    <div class="item">
+        <span class={`status ${getStatusClass()}`}></span>
+
+        {#if details.omdb_info} {details.omdb_info.Title}
+        {:else if details.title_info} {details.title_info.Title}
+        {:else} {details.name}
+        {/if}
+
+        {#if details.title_info && details.title_info.Episodic}
+            <span class="season">S{details.title_info.Season}E{details.title_info.Episode}</span>
+        {/if}
+    </div>
+{/if}

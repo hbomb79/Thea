@@ -1,6 +1,10 @@
 $navHeight: 2rem;
 $statusPanelWidth: 380px;
 $statusPanelAnimTime: 200ms;
+$pendingColour: #cabdff;
+$processingColour: #39d3fd96;
+$cancelledColour: #ffc297;
+$troubleColour: #f76c6c;
 @keyframes blinker {
   50% {
     opacity: 30%;
@@ -19,6 +23,24 @@ $statusPanelAnimTime: 200ms;
     }
 }
 
+@mixin pulse-keyframe($color) {
+    @keyframes pulse {
+        0% {
+            transform: scale(0.9);
+            box-shadow: 0 0 0 $color;
+        }
+        70% {
+            transform: scale(1);
+            box-shadow: 0 0 10px rgba($color: $color, $alpha: 0.6);
+        }
+        90% {
+            box-shadow: 0 0 15px rgba($color: $color, $alpha: 0);
+        }
+        100% {
+            transform: scale(0.9);
+        }
+    }
+}
 ::-webkit-scrollbar {
     width: 12px;
     background-color: #817d7d66;

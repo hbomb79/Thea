@@ -1,3 +1,5 @@
+$sidebarWidth: 350px;
+
 .dashboard {
     position: relative;
     width: 100%;
@@ -9,12 +11,39 @@
         bottom: 6rem;
         left: 4rem;
         right: 4rem;
-        background: linear-gradient(122deg, #ffffffc7, #ffffff45);
-        border: solid 1px #c4b8db;
-        border-radius: 10px;
-        box-shadow: 0px 0px 3px #0000000f;
         max-width: 1400px;
         margin: 0 auto;
+
+        &.sidebar-open {
+            .sidebar{
+                width: $sidebarWidth;
+                opacity: 1;
+            }
+
+            .tiles {
+                left: $sidebarWidth;
+            }
+        }
+
+        .sidebar {
+            width: 0px;
+            opacity: 0;
+            height: 100%;
+            background: #ffffff3f;
+            border-right: solid 1px #bfbfbf5f;
+            position: relative;
+            overflow: hidden;
+
+            transition: all 150ms ease-in-out;
+            transition-property: opacity, width;
+
+            h2 {
+                color: #9184c5;
+                text-align: left;
+                padding: 2rem 0 1rem 2rem;
+                margin: 0;
+            }
+        }
 
         .options {
             position: absolute;
@@ -62,6 +91,10 @@
             align-items: flex-start;
             justify-content: space-between;
             overflow-y: auto;
+
+            transition: all 150ms ease-in-out;
+            transition-property: left;
+
             &::-webkit-scrollbar {
                 width: 12px;
                 background-color: #817d7d66;

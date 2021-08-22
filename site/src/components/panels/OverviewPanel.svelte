@@ -6,7 +6,7 @@ import ffmpegIcon from '../../assets/ffmpeg-stage.svg';
 import dbIcon from '../../assets/db-stage.svg';
 import StageIcon from '../StageIcon.svelte';
 import { createEventDispatcher, onMount } from "svelte";
-import type { QueueDetails } from '../QueueItem.svelte';
+import type { QueueDetails } from '../../queue';
 
 // details is the QueueDetails we're showing in this component,
 // passed in from the parent component

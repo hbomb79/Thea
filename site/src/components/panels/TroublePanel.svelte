@@ -4,8 +4,8 @@ import { commander, dataStream } from "../../commander";
 import { SocketMessageType } from "../../store";
 
 import type { SocketData } from "../../store";
-import { QueueStatus, QueueTroubleType } from "../QueueItem.svelte";
-import type { QueueDetails, QueueTroubleDetails } from "../QueueItem.svelte";
+import { QueueStatus, QueueTroubleType } from "../../queue";
+import type { QueueDetails, QueueTroubleDetails } from "../../queue";
 
 import closeSvg from '../../assets/close.svg';
 

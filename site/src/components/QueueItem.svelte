@@ -1,85 +1,4 @@
 <script context="module" lang="ts">
-// This module just exports some interfaces that we want
-// to be able to use in other components.
-export enum QueueStatus {
-    PENDING,
-    PROCESSING,
-    COMPLETED,
-    NEEDS_RESOLVING,
-    CANCELLING,
-    CANCELLED,
-}
-
-export enum QueueStage {
-    IMPORT,
-    TITLE,
-    OMDB,
-    FFMPEG,
-    DB,
-    FINISH
-}
-
-export enum QueueTroubleType {
-	TITLE_FAILURE,
-	OMDB_NO_RESULT_FAILURE,
-	OMDB_MULTIPLE_RESULT_FAILURE,
-	OMDB_REQUEST_FAILURE,
-	FFMPEG_FAILURE,
-}
-
-export interface QueueItem {
-    id: number
-    name: string
-    stage: QueueStage
-    status: QueueStatus
-    statusLine: string
-}
-
-// QueueTroubleInfo represents the data we receive
-// from the Go server regarding the Title info for
-// our queue item. This information will be
-// unavailable until the title formatting
-// has been completed.
-export interface QueueTitleInfo {
-    Title: string
-    Episodic: boolean
-    Episode: number
-    Season: number
-    Year: number
-    Resolution: string
-}
-
-// QueueOmdbInfo represents the information about a queue item
-// from the go server - this data will be unavailable until
-// a worker on the go server has queried OMDB for this information
-export interface QueueOmdbInfo {
-    Title: string
-    plot: string
-    ReleaseYear: number
-    Runtime: string
-    Type: string
-    poster: string
-    ImdbId: string
-    Response: boolean
-    Error: string
-    Genre: string[]
-}
-
-export interface QueueTroubleDetails {
-    message: string
-    expected_args: any
-    type: QueueTroubleType
-    payload: any
-    item_id: number
-}
-
-// QueueDetails is a single interface that extends the definition
-// given by QueueItem, by appending the three above interfaces to it.
-export interface QueueDetails extends QueueItem {
-    title_info: QueueTitleInfo
-    omdb_info:  QueueOmdbInfo
-    trouble: QueueTroubleDetails
-}
 </script>
 
 <script lang="ts">
@@ -98,54 +17,19 @@ import FfmpegPanel from "./panels/FfmpegPanel.svelte";
 import DatabasePanel from "./panels/DatabasePanel.svelte";
 import TroublePanel from './panels/TroublePanel.svelte';
 import QueueItemControls, { Action } from './QueueItemControls.svelte';
-
-// The queueInfo we're wanting to display from the parent component.
-export let queueInfo:QueueItem
+import { QueueStage, QueueStatus } from "../queue";
+import type { QueueDetails } from "../queue";
 
 // The enhanced version of the above queueInfo, populated after the component
 // has been mounted by commander (QUEUE_DETAILS websocket command)
-let queueDetails:QueueDetails = null
+export let queueDetails: QueueDetails = null
 
-// The state of this component, affected by the websocket
-// packets that we're receiving from commander.
-// This enum is used to control what HTML content we're displaying
-enum ComponentState {
-    LOADING,
-    ERR,
-    COMPLETE
-}
-
-// The page/panel we're wanting to view inside this component,
-// affected by user interaction (e.g. on:click events)
-
-// The initial state/page of the component
-let state = ComponentState.LOADING
 let page = QueueStage.IMPORT
 let controlsPanel:QueueItemControls = null
 let troubleModal:TroublePanel = null
 let domItemBack:HTMLElement = null
 let domItemFront:HTMLElement = null
 let domItem:HTMLElement = null
-
-const getQueueDetails = () => {
-    commander.sendMessage({
-        type: SocketMessageType.COMMAND,
-        title: "QUEUE_DETAILS",
-        arguments: {id: queueInfo.id}
-    }, (response:SocketData): boolean => {
-        if(response.type == SocketMessageType.RESPONSE) {
-            queueDetails = response.arguments.payload
-            state = ComponentState.COMPLETE
-
-            return true
-        }
-
-        queueDetails = null
-        state = ComponentState.ERR
-
-        return false
-    })
-}
 
 // getStageStr returns a string representing the current stage of this item
 function getStageStr(stage:number): string {
@@ -306,18 +190,17 @@ function resizeFlipContainer() {
 // we'll be notified by the server via an 'UPDATE' packet, which we
 // can use for all the information
 onMount(() => {
-    getQueueDetails()
-
     requestAnimationFrame(resizeFlipContainer)
 
-    dataStream.subscribe((data:SocketData) => {
-        if(data.type == SocketMessageType.UPDATE) {
-            const updateContext = data.arguments.context
-            if(updateContext && updateContext.QueueItem && updateContext.QueueItem.id == queueDetails.id) {
-                queueDetails = updateContext.QueueItem
-            }
-        }
-    })
+    //TODO determine if needed
+    // dataStream.subscribe((data:SocketData) => {
+    //     if(data.type == SocketMessageType.UPDATE) {
+    //         const updateContext = data.arguments.context
+    //         if(updateContext && updateContext.QueueItem && updateContext.QueueItem.id == queueDetails.id) {
+    //             queueDetails = updateContext.QueueItem
+    //         }
+    //     }
+    // })
 })
 
 </script>
@@ -378,15 +261,7 @@ onMount(() => {
 </style>
 
 <!-- Template -->
-{#if state == ComponentState.LOADING}
-    <div class="item">
-        <main>
-            <h2>Loading</h2>
-            <span style="display:block;">Please wait while we fetch this queue item from the server</span>
-            {@html rippleHtml}
-        </main>
-    </div>
-{:else if state == ComponentState.COMPLETE}
+{#if queueDetails}
     <div class="item-wrapper">
         <div class="item" class:flipped={troubleModal} bind:this={domItem} class:trouble="{queueDetails.trouble}">
             <QueueItemControls bind:this={controlsPanel} on:queue-control={handleItemAction}/>
@@ -460,14 +335,5 @@ onMount(() => {
                 <!-- Svelte dynamic component here -->
             </div>
         </div>
-    </div>
-{:else}
-    <div class="item">
-        <div class="header">
-            <h2>Failed to load</h2>
-        </div>
-        <main>
-            <span>Our request to the server failed. Please check the console for details.</span>
-        </main>
     </div>
 {/if}

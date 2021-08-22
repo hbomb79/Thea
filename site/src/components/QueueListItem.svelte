@@ -4,8 +4,8 @@ import type { QueueDetails } from "../queue";
 
 
 export let details: QueueDetails = null;
-const getStatusClass = () => {
-    switch(details.status) {
+$:getStatusClass = () => {
+    switch(details?.status) {
         case QueueStatus.PENDING:
             return "pending"
         case QueueStatus.PROCESSING:
@@ -25,10 +25,13 @@ const getStatusClass = () => {
 @use "../styles/global.scss";
 .item {
     padding: 1rem;
-    border-bottom: solid 1px #cec9e7;
-    margin: 0rem;
     color: #615a7c;
+    cursor: pointer;
     text-align: left;
+    border-radius: 7px;
+    background: #f8f9ff;
+    margin: 11px 1rem;
+    border: solid 1px #8c91b938;
 
     .status {
         background: #39d3fd96;

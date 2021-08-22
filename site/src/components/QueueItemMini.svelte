@@ -3,8 +3,8 @@ import { QueueStatus } from "../queue";
 import type { QueueDetails } from "../queue";
 
 export let queueDetails:QueueDetails
-const getStatusClass = () => {
-    switch(queueDetails.status) {
+$:getStatusClass = () => {
+    switch(queueDetails?.status) {
         case QueueStatus.PENDING:
             return "pending"
         case QueueStatus.PROCESSING:

@@ -1,6 +1,9 @@
 <script lang="ts">
 import { QueueStatus } from "../queue";
 import type { QueueDetails } from "../queue";
+import { createEventDispatcher } from "svelte";
+
+const dispatch = createEventDispatcher();
 
 
 export let details: QueueDetails = null;
@@ -32,6 +35,11 @@ $:getStatusClass = () => {
     background: #f8f9ff;
     margin: 11px 1rem;
     border: solid 1px #8c91b938;
+    transition: background 200ms;
+
+    &:hover {
+        background: white;
+    }
 
     .status {
         background: #39d3fd96;
@@ -63,7 +71,7 @@ $:getStatusClass = () => {
 </style>
 
 {#if details}
-    <div class="item">
+    <div class="item" on:click={() => dispatch('selected', details.id)}>
         <span class={`status ${getStatusClass()}`}></span>
 
         {#if details.omdb_info} {details.omdb_info.Title}

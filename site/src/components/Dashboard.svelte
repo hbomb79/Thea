@@ -8,6 +8,7 @@ import { QueueManager } from "../queue";
 import type { QueueDetails, QueueItem } from "../queue";
 import QueueItemMini from "./QueueItemMini.svelte";
 import QueueListItem from "./QueueListItem.svelte";
+import QueueItemFull from "./QueueItemFull.svelte";
 
 const comp = {
     optionElements: new Array(3),
@@ -19,6 +20,7 @@ const comp = {
 let queue = new QueueManager()
 let details: Map<number, QueueDetails> = null
 let index: QueueItem[] = []
+$:selectedItem = null
 
 onMount(() => {
     comp.optionElements.forEach((item: HTMLElement, index) => {
@@ -67,7 +69,7 @@ onMount(() => {
 
                         <div class="queue-items">
                             {#each index as item (item.id)}
-                                <QueueListItem details={details[item.id]}/>
+                                <QueueListItem on:selected={(event) => selectedItem = details[event.detail]} details={details[item.id]}/>
                             {/each}
                         </div>
                     {/if}
@@ -117,7 +119,11 @@ onMount(() => {
                             </div>
                         </div>
                     {:else if comp.selectionOption == 1}
-                        <Queue queueIndex={index} queueDetails={details}/>
+                        {#if selectedItem}
+                            <QueueItemFull details={selectedItem}/>
+                        {:else}
+                            <h2>Select an item</h2>
+                        {/if}
                     {/if}
                 </div>
             </div>

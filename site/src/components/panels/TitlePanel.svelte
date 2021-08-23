@@ -1,8 +1,8 @@
 <script lang="ts">
-import type { QueueDetails } from '../QueueItem.svelte';
+import type { QueueDetails } from '../../queue';
 import StageIcon from '../StageIcon.svelte';
-export let details:QueueDetails;
 
+export let details:QueueDetails;
 </script>
 
 <style lang="scss">
@@ -12,7 +12,6 @@ export let details:QueueDetails;
     padding: 0 !important;
 
     .status {
-        background-color: white;
         padding: 1rem;
         display: flex;
         flex-direction: column-reverse;

@@ -5,7 +5,7 @@ import { createEventDispatcher } from "svelte";
 
 const dispatch = createEventDispatcher();
 
-
+export let selectedItem: QueueDetails = null;
 export let details: QueueDetails = null;
 $:getStatusClass = () => {
     switch(details?.status) {
@@ -28,17 +28,24 @@ $:getStatusClass = () => {
 @use "../styles/global.scss";
 .item {
     padding: 1rem;
-    color: #615a7c;
+    color: #9696a5;
     cursor: pointer;
     text-align: left;
     border-radius: 7px;
-    background: #f8f9ff;
+    background: #e9eaef54;
     margin: 11px 1rem;
     border: solid 1px #8c91b938;
-    transition: background 200ms;
+    transition: all 200ms;
+    transition-property: background, border, box-shadow, color;
 
     &:hover {
+        background: #ffffff85;
+    }
+
+    &.active {
         background: white;
+        box-shadow: 0px 0px 7px -5px black;
+        color: #8e82bf;
     }
 
     .status {
@@ -71,7 +78,7 @@ $:getStatusClass = () => {
 </style>
 
 {#if details}
-    <div class="item" on:click={() => dispatch('selected', details.id)}>
+    <div class="item" on:click={() => dispatch('selected', details.id)} class:active={selectedItem?.id == details?.id}>
         <span class={`status ${getStatusClass()}`}></span>
 
         {#if details.omdb_info} {details.omdb_info.Title}

@@ -69,16 +69,15 @@ const onSelect = (ev:MouseEvent) => {
 <style lang="scss">
 .controls {
     position: absolute;
-    right: -56px;
+    right: 1rem;
+    top: 1rem;
     font-size: 0;
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: row-reverse;
     background: #f3f5fe;
-    top: 52px;
     padding: 5px 3px;
     border-radius: 4px;
     transition: opacity 250ms ease-in-out;
-    opacity: 0;
 
     span.control {
         display: inline-block;

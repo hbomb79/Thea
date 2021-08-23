@@ -6,6 +6,7 @@ import TitlePanel from "./panels/TitlePanel.svelte";
 import OmdbPanel from "./panels/OmdbPanel.svelte";
 import FfmpegPanel from "./panels/FfmpegPanel.svelte";
 import DatabasePanel from "./panels/DatabasePanel.svelte";
+import QueueItemControls from "./QueueItemControls.svelte";
 
 export let details: QueueDetails = null;
 
@@ -75,6 +76,7 @@ const stages = [
             border-radius: 5px;
             border: solid 1px #d4d6e1;
             margin: 0 0 2rem 0;
+            max-width: none;
 
             &.pipeline {
                 text-align: center;
@@ -103,6 +105,8 @@ const stages = [
             <div class="content">
                 <h2 class="title">Item Title</h2>
                 <p class="sub">Item Status</p>
+
+                <QueueItemControls/>
             </div>
         </div>
 

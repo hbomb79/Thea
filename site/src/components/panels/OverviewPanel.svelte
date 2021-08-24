@@ -15,7 +15,6 @@ export let details:QueueDetails;
 // els and checkEls are lists of HTMLElements that are
 // bound dynamically by svelte after mounting
 const els:HTMLElement[] = new Array(4);
-const checkEls:HTMLElement[] = new Array(4);
 
 // The main container for our stages that is used to adjust
 // the 3d perspective for our tilt animations (see handleMouseOver).
@@ -89,21 +88,6 @@ function onCheckClick(checkIndex:number) {
     }
 }
 
-// getCheckClass is a dynamic binding that is used to
-// get the HTML 'class' that must be applied to each
-// 'check' icon inbetween each pipeline stage in the Overview.
-// This class is used to adjust the color and connecting lines
-// to better reflect the situation (e.g. red with no line
-// after the icon to indicate an error)
-$:getCheckClass = function(checkIndex:number):string {
-    if(checkIndex < details.stage) {
-        return 'complete'
-    } else if(checkIndex == details.stage) {
-        return details.trouble ? 'trouble' : (details.status == 0 ? 'pending' : 'working')
-    } else {
-        return 'queued'
-    }
-}
 
 
 // stages is used to specify the stages we're presenting in this overlay.
@@ -131,8 +115,8 @@ const stages = [
         </div>
 
         {#if index < stages.length - 1}
-            <div bind:this={checkEls[index]} class="check {getCheckClass(index)}" on:click="{() => onCheckClick(index)}">
-                <StageIcon details={details} stageIndex={index}/>
+            <div on:click="{() => onCheckClick(index)}" class="check-wrapper">
+                <StageIcon drawLines={true} details={details} stageIndex={index}/>
             </div>
         {/if}
     {/each}

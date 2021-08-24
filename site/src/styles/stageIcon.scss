@@ -20,7 +20,7 @@
     &.trouble {
         transition: all 200ms ease-in-out;
         transition-property: background-color, box-shadow;
-        background-color: #f3f5fe;
+        background-color: transparent;
         box-shadow: 0px 0px 0px 0px transparent;
         border-radius: 6px;
         cursor: pointer;

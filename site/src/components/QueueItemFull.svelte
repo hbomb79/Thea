@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { QueueDetails } from "../queue";
+import { QueueStatus } from "../queue";
 import wavesSvg from '../assets/waves.svg';
 import OverviewPanel from "./panels/OverviewPanel.svelte";
 import TitlePanel from "./panels/TitlePanel.svelte";
@@ -8,6 +9,7 @@ import FfmpegPanel from "./panels/FfmpegPanel.svelte";
 import DatabasePanel from "./panels/DatabasePanel.svelte";
 import QueueItemControls from "./QueueItemControls.svelte";
 import StageIcon from "./StageIcon.svelte";
+import TroublePanel from "./panels/TroublePanel.svelte";
 
 export let details: QueueDetails = null;
 const stages = [
@@ -119,18 +121,8 @@ const openStages: boolean[] = new Array(stages.length);
                     }
                 }
 
-                .content {
-                    display: none;
-                }
-
-                &.content-open {
-                    .header {
-                        background: white;
-                    }
-
-                    .content {
-                        display: block;
-                    }
+                &.content-open .header {
+                    background: white;
                 }
             }
         }
@@ -175,13 +167,18 @@ const openStages: boolean[] = new Array(stages.length);
                             <StageIcon details={details} stageIndex={k}/>
                         </div>
                     </div>
-                    <div class="content">
-                        {#if component}
-                            <svelte:component this={component} details={details}/>
-                        {:else}
-                            <p>No component available for this stage</p>
-                        {/if}
-                    </div>
+
+                    {#if openStages[k]}
+                        <div class="content">
+                            {#if details.stage == k && details.trouble}
+                                <TroublePanel queueDetails={details}/>
+                            {:else if component}
+                                <svelte:component this={component} details={details}/>
+                            {:else}
+                                <p>No component available for this stage</p>
+                            {/if}
+                        </div>
+                    {/if}
                 </div>
             {/each}
         </div>

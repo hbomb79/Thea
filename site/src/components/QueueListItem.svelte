@@ -5,7 +5,7 @@ import { createEventDispatcher } from "svelte";
 
 const dispatch = createEventDispatcher();
 
-export let selectedItem: QueueDetails = null;
+export let selectedItem: number = null;
 export let details: QueueDetails = null;
 $:getStatusClass = () => {
     switch(details?.status) {
@@ -78,7 +78,7 @@ $:getStatusClass = () => {
 </style>
 
 {#if details}
-    <div class="item" on:click={() => dispatch('selected', details.id)} class:active={selectedItem?.id == details?.id}>
+    <div class="item" on:click={() => dispatch('selected', details.id)} class:active={selectedItem == details?.id}>
         <span class={`status ${getStatusClass()}`}></span>
 
         {#if details.omdb_info} {details.omdb_info.Title}

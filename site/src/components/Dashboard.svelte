@@ -69,7 +69,7 @@ onMount(() => {
 
                         <div class="queue-items">
                             {#each index as item (item.id)}
-                                <QueueListItem selectedItem={selectedItem} on:selected={(event) => selectedItem = details[event.detail]} details={details[item.id]}/>
+                                <QueueListItem selectedItem={selectedItem} on:selected={(event) => selectedItem = event.detail} details={details[item.id]}/>
                             {/each}
                         </div>
                     {/if}
@@ -119,8 +119,8 @@ onMount(() => {
                             </div>
                         </div>
                     {:else if comp.selectionOption == 1}
-                        {#if selectedItem}
-                            <QueueItemFull details={selectedItem}/>
+                        {#if details[selectedItem]}
+                            <QueueItemFull details={details[selectedItem]}/>
                         {:else}
                             <h2>Select an item</h2>
                         {/if}

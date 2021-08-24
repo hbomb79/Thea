@@ -37,7 +37,7 @@ export let queueDetails: QueueDetails
 const dispatch = createEventDispatcher()
 
 let state = ComponentState.MAIN
-let troubleDetails: QueueTroubleDetails = queueDetails.trouble
+$:troubleDetails = queueDetails?.trouble
 let failureDetails = ""
 
 let embeddedPanel: EmbeddedPanel = null
@@ -153,49 +153,16 @@ onMount(() => {
 @use "../../styles/global.scss";
 @use "../../styles/modal.scss";
 
-.modal-backdrop {
-    display: none;
-}
 .modal.trouble {
-    border-color: #ffc6c6;
-    border-width: 1px;
+    border: none;
     margin: 0;
     flex-direction: column;
     position: initial;
     transform: none;
+    max-width: none;
+    background: none;
 
-    .header {
-        background: #ffc6c6;
-        align-items: center;
-        flex-shrink: 0;
-
-        h2 {
-            color: #ff7a7a;
-            padding-left: 1rem;
-        }
-
-        .close {
-            padding: 0.5rem;
-            margin-right: 0.5rem;
-            background: #ffc6c6;
-            transition: background 150ms;
-            border-radius: 4px;
-            font-size: 0;
-            cursor: pointer;
-            height: fit-content;
-
-            &:hover {
-                background: #f74242;
-            }
-
-            :global(svg) {
-                width: 1rem;
-                height: 1rem;
-                fill: #ff7979;
-            }
-        }
-    }
-
+    /*
     .panel {
         background: #ffebeb;
 
@@ -221,7 +188,7 @@ onMount(() => {
                 content: none;
             }
         }
-    }
+    }*/
 
     main {
         padding: 1rem 2rem;
@@ -233,13 +200,7 @@ onMount(() => {
 </style>
 
 <!-- Template -->
-<div class="modal-backdrop" on:click="{() => dispatch('close')}"></div>
 <div class="item modal trouble">
-    <div class="header">
-        <h2>Trouble Diagnostics</h2>
-        <span class="close" on:click={() => dispatch('close')}>{@html closeSvg}</span>
-    </div>
-
     {#if embeddedPanel}
         <div class="panel">
             <span class="panel-item" on:click={() => embeddedPanel.selectResolver("")} class:active={embeddedPanelResolver == ""}>Details</span>

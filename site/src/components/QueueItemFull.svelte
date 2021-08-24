@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { QueueDetails } from "../queue";
+import { QueueStatus } from "../queue";
 
 import wavesSvg from '../assets/waves.svg';
 import OverviewPanel from "./panels/OverviewPanel.svelte";
@@ -10,6 +11,7 @@ import DatabasePanel from "./panels/DatabasePanel.svelte";
 import QueueItemControls from "./QueueItemControls.svelte";
 import StageIcon from "./StageIcon.svelte";
 import TroublePanel from "./panels/TroublePanel.svelte";
+import QueueStagePanel from "./panels/QueueStagePanel.svelte";
 
 export let details: QueueDetails = null;
 const stages = [
@@ -21,6 +23,14 @@ const stages = [
 ]
 
 const openStages: boolean[] = new Array(stages.length);
+
+$:detailsChanged(details)
+
+// Called automatically by Svelte when the details provided to
+// this component change.
+const detailsChanged = (newDetails: QueueDetails) => {
+    console.log(newDetails)
+}
 </script>
 
 <style lang="scss">
@@ -169,13 +179,7 @@ const openStages: boolean[] = new Array(stages.length);
 
                     {#if openStages[k]}
                         <div class="content">
-                            {#if details.stage == k && details.trouble}
-                                <TroublePanel queueDetails={details}/>
-                            {:else if component}
-                                <svelte:component this={component} details={details}/>
-                            {:else}
-                                <p>No component available for this stage</p>
-                            {/if}
+                            <QueueStagePanel queueDetails={details} stageIndex={k} stagePanel={component}/>
                         </div>
                     {/if}
                 </div>

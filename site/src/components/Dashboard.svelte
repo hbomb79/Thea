@@ -1,7 +1,5 @@
 <script lang="ts">
 import { onMount } from "svelte";
-import Queue from "./Queue.svelte";
-// import ProgressBar from 'progressbar.js'
 
 import healthSvg from '../assets/health.svg';
 import { QueueManager } from "../queue";
@@ -20,7 +18,7 @@ const comp = {
 let queue = new QueueManager()
 let details: Map<number, QueueDetails> = null
 let index: QueueItem[] = []
-$:selectedItem = null
+let selectedItem: number = null
 
 onMount(() => {
     comp.optionElements.forEach((item: HTMLElement, index) => {

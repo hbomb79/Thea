@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { QueueDetails } from "../queue";
-import { QueueStatus } from "../queue";
+
 import wavesSvg from '../assets/waves.svg';
 import OverviewPanel from "./panels/OverviewPanel.svelte";
 import TitlePanel from "./panels/TitlePanel.svelte";
@@ -24,7 +24,6 @@ const openStages: boolean[] = new Array(stages.length);
 </script>
 
 <style lang="scss">
-
 .queue-item {
     flex: 1;
     text-align: left;
@@ -42,7 +41,7 @@ const openStages: boolean[] = new Array(stages.length);
             position: absolute;
             width: 100%;
             bottom: -65%;
-            min-width: 900px;
+            min-width: 1050px;
             z-index: 1;
             opacity: 0.4;
         }
@@ -89,7 +88,7 @@ const openStages: boolean[] = new Array(stages.length);
             background: #f3f5fe;
             border-radius: 5px;
             border: solid 1px #d4d6e1;
-            margin: 0 0 2rem 0;
+            margin: 0 0 1.2rem 0;
             max-width: none;
 
             &.pipeline {

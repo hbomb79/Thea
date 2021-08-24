@@ -129,6 +129,9 @@ const detailsChanged = (newDetails: QueueDetails) => {
                         height: 1.5rem;
                     }
                 }
+                .content:not(.troubled) {
+                    border-top: solid 1px #e0e3fc;
+                }
 
                 &.content-open .header {
                     background: white;
@@ -178,7 +181,7 @@ const detailsChanged = (newDetails: QueueDetails) => {
                     </div>
 
                     {#if openStages[k]}
-                        <div class="content">
+                        <div class="content" class:troubled={details.stage == k && details.status == QueueStatus.NEEDS_RESOLVING}>
                             <QueueStagePanel queueDetails={details} stageIndex={k} stagePanel={component}/>
                         </div>
                     {/if}

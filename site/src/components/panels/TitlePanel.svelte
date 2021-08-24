@@ -11,21 +11,6 @@ export let details:QueueDetails;
     flex-direction: row;
     padding: 0 !important;
 
-    .status {
-        padding: 1rem;
-        display: flex;
-        flex-direction: column-reverse;
-        margin: 1rem 1rem 1rem 2rem;
-
-        :global(svg) {
-            width: 4.5rem;
-            height: 4.5rem;
-            margin-bottom: 1rem;
-            fill: #abc3fb;
-            flex: 1 auto;
-        }
-    }
-
     .view {
         flex: 1 auto;
         padding: 1rem 2rem 1rem 1rem;
@@ -33,24 +18,42 @@ export let details:QueueDetails;
         min-width: 0;
         flex-basis: auto;
 
-        .props {
+        .source {
+            text-align: center;
+
+            p {
+                display: inline-block;
+                padding: 14px 2rem;
+                color: #786da5;
+                background: white;
+                border-radius: 6px;
+                margin-bottom: 0;
+                border: solid 1px #dce1f9;
+            }
+        }
+
+        .result {
             display: flex;
-            flex-wrap: wrap;
-            height: 100%;
             justify-content: space-around;
-            text-align: left;
+
+            .main {
+                width: 60%;
+                margin-right: 1rem;
+            }
 
             .prop {
-                width: 33%;
-                min-width: 170px;
-                align-self: center;
+                margin: 1.3rem 0;
 
-                overflow: hidden;
-                text-overflow: ellipsis;
-                padding: 0.5rem 1rem;
+                .title {
+                    color: #9184c5;
+                    font-weight: 400;
+                    margin: 0;
+                    font-size: 1.3rem;
+                }
 
-                .name {
-                    display: block;
+                span {
+                    color: #8c91b9;
+                    font-style: italic;
                 }
             }
         }
@@ -60,17 +63,39 @@ export let details:QueueDetails;
 
 {#if details.title_info}
     <div class="title-info tile">
-        <section class="status">
-            <StageIcon details={details} stageIndex={1}/>
-        </section>
         <section class="view">
-            <div class="props">
-                {#each Object.entries(details.title_info) as value}
+            <div class="source">
+                <p>{details.name}</p>
+            </div>
+            <div class="result">
+                <div class="main">
                     <div class="prop">
-                        <span class="name"><b>{value[0]}</b></span>
-                        <span>{value[1]}</span>
+                        <h2 class="title">Title</h2>
+                        <span>{details.title_info.Title}</span>
                     </div>
-                {/each}
+                    <div class="prop">
+                        <h2 class="title">Year</h2>
+                        <span>{details.title_info.Year}</span>
+                    </div>
+                    <div class="prop">
+                        <h2 class="title">Resolution</h2>
+                        <span>{details.title_info.Resolution}</span>
+                    </div>
+                </div>
+                <div class="episode">
+                    <div class="prop">
+                        <h2 class="title">Episodic?</h2>
+                        <span>{details.title_info.Episodic}</span>
+                    </div>
+                    <div class="prop">
+                        <h2 class="title">Season</h2>
+                        <span>{details.title_info.Season}</span>
+                    </div>
+                    <div class="prop">
+                        <h2 class="title">Episode</h2>
+                        <span>{details.title_info.Episode}</span>
+                    </div>
+                </div>
             </div>
         </section>
     </div>

@@ -16,7 +16,7 @@ const stages = [
     ["Importer", "import", null],
     ["Title Parser", "title", TitlePanel],
     ["OMDB Queryer", "omdb", OmdbPanel],
-    ["FFmpeg Trascoder", "ffmpeg", FfmpegPanel],
+    ["FFmpeg Transcoder", "ffmpeg", FfmpegPanel],
     ["Database Committer", "db", DatabasePanel],
 ]
 

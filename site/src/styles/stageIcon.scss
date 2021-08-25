@@ -13,6 +13,14 @@
         transition: opacity 200ms ease-out;
     }
 
+    :global(.spinner-wrap) {
+        transform: scale(0.4) translate(-50%, -50%);
+        position: absolute;
+        left: -25%;
+        top: -4px;
+        color: #96b4fd;
+    }
+
     &:hover :global(svg) {
         opacity: 1;
     }
@@ -54,11 +62,13 @@
         }
     }
 
-    &.queued {
+    &.queued, &.pending, &.working {
         &:before, &:after {
             display: none;
         }
+    }
 
+    &.queued {
         :global(svg) {
             fill: #abaaaa;
         }

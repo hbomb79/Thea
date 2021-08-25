@@ -18,10 +18,12 @@ $sidebarWidth: 350px;
             .sidebar{
                 width: $sidebarWidth;
                 opacity: 1;
+                box-shadow: -4px 0px 8px #0000004d;
+                z-index: 104;
             }
 
             .tiles {
-                left: $sidebarWidth;
+                left: $sidebarWidth + 1px;
             }
         }
 
@@ -71,6 +73,7 @@ $sidebarWidth: 350px;
                     background: white;
                     font-weight: 500;
                     color: #9285c5;
+                    box-shadow: 0px 0px 3px #00000030;
                 }
 
                 &:last-child {

@@ -7,14 +7,16 @@ $sidebarWidth: 350px;
 
     .wrapper {
         position: absolute;
-        top: 5rem;
-        bottom: 3rem;
+        top: 7rem;
+        bottom: 7rem;
         left: 4rem;
         right: 4rem;
-        max-width: 1400px;
+        max-width: 1850px;
         margin: 0 auto;
 
         &.sidebar-open {
+            max-width: 1850px;
+
             .sidebar{
                 width: $sidebarWidth;
                 opacity: 1;
@@ -44,6 +46,7 @@ $sidebarWidth: 350px;
                 text-align: left;
                 padding: 2rem 0 0.4rem 2rem;
                 margin: 0;
+                font-weight: 400;
             }
         }
 
@@ -135,6 +138,7 @@ $sidebarWidth: 350px;
                         font-size: 1rem;
                         color: #9184c5;
                         padding-left: 1rem;
+                        font-weight: 500;
                     }
 
                     .content, .content .mini-tile {
@@ -152,6 +156,7 @@ $sidebarWidth: 350px;
                         height: 180px;
                         background: linear-gradient(28deg, #6ca8ff, #ef8dff);
                         position: relative;
+                        box-shadow: 0px 2px 6px -1px rgba(0,0,0,0.2);
 
                         h2 {
                             padding: 2rem 0 0 2rem;

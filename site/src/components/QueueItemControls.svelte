@@ -40,6 +40,7 @@ const onSelect = (ev:MouseEvent) => {
 
     if(currentControl && currentControl == action) {
         dispatch("queue-control", action)
+        return
     }
 
     currentControl = action
@@ -74,9 +75,10 @@ const onSelect = (ev:MouseEvent) => {
     font-size: 0;
     display: flex;
     flex-direction: row-reverse;
-    background: #f3f5fe;
-    padding: 5px 3px;
+    background: #ffffff5e;
+    padding: 3px 3px;
     border-radius: 4px;
+    border: solid 1px #00000030;
     transition: opacity 250ms ease-in-out;
 
     span.control {
@@ -87,7 +89,7 @@ const onSelect = (ev:MouseEvent) => {
         overflow: hidden;
         cursor: pointer;
         transition: all 250ms ease-in-out;
-        transition-property: width;
+        transition-property: width, background;
         width: 1.3rem;
         position: relative;
 
@@ -101,7 +103,7 @@ const onSelect = (ev:MouseEvent) => {
             transition: all 250ms ease-in-out;
             transition-property: opacity;
             font-size: 14px;
-            color: #767676;
+            color: #9385cb;
 
             position: absolute;
             right: 8px;
@@ -111,7 +113,7 @@ const onSelect = (ev:MouseEvent) => {
             width: 0.8rem;
             height: 0.8rem;
             padding: 4px;
-            fill: grey;
+            fill: #9385cb;
             display: inline-block;
         }
 
@@ -120,7 +122,7 @@ const onSelect = (ev:MouseEvent) => {
         }
 
         &:hover {
-            background: #cecece;
+            background: #00000014;
         }
     }
 }

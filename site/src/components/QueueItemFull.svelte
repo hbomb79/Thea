@@ -170,9 +170,8 @@ function handleItemAction(event: CustomEvent) {
 
         .waves {
             position: absolute;
-            width: 100%;
-            bottom: -65%;
-            min-width: 1050px;
+            bottom: -350px;
+            width: 1850px;
             z-index: 1;
             opacity: 0.4;
         }
@@ -208,6 +207,9 @@ function handleItemAction(event: CustomEvent) {
 
     .main {
         padding: 1rem 2rem;
+        max-width: 1100px;
+        margin: 0 auto;
+
         .tile-title {
             font-size: 1rem;
             color: #9e94c5;

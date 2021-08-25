@@ -1,8 +1,5 @@
 /// <reference types="svelte" />
 declare module "*.svg"
-
-export {}
-
 declare module '*.html' {
   const value: any;
   export default value;
@@ -17,3 +14,4 @@ interface ServerConfiguration {
 declare global {
     var SERVER_CONFIG: ServerConfiguration
 }
+// export {}

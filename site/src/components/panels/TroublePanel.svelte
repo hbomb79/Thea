@@ -211,23 +211,25 @@ onMount(() => {
     {/if}
     <main>
         {#if state == ComponentState.MAIN}
-            {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
-                <TitleTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
-            {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
-                <OmdbTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
-            {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
-                <FormatTroublePanel bind:this={embeddedPanel} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
-            {:else}
-                <h2>Cannot Resolve</h2>
-                <p class="sub">Unknown trouble type</p>
-                <p>We don't have a known resolution for this trouble case. Please check server logs for guidance.</p>
-            {/if}
+            {#if troubleDetails}
+                {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
+                    <TitleTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+                {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
+                    <OmdbTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+                {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
+                    <FormatTroublePanel bind:this={embeddedPanel} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+                {:else}
+                    <h2>Cannot Resolve</h2>
+                    <p class="sub">Unknown trouble type</p>
+                    <p>We don't have a known resolution for this trouble case. Please check server logs for guidance.</p>
+                {/if}
 
-            {#if embeddedPanelResolver == "" && embeddedPanel}
-                <h2>{embeddedPanel.getHeader()}</h2>
-                <p class="sub">{@html embeddedPanel.getBody()}</p>
+                {#if embeddedPanelResolver == "" && embeddedPanel}
+                    <h2>{embeddedPanel.getHeader()}</h2>
+                    <p class="sub">{@html embeddedPanel.getBody()}</p>
 
-                <p><code><b>Error: </b>{troubleDetails.message}</code><br><br><i>Select an option above to begin resolving</i></p>
+                    <p><code><b>Error: </b>{troubleDetails.message}</code><br><br><i>Select an option above to begin resolving</i></p>
+                {/if}
             {/if}
         {:else if state == ComponentState.RESOLVING || state == ComponentState.CONFIRMING || state == ComponentState.LONG_CONFIRMATION}
             <h2>Resolving trouble</h2>

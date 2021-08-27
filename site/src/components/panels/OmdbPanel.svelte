@@ -1,7 +1,7 @@
 <script lang="ts">
-import type { QueueDetails } from '../QueueItem.svelte';
+import type { QueueDetails } from '../../queue';
 import dualRing from '../../assets/html/dual-ring.html';
-export let details:QueueDetails;
+export let details: QueueDetails;
 
 </script>
 

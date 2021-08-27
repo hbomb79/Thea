@@ -1,8 +1,8 @@
 <script lang="ts">
 import { createEventDispatcher, onMount } from "svelte";
 import DynamicForm from "../../DynamicForm.svelte";
-import type { QueueDetails } from "../../QueueItem.svelte";
-import { QueueTroubleType } from "../../QueueItem.svelte";
+import type { QueueDetails } from "../../../queue";
+import { QueueTroubleType } from "../../../queue";
 
 export let queueDetails: QueueDetails
 const dispatcher = createEventDispatcher()

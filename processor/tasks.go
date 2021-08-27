@@ -394,6 +394,10 @@ func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, err
 		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
 	}
 
+	if result.Response == false {
+		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("fetch failed: OMDB response contained no data (%s)", result.Error), queueItem, OMDB_REQUEST_FAILURE), nil}
+	}
+
 	return &result, nil
 }
 

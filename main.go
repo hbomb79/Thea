@@ -38,7 +38,7 @@ func (tpa *Tpa) Start() {
 	go tpa.socketHub.Start()
 	go tpa.httpRouter.Start(&api.RouterOptions{
 		ApiPort: 8080,
-		ApiHost: "localhost",
+		ApiHost: "0.0.0.0",
 		ApiRoot: "/api/tpa",
 	})
 

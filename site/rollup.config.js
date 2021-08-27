@@ -5,11 +5,14 @@ import livereload from 'rollup-plugin-livereload';
 import { terser } from 'rollup-plugin-terser';
 import sveltePreprocess from 'svelte-preprocess';
 import typescript from '@rollup/plugin-typescript';
+import replace from '@rollup/plugin-replace';
 import css from 'rollup-plugin-css-only';
 import svg from 'rollup-plugin-svg-import';
 import html from 'rollup-plugin-html';
 
 const production = !process.env.ROLLUP_WATCH;
+
+require('dotenv').config();
 
 function serve() {
 	let server;
@@ -41,6 +44,13 @@ export default {
 		file: 'public/build/bundle.js'
 	},
 	plugins: [
+    replace({
+      SERVER_CONFIG: JSON.stringify({
+        isProduction: production,
+        host: process.env.WS_HOST || "localhost",
+        port: process.env.WS_POST || "8080",
+      }),
+    }),
 		svelte({
 			preprocess: sveltePreprocess({ sourceMap: !production }),
 			compilerOptions: {

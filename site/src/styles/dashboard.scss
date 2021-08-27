@@ -1,0 +1,232 @@
+$sidebarWidth: 350px;
+
+.dashboard {
+    position: relative;
+    width: 100%;
+    height: 100%;
+
+    .wrapper {
+        position: absolute;
+        top: 7rem;
+        bottom: 7rem;
+        left: 4rem;
+        right: 4rem;
+        max-width: 1850px;
+        margin: 0 auto;
+
+        &.sidebar-open {
+            max-width: 1850px;
+
+            .sidebar{
+                width: $sidebarWidth;
+                opacity: 1;
+                box-shadow: -4px 0px 8px #0000004d;
+                z-index: 104;
+            }
+
+            .tiles {
+                left: $sidebarWidth + 1px;
+            }
+        }
+
+        .sidebar {
+            width: 0px;
+            opacity: 0;
+            height: 100%;
+            background: #ffffff3f;
+            border-right: solid 1px #bfbfbf5f;
+            position: relative;
+            overflow: hidden;
+
+            transition: all 150ms ease-in-out;
+            transition-property: opacity, width;
+
+            h2 {
+                color: #9184c5;
+                text-align: left;
+                padding: 2rem 0 0.4rem 2rem;
+                margin: 0;
+                font-weight: 400;
+            }
+        }
+
+        .options {
+            position: absolute;
+            top: -49px;
+            display: flex;
+            left: 0;
+            right: 0;
+
+            .option {
+                padding: 0.5rem 1.2rem;
+                margin: 0.4rem;
+                text-align: left;
+                border-radius: 8px;
+                cursor: pointer;
+                background: #ffffff00;
+                color: #9aa1d3;
+                transition: all 150ms ease-in-out;
+                transition-property: background, color; 
+
+                &:hover {
+                    background: #ffffff55;
+                }
+
+                &.active {
+                    background: white;
+                    font-weight: 500;
+                    color: #9285c5;
+                    box-shadow: 0px 0px 3px #00000030;
+                }
+
+                &:last-child {
+                    margin-left: auto;
+                }
+            }
+        }
+
+        .tiles {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            top: 0;
+            display: flex;
+            flex-direction: row;
+            padding: 1rem 3rem;
+            align-items: flex-start;
+            justify-content: space-between;
+            overflow-y: auto;
+
+            transition: all 150ms ease-in-out;
+            transition-property: left;
+
+            &.full-size {
+                padding: 0;
+            }
+
+            &::-webkit-scrollbar {
+                width: 12px;
+                background-color: #817d7d66;
+                box-shadow: 0px 0px 8px -5px black;
+            }
+
+            &::-webkit-scrollbar-thumb {
+                background-color: #ffffffb0;
+                border-radius: 7px;
+            }
+
+            &::-webkit-scrollbar-thumb:hover {
+                background-color: #ffffffef;
+            }
+
+            .column {
+                height: 100%;
+                text-align: left;
+                width: 35%;
+                display: flex;
+                flex-direction: column;
+
+                &.main {
+                    width: 60%;
+                }
+
+                .tile {
+                    width: 100%;
+
+                    .header {
+                        font-size: 1rem;
+                        color: #9184c5;
+                        padding-left: 1rem;
+                        font-weight: 500;
+                    }
+
+                    .content, .content .mini-tile {
+                        background: #ffffff;
+                        padding: 0;
+                        border-radius: 4px;
+                        box-shadow: 0px 0px 3px #0000000f;
+                    }
+                }
+
+                .tile.overview {
+                    margin-bottom: 2rem;
+
+                    .content {
+                        height: 180px;
+                        background: linear-gradient(28deg, #6ca8ff, #ef8dff);
+                        position: relative;
+                        box-shadow: 0px 2px 6px -1px rgba(0,0,0,0.2);
+
+                        h2 {
+                            padding: 2rem 0 0 2rem;
+                            color: white;
+                            margin: 0;
+                            font-size: 2rem;
+                        }
+
+                        p {
+                            margin: 0 0 0 2rem;
+                            color: #edf2fe;
+                            font-size: 1.1rem;
+                        }
+
+                        :global(svg) {
+                            height: 100px;
+                            fill: white;
+                            position: absolute;
+                            right: 2.8rem;
+                            top: 2.4rem;
+                            width: auto;
+                        }
+                    }
+                }
+
+                .tile.status {
+                    margin-bottom: 2rem;
+
+                    .content {
+                        background: none;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: space-between;
+                        box-shadow: none;
+
+                        .mini-tile {
+                            width: 40%;
+                            height: 6rem;
+                            padding: 1rem;
+                            display: flex;
+                            flex-direction: row;
+
+                            .main {
+                                width: 35%;
+                                height: 100%;
+                                flex-grow: 0;
+                                display: flex;
+                                flex-direction: column;
+                                justify-content: center;
+
+                                .progress {
+                                    position: relative;
+                                    flex-grow: 0;
+                                }
+                            }
+
+                            .tag {
+                                flex-grow: 1;
+                                align-self: center;
+                                text-align: center;
+                            }
+                        }
+                    }
+                }
+
+                .tile.queue {
+                    display: flex;
+                    flex-direction: column;
+                }
+            }
+        }
+    }
+}

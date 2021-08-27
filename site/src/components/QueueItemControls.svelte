@@ -40,6 +40,7 @@ const onSelect = (ev:MouseEvent) => {
 
     if(currentControl && currentControl == action) {
         dispatch("queue-control", action)
+        return
     }
 
     currentControl = action
@@ -69,25 +70,27 @@ const onSelect = (ev:MouseEvent) => {
 <style lang="scss">
 .controls {
     position: absolute;
-    right: 4px;
-    top: 50%;
+    right: 1rem;
+    top: 1rem;
     font-size: 0;
-    transform: translate(0, -50%);
+    display: flex;
+    flex-direction: row-reverse;
+    background: #ffffff5e;
+    padding: 3px 3px;
+    border-radius: 4px;
+    border: solid 1px #00000030;
+    transition: opacity 250ms ease-in-out;
 
     span.control {
         display: inline-block;
         padding: 6px;
-        background: #eee;
-        margin: 0 4px;
+        margin: 3px 4px;
         border-radius: 4px;
         overflow: hidden;
         cursor: pointer;
-        border: solid 1px #e3e3e3;
-
         transition: all 250ms ease-in-out;
-        transition-property: width;
+        transition-property: width, background;
         width: 1.3rem;
-
         position: relative;
 
         &.active span {
@@ -100,7 +103,7 @@ const onSelect = (ev:MouseEvent) => {
             transition: all 250ms ease-in-out;
             transition-property: opacity;
             font-size: 14px;
-            color: #767676;
+            color: #9385cb;
 
             position: absolute;
             right: 8px;
@@ -110,7 +113,7 @@ const onSelect = (ev:MouseEvent) => {
             width: 0.8rem;
             height: 0.8rem;
             padding: 4px;
-            fill: grey;
+            fill: #9385cb;
             display: inline-block;
         }
 
@@ -119,7 +122,7 @@ const onSelect = (ev:MouseEvent) => {
         }
 
         &:hover {
-            background: #cecece;
+            background: #00000014;
         }
     }
 }

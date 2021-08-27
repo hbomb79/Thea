@@ -4,8 +4,8 @@ import { commander, dataStream } from "../../commander";
 import { SocketMessageType } from "../../store";
 
 import type { SocketData } from "../../store";
-import { QueueStatus, QueueTroubleType } from "../QueueItem.svelte";
-import type { QueueDetails, QueueTroubleDetails } from "../QueueItem.svelte";
+import { QueueStatus, QueueTroubleType } from "../../queue";
+import type { QueueDetails, QueueTroubleDetails } from "../../queue";
 
 import closeSvg from '../../assets/close.svg';
 
@@ -37,7 +37,7 @@ export let queueDetails: QueueDetails
 const dispatch = createEventDispatcher()
 
 let state = ComponentState.MAIN
-let troubleDetails: QueueTroubleDetails = queueDetails.trouble
+$:troubleDetails = queueDetails?.trouble
 let failureDetails = ""
 
 let embeddedPanel: EmbeddedPanel = null
@@ -153,49 +153,16 @@ onMount(() => {
 @use "../../styles/global.scss";
 @use "../../styles/modal.scss";
 
-.modal-backdrop {
-    display: none;
-}
 .modal.trouble {
-    border-color: #ffc6c6;
-    border-width: 1px;
+    border: none;
     margin: 0;
     flex-direction: column;
     position: initial;
     transform: none;
+    max-width: none;
+    background: none;
 
-    .header {
-        background: #ffc6c6;
-        align-items: center;
-        flex-shrink: 0;
-
-        h2 {
-            color: #ff7a7a;
-            padding-left: 1rem;
-        }
-
-        .close {
-            padding: 0.5rem;
-            margin-right: 0.5rem;
-            background: #ffc6c6;
-            transition: background 150ms;
-            border-radius: 4px;
-            font-size: 0;
-            cursor: pointer;
-            height: fit-content;
-
-            &:hover {
-                background: #f74242;
-            }
-
-            :global(svg) {
-                width: 1rem;
-                height: 1rem;
-                fill: #ff7979;
-            }
-        }
-    }
-
+    /*
     .panel {
         background: #ffebeb;
 
@@ -221,7 +188,7 @@ onMount(() => {
                 content: none;
             }
         }
-    }
+    }*/
 
     main {
         padding: 1rem 2rem;
@@ -233,13 +200,7 @@ onMount(() => {
 </style>
 
 <!-- Template -->
-<div class="modal-backdrop" on:click="{() => dispatch('close')}"></div>
 <div class="item modal trouble">
-    <div class="header">
-        <h2>Trouble Diagnostics</h2>
-        <span class="close" on:click={() => dispatch('close')}>{@html closeSvg}</span>
-    </div>
-
     {#if embeddedPanel}
         <div class="panel">
             <span class="panel-item" on:click={() => embeddedPanel.selectResolver("")} class:active={embeddedPanelResolver == ""}>Details</span>
@@ -250,23 +211,25 @@ onMount(() => {
     {/if}
     <main>
         {#if state == ComponentState.MAIN}
-            {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
-                <TitleTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
-            {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
-                <OmdbTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
-            {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
-                <FormatTroublePanel bind:this={embeddedPanel} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
-            {:else}
-                <h2>Cannot Resolve</h2>
-                <p class="sub">Unknown trouble type</p>
-                <p>We don't have a known resolution for this trouble case. Please check server logs for guidance.</p>
-            {/if}
+            {#if troubleDetails}
+                {#if troubleDetails.type == QueueTroubleType.TITLE_FAILURE}
+                    <TitleTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+                {:else if troubleDetails.type == QueueTroubleType.OMDB_MULTIPLE_RESULT_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_REQUEST_FAILURE || troubleDetails.type == QueueTroubleType.OMDB_NO_RESULT_FAILURE}
+                    <OmdbTroublePanel bind:this={embeddedPanel} queueDetails={queueDetails} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+                {:else if troubleDetails.type == QueueTroubleType.FFMPEG_FAILURE}
+                    <FormatTroublePanel bind:this={embeddedPanel} on:try-resolve={sendResolution} on:selection-change={updateEmbeddedPanelResolver}/>
+                {:else}
+                    <h2>Cannot Resolve</h2>
+                    <p class="sub">Unknown trouble type</p>
+                    <p>We don't have a known resolution for this trouble case. Please check server logs for guidance.</p>
+                {/if}
 
-            {#if embeddedPanelResolver == "" && embeddedPanel}
-                <h2>{embeddedPanel.getHeader()}</h2>
-                <p class="sub">{@html embeddedPanel.getBody()}</p>
+                {#if embeddedPanelResolver == "" && embeddedPanel}
+                    <h2>{embeddedPanel.getHeader()}</h2>
+                    <p class="sub">{@html embeddedPanel.getBody()}</p>
 
-                <p><code><b>Error: </b>{troubleDetails.message}</code><br><br><i>Select an option above to begin resolving</i></p>
+                    <p><code><b>Error: </b>{troubleDetails.message}</code><br><br><i>Select an option above to begin resolving</i></p>
+                {/if}
             {/if}
         {:else if state == ComponentState.RESOLVING || state == ComponentState.CONFIRMING || state == ComponentState.LONG_CONFIRMATION}
             <h2>Resolving trouble</h2>

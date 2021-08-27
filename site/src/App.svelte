@@ -1,11 +1,9 @@
 <script lang="ts">
-import Nav from './components/Nav.svelte'
-import Queue from './components/Queue.svelte'
-import StatusPanel from './components/StatusPanel.svelte'
 import rippleHtml from './assets/html/ripple.html'
 
 import { statusStream } from './commander'
 import { SocketPacketType } from './store'
+import Dashboard from './components/Dashboard.svelte';
 </script>
 
 <style lang="scss">
@@ -19,12 +17,8 @@ main {
     text-align: center;
 
     position: fixed;
-    left: 0;
-    right: 0;
-    top: 60px;
-    bottom: 0;
-
-    overflow-y: scroll;
+    width: 100%;
+    height: 100%;
 
     transition: right global.$statusPanelAnimTime ease-out;
     display: flex;
@@ -50,13 +44,9 @@ main {
         box-shadow: 0px 0px 5px -3px black;
         flex: 0 auto;
     }
-
-
 }
 </style>
 
-<Nav title="TPA Dashboard"/>
-<StatusPanel/>
 <main>
     {#if $statusStream == SocketPacketType.INIT}
         <div class="loading modal">
@@ -64,7 +54,7 @@ main {
             {@html rippleHtml}
         </div>
     {:else if $statusStream == SocketPacketType.OPEN}
-        <Queue />
+        <Dashboard/>
     {:else}
         <div class="err modal">
             <h2>Failed to connect to server.</h2>

@@ -60,7 +60,8 @@ export const socketStream = writable({
 // connection to the go-backend server. We export a sendMessage function
 // that allows components to send messages directly via the websocket
 // rather than through a Commander instance.
-const socket = new WebSocket("ws://localhost:8080/api/tpa/v0/ws")
+const config = SERVER_CONFIG
+const socket = new WebSocket(`ws://${config.host}:${config.port}/api/tpa/v0/ws`)
 export function sendMessage(message:string) {
     if (socket.readyState <= 1) {
         socket.send(message)

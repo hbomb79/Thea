@@ -174,6 +174,10 @@ func (p *Processor) Start() error {
 // in the queue that no longer exist in the discovered items will also be cancelled
 // and removed from the queue.
 func (p *Processor) SynchroniseQueue() error {
+	// Reload the queues cache so that our exlusion list
+	// is up to date (in case the cache was deleted or edited externally)
+	p.Queue.cache.Load()
+
 	presentItems, err := p.DiscoverItems()
 	if err != nil {
 		return err

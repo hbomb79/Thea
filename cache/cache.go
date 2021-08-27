@@ -31,11 +31,7 @@ func New(path string) *Cache {
 		content:  make(map[string]interface{}),
 	}
 
-	if err := c.load(); err != nil {
-		fmt.Printf("[Cache] (!!) Failed to load preexisting cache content from file(%s): %s\n - Defaulting to empty cache and attempting to save.\n", path, err.Error())
-		c.Save()
-	}
-
+	c.Load()
 	return c
 }
 
@@ -96,6 +92,17 @@ func (cache *Cache) IterItems(cb func(*Cache, string, interface{}) bool) {
 func (cache *Cache) Save() {
 	if err := cache.save(); err != nil {
 		fmt.Printf("[Cache] (!!) Failed to save cache! %s\n", err.Error())
+	}
+}
+
+// Load will check the local filesystem (cache.filePath) for an existing cache
+// and loads it in to memory if found. If not found, an empty cache map is
+// constructed which can be saved to the filesystem with 'Save'
+func (cache *Cache) Load() {
+	if err := cache.load(); err != nil {
+		fmt.Printf("[Cache] (!!) Unable to load cache file(%s): %s. Using empty cache!\n", cache.filePath, err.Error())
+
+		cache.content = make(map[string]interface{})
 	}
 }
 

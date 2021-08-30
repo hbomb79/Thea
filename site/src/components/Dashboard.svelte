@@ -118,7 +118,7 @@ onMount(() => {
                         {/if}
 
                         <div class="queue-items">
-                            <QueueList {index} {details} on:selection-change={(ev) => selectedItem = ev.detail} on:index-reorder={handleQueueReorder}/>
+                            <QueueList {index} {details} bind:selectedItem={selectedItem} on:index-reorder={handleQueueReorder}/>
                         </div>
                     {/if}
                 </div>

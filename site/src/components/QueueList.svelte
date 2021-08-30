@@ -9,7 +9,7 @@ const dispatch = createEventDispatcher()
 
 export let index: QueueItem[] = null
 export let details: Map<number, QueueDetails> = null
-let selectedItem: number = null
+export let selectedItem: number = null
 
 $:onChange(selectedItem)
 const onChange = (item: number) => {

@@ -83,11 +83,16 @@ type Negotiator interface {
 	OnProcessorUpdate(update *ProcessorUpdate)
 }
 
+type processorUpdateType = int
+
+const (
+	ITEM processorUpdateType = iota
+	QUEUE
+)
+
 type ProcessorUpdate struct {
-	// TODO fix this: including a 'Trouble' here is pointless
-	// as the data is all private. It will always be JSON marhsalled to nothing.
+	UpdateType   processorUpdateType
 	QueueItem    *QueueItem
-	Trouble      Trouble
 	ItemPosition int
 	ItemId       int
 }
@@ -257,6 +262,15 @@ func (p *Processor) listenForUpdates() {
 			break
 		}
 
+		if update == -1 {
+			// -1 update ID indicates a fundamental change to the queue, rather than
+			// a particular item. Send out a processor update, which will tell all
+			// connected clients to INVALIDATE their current queue index, and refetch from the server
+			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QUEUE, nil, 0, 0})
+
+			continue
+		}
+
 		p.pendingUpdates[update] = true
 	}
 }
@@ -265,12 +279,12 @@ func (p *Processor) submitUpdates() {
 	for k := range p.pendingUpdates {
 		queueItem, idx := p.Queue.FindById(k)
 		if queueItem == nil || idx < 0 {
-			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QueueItem: nil, ItemPosition: -1, Trouble: nil, ItemId: k})
+			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{UpdateType: ITEM, QueueItem: nil, ItemPosition: -1, ItemId: k})
 		} else {
 			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{
+				UpdateType:   ITEM,
 				QueueItem:    queueItem,
 				ItemPosition: idx,
-				Trouble:      queueItem.Trouble,
 				ItemId:       k,
 			})
 		}

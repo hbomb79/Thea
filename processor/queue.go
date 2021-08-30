@@ -188,3 +188,26 @@ func (queue *processorQueue) FindById(id int) (*QueueItem, int) {
 
 	return nil, -1
 }
+
+func (queue *processorQueue) Reorder(indexOrder []int) error {
+	queue.Lock()
+	defer queue.Unlock()
+
+	queueLength := len(queue.Items)
+	if len(indexOrder) != queueLength {
+		return errors.New("indexOrder provided must be equal in length to the queue")
+	}
+
+	newQueue := make([]*QueueItem, queueLength)
+	for k, v := range indexOrder {
+		if item, idx := queue.FindById(v); item != nil && idx > -1 {
+			newQueue[k] = item
+			continue
+		}
+
+		return fmt.Errorf("indexOrder key %v specifies item ID %v, which does not exist!", k, v)
+	}
+
+	queue.Items = newQueue
+	return nil
+}

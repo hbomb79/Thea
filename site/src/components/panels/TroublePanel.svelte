@@ -1,16 +1,12 @@
 <script lang="ts">
-import { onMount } from "svelte";
-import { commander, dataStream } from "../../commander";
+import { commander } from "../../commander";
 import { SocketMessageType } from "../../store";
 
 import type { SocketData } from "../../store";
-import { QueueStatus, QueueTroubleType } from "../../queue";
-import type { QueueDetails, QueueTroubleDetails } from "../../queue";
-
-import closeSvg from '../../assets/close.svg';
+import { QueueTroubleType } from "../../queue";
+import type { QueueDetails } from "../../queue";
 
 import OmdbTroublePanel from "./trouble_panels/OmdbTroublePanel.svelte";
-import { createEventDispatcher } from "svelte/internal";
 import TitleTroublePanel from "./trouble_panels/TitleTroublePanel.svelte";
 import FormatTroublePanel from "./trouble_panels/FormatTroublePanel.svelte";
 
@@ -26,15 +22,10 @@ enum ComponentState {
     MAIN,
     RESOLVING,
     CONFIRMING,
-    LONG_CONFIRMATION,
-    RESOLVED,
     FAILURE,
-    PERSISTS
 }
 
 export let queueDetails: QueueDetails
-
-const dispatch = createEventDispatcher()
 
 let state = ComponentState.MAIN
 $:troubleDetails = queueDetails?.trouble
@@ -43,7 +34,6 @@ let failureDetails = ""
 let embeddedPanel: EmbeddedPanel = null
 let embeddedPanelResolver = ""
 
-let confirmationTimeout = null
 
 // sendResolution will attempt to send a trouble resolution command to the server
 // by appending the given data to the message using the spread syntax.
@@ -86,109 +76,16 @@ function resetPanel() {
     })
 }
 
-function startConfirmationTimeout() {
-    if(confirmationTimeout) return
-
-    confirmationTimeout = setTimeout(() => {
-        if(state == ComponentState.CONFIRMING) state = ComponentState.LONG_CONFIRMATION
-        confirmationTimeout = null
-    }, 3000)
-}
-
-onMount(() => {
-    dataStream.subscribe((data) => {
-        if(data.type == SocketMessageType.UPDATE) {
-            const updateContext = data.arguments.context
-            if(!(updateContext && updateContext.QueueItem && updateContext.QueueItem.id == queueDetails.id)) {
-                return
-            }
-
-            // Depending on the status of this panel, we'll need to perform some
-            // comparisions between this new data, and the data we're currently holding.
-            const newDetails = updateContext.QueueItem
-            switch(state) {
-                case ComponentState.RESOLVING:
-                case ComponentState.LONG_CONFIRMATION:
-                case ComponentState.CONFIRMING:
-                    if(queueDetails.stage != newDetails.stage || !newDetails.trouble || newDetails.taskFeedback) {
-                        // Our item has either gone to the next stage, cleared it's trouble state, or the task has
-                        // provided some real feedback. This is the earliest indication our resolution likely
-                        // worked
-                        state = ComponentState.RESOLVED
-                        break
-                    }
-
-                    // If the stage is the same, there's a trouble, AND no task feedback we must test to see if the trouble
-                    // is the same as what we have
-                    if(queueDetails.trouble.type == newDetails.trouble.type) {
-                        // If the new details given still show the item as NEEDS_RESOLVING,
-                        // then it means the resolution didn't work. This is because
-                        // as soon as a resolution is accepted by the server, the item is marked as PENDING.
-                        if(newDetails.status == QueueStatus.NEEDS_RESOLVING) {
-                            // The item still needs attention
-                            state = ComponentState.PERSISTS
-                        } else if(newDetails.status == QueueStatus.PENDING){
-                            startConfirmationTimeout()
-                        }
-
-                        break
-                    }
-
-                    break
-                case ComponentState.PERSISTS:
-                    // If while we're notifying the user that the trouble
-                    // did not resolve... it resolves, display the resolved panel
-                    if(!newDetails.trouble) state = ComponentState.RESOLVED
-                    break
-            }
-
-            queueDetails = newDetails
-        }
-    })
-})
-
 </script>
 
 <style lang="scss">
 @use "../../styles/global.scss";
-@use "../../styles/modal.scss";
+@use "../../styles/tile.scss";
 
 .modal.trouble {
-    border: none;
     margin: 0;
     flex-direction: column;
     position: initial;
-    transform: none;
-    max-width: none;
-    background: none;
-
-    /*
-    .panel {
-        background: #ffebeb;
-
-        .panel-item {
-            box-shadow: 0px 3px 6px -5px #909090;
-            background-color: #ffc6c6;
-            color: #ff6060;
-            border: 2px solid #ffc6c6;
-
-            &:hover {
-                background-color: #f99191;
-                color: #ffebeb;
-                border-color: #f99191;
-            }
-
-            &.active {
-                background-color: #ff9a9a;
-                color: white;
-                border-color: #ffc6c6;
-            }
-
-            &:before {
-                content: none;
-            }
-        }
-    }*/
 
     main {
         padding: 1rem 2rem;
@@ -231,7 +128,7 @@ onMount(() => {
                     <p><code><b>Error: </b>{troubleDetails.message}</code><br><br><i>Select an option above to begin resolving</i></p>
                 {/if}
             {/if}
-        {:else if state == ComponentState.RESOLVING || state == ComponentState.CONFIRMING || state == ComponentState.LONG_CONFIRMATION}
+        {:else if state == ComponentState.RESOLVING || state == ComponentState.CONFIRMING}
             <h2>Resolving trouble</h2>
             <p class="sub">
                 {#if state == ComponentState.RESOLVING}
@@ -240,31 +137,9 @@ onMount(() => {
                 Verifying item progression
                 {/if}
             </p>
-            {#if state == ComponentState.LONG_CONFIRMATION}
-                <p>
-                    This might take longer than anticipated... we need a worker in order to confirm that this resolution solved the problem, but they're all busy at the moment.
-                    <br><br>
-                    <i>Feel free to close this modal - your resolution data is saved and will be used once a worker is available</i>
-                </p>
-            {:else}
             <p>
                 Please wait while we confirm that your resolution data solved the problem. This could take a few seconds...
             </p>
-            {/if}
-        {:else if state == ComponentState.RESOLVED}
-            <h2>Trouble Resolved</h2>
-            <p>This trouble has been resolved. You can now close this modal.</p>
-
-            <button on:click|preventDefault={() => dispatch("close")}>Close</button>
-        {:else if state == ComponentState.PERSISTS}
-            <h2>Trouble Resolution Failed</h2>
-            <p class="sub">Persistent trouble type</p>
-            <p>
-                The server accepted our resolution data, however the trouble was re-raised by the server.<br>
-                <i>Check server logs for more information, or contact server administrator for further assistance</i>
-            </p>
-
-            <button on:click|preventDefault={resetPanel}>Back</button>
         {:else if state == ComponentState.FAILURE}
             <h2>Trouble Resolution Failed</h2>
             <p class="sub">Resolution rejected</p>

@@ -64,3 +64,21 @@ func (message *SocketMessage) ValidateArguments(required map[string]string) erro
 
 	return nil
 }
+
+// FormReply is a method on a SocketMessage that will
+// return a NEW message that has the same origin/id as
+// the original message, but with a new (caller provided) title,
+// type, and arguments.
+func (message *SocketMessage) FormReply(replyTitle string, replyBody map[string]interface{}, replyType socketMessageType) *SocketMessage {
+	if replyBody != nil {
+		replyBody["command"] = message.Body
+	}
+
+	return &SocketMessage{
+		Title:  replyTitle,
+		Body:   replyBody,
+		Type:   replyType,
+		Id:     message.Id,
+		Target: message.Origin,
+	}
+}

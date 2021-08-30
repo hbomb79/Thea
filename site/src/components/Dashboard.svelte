@@ -1,3 +1,12 @@
+<script lang="ts" context="module">
+export enum QueueState {
+    SYNCED,
+    REORDERING,
+    SYNCING,
+    FAILURE
+}
+
+</script>
 <script lang="ts">
 import { onMount } from "svelte";
 
@@ -5,8 +14,11 @@ import healthSvg from '../assets/health.svg';
 import { QueueManager } from "../queue";
 import type { QueueDetails, QueueItem } from "../queue";
 import QueueItemMini from "./QueueItemMini.svelte";
-import QueueListItem from "./QueueListItem.svelte";
 import QueueItemFull from "./QueueItemFull.svelte";
+import QueueList from "./QueueList.svelte";
+import { commander } from "../commander";
+import { SocketMessageType } from "../store";
+import type { SocketData } from "../store";
 
 const comp = {
     optionElements: new Array(3),
@@ -15,10 +27,39 @@ const comp = {
     selectionOption: 0,
 }
 
+let queueState = QueueState.SYNCED
+
 let queue = new QueueManager()
 let details: Map<number, QueueDetails> = null
 let index: QueueItem[] = []
-let selectedItem: number = null
+let selectedItem: number = -1
+
+const handleQueueReorder = (event: CustomEvent) => {
+    index = event.detail
+    queueState = QueueState.REORDERING
+}
+
+const commitQueueReorder = () => {
+    console.warn("Syncing queue index with server - new index: ", index, "flattened: ", index.flatMap(item => item.id))
+    queueState = QueueState.SYNCING
+    commander.sendMessage({
+        title: "QUEUE_REORDER",
+        type: SocketMessageType.COMMAND,
+        arguments: {
+            index: index.flatMap(item => item.id)
+        }
+    }, (replyData: SocketData): boolean => {
+        if(replyData.type == SocketMessageType.ERR_RESPONSE) {
+            console.warn("Queue reordering failed - requesting up-to-date index from server", replyData)
+            alert(`Failed to reorder queue: ${replyData.arguments.error}`)
+
+            queue.requestIndex()
+        }
+
+        queueState = QueueState.SYNCED
+        return false
+    })
+}
 
 onMount(() => {
     comp.optionElements.forEach((item: HTMLElement, index) => {
@@ -26,7 +67,15 @@ onMount(() => {
     })
 
     queue.itemDetails.subscribe((v) => details = v)
-    queue.itemIndex.subscribe((v) => index = v)
+    queue.itemIndex.subscribe((v) => {
+        if(queueState == QueueState.REORDERING) {
+            console.warn("Queue index change from server was IGNORED as queue is being reordered!")
+            return
+        }
+
+        queueState = QueueState.SYNCED
+        index = v
+    })
 })
 </script>
 
@@ -64,11 +113,12 @@ onMount(() => {
                 <div class="sidebar">
                     {#if comp.selectionOption == 1}
                         <h2 class="header">Items</h2>
+                        {#if queueState == QueueState.REORDERING || queueState == QueueState.SYNCING}
+                            <button id="queue-reorder-commit" on:click={commitQueueReorder}>Save Order</button>
+                        {/if}
 
                         <div class="queue-items">
-                            {#each index as item (item.id)}
-                                <QueueListItem selectedItem={selectedItem} on:selected={(event) => selectedItem = event.detail} details={details[item.id]}/>
-                            {/each}
+                            <QueueList {index} {details} on:selection-change={(ev) => selectedItem = ev.detail} on:index-reorder={handleQueueReorder}/>
                         </div>
                     {/if}
                 </div>
@@ -111,14 +161,14 @@ onMount(() => {
                                 <h2 class="header">Queue</h2>
                                 <div class="content">
                                     {#each index as item}
-                                        <QueueItemMini queueDetails={details[item.id]}/>
+                                        <QueueItemMini queueDetails={details.get(item.id)}/>
                                     {/each}
                                 </div>
                             </div>
                         </div>
                     {:else if comp.selectionOption == 1}
-                        {#if details[selectedItem]}
-                            <QueueItemFull details={details[selectedItem]}/>
+                        {#if selectedItem > -1 && details.has(selectedItem)}
+                            <QueueItemFull details={details.get(selectedItem)}/>
                         {:else}
                             <h2>Select an item</h2>
                         {/if}

@@ -158,7 +158,7 @@ export class QueueManager {
     requestDetails(itemId: number) {
         const handleReply = (response: SocketData): boolean => {
             if(response.type == SocketMessageType.RESPONSE) {
-                this._details[itemId] = response.arguments.payload
+                this._details.set(itemId, response.arguments.payload)
                 this.itemDetails.set(this._details)
             } else {
                 console.warn("[QueueManager] Invalid reply while fetching queue details.", response)
@@ -178,38 +178,43 @@ export class QueueManager {
 
     private handleUpdate(data: SocketData) {
         const update = data.arguments.context
-        const newItem = update.QueueItem as QueueDetails
+        if(update.UpdateType == 0) {
+            const newItem = update.QueueItem as QueueDetails
 
-        const idx = this._items.findIndex(item => item.id == update.ItemId)
-        if( update.ItemPosition < 0 || !newItem ) {
-            // Item has been removed from queue! Find the item
-            // in the queue with the ID that matches the one removed
-            // and pull it from the list
-            if(idx < 0) {
-                console.warn("Failed to find item inside of list for removal. Forcing refresh!")
-                this.requestIndex()
+            const idx = this._items.findIndex(item => item.id == update.ItemId)
+            if( update.ItemPosition < 0 || !newItem ) {
+                // Item has been removed from queue! Find the item
+                // in the queue with the ID that matches the one removed
+                // and pull it from the list
+                if(idx < 0) {
+                    console.warn("Failed to find item inside of list for removal. Forcing refresh!")
+                    this.requestIndex()
 
-                return
-            }
+                    return
+                }
 
-            this._items.splice(idx, 1)
-            this.itemIndex.set(this._items)
-        } else if(idx != update.ItemPosition) {
-            // The position for this item has changed.. likely due to a item promotion.
-            // Update the order of the queue - to do this we should
-            // simply re-query the server for an up-to-date queue index.
-            this.requestIndex()
-        } else {
-            if(idx < 0) {
-                // New item
-                this._items.push(newItem)
+                this._items.splice(idx, 1)
                 this.itemIndex.set(this._items)
+            } else if(idx != update.ItemPosition) {
+                // The position for this item has changed.. likely due to a item promotion.
+                // Update the order of the queue - to do this we should
+                // simply re-query the server for an up-to-date queue index.
+                this.requestIndex()
             } else {
-                // An existing item has had an in-place update.
-                this._details[newItem.id] = newItem
-                this.itemDetails.set(this._details)
-            }
+                if(idx < 0) {
+                    // New item
+                    this._items.push(newItem)
+                    this.itemIndex.set(this._items)
+                } else {
+                    // An existing item has had an in-place update.
+                    this._details.set(newItem.id, newItem)
+                    this.itemDetails.set(this._details)
+                }
 
+            }
+        } else if(update.UpdateType == 1) {
+            console.log("Queue update received from server - refetching item indexes")
+            this.requestIndex()
         }
     }
 }

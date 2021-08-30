@@ -27,14 +27,7 @@ func (wsGateway *WsGateway) WsQueueIndex(hub *ws.SocketHub, message *ws.SocketMe
 	// next message to the origin of the current one.
 	// Also set the ID to match any provided by the client
 	// so they can pair this reply with the source request.
-	hub.Send(&ws.SocketMessage{
-		Title:  "COMMAND_SUCCESS",
-		Body:   map[string]interface{}{"payload": data, "command": message},
-		Type:   ws.Response,
-		Id:     message.Id,
-		Target: message.Origin,
-	})
-
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": data}, ws.Response))
 	return nil
 }
 
@@ -53,13 +46,39 @@ func (wsGateway *WsGateway) WsQueueDetails(hub *ws.SocketHub, message *ws.Socket
 		return errors.New("failed to get queue details - item with matching ID not found")
 	}
 
-	hub.Send(&ws.SocketMessage{
-		Title:  "COMMAND_SUCCESS",
-		Body:   map[string]interface{}{"payload": queueItem, "command": message},
-		Id:     message.Id,
-		Target: message.Origin,
-		Type:   ws.Response,
-	})
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem}, ws.Response))
+	return nil
+}
+
+func (wsGateway *WsGateway) WsQueueReorder(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	const ERR_FMT = "failed to reorder queue - %v"
+	index := message.Body["index"]
+	if index == nil {
+		return fmt.Errorf(ERR_FMT, "required 'index' array is missing")
+	}
+
+	orderArray, ok := index.([]interface{})
+	if !ok {
+		return fmt.Errorf(ERR_FMT, "'index' key is malformed, must be a JSON array of integers")
+	}
+
+	newOrder := make([]int, len(orderArray))
+	for k, v := range orderArray {
+		tmp, ok := v.(float64)
+		if !ok {
+			return fmt.Errorf(ERR_FMT, fmt.Sprintf("'index' array contains illegal value at key %v (val: %v) - can only be integers", k, v))
+		}
+
+		newOrder[k] = int(tmp)
+	}
+
+	if err := wsGateway.proc.Queue.Reorder(newOrder); err != nil {
+		return fmt.Errorf(ERR_FMT, err.Error())
+	}
+
+	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
+	wsGateway.proc.UpdateChan <- -1
+
 	return nil
 }
 
@@ -81,14 +100,7 @@ func (wsGateway *WsGateway) WsItemPromote(hub *ws.SocketHub, message *ws.SocketM
 	}
 
 	wsGateway.proc.UpdateChan <- queueItem.Id
-	hub.Send(&ws.SocketMessage{
-		Title:  "COMMAND_SUCCESS",
-		Body:   map[string]interface{}{"payload": queueItem, "command": message},
-		Id:     message.Id,
-		Target: message.Origin,
-		Type:   ws.Response,
-	})
-
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem}, ws.Response))
 	return nil
 }
 
@@ -109,14 +121,7 @@ func (wsGateway *WsGateway) WsItemPause(hub *ws.SocketHub, message *ws.SocketMes
 		return errors.New(fmt.Sprintf(ERR_FMT, err.Error()))
 	}
 
-	hub.Send(&ws.SocketMessage{
-		Title:  "COMMAND_SUCCESS",
-		Body:   map[string]interface{}{"payload": queueItem, "command": message},
-		Id:     message.Id,
-		Target: message.Origin,
-		Type:   ws.Response,
-	})
-
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem}, ws.Response))
 	return nil
 }
 
@@ -137,14 +142,7 @@ func (wsGateway *WsGateway) WsItemCancel(hub *ws.SocketHub, message *ws.SocketMe
 		return errors.New(fmt.Sprintf(ERR_FMT, err.Error()))
 	}
 
-	hub.Send(&ws.SocketMessage{
-		Title:  "COMMAND_SUCCESS",
-		Body:   map[string]interface{}{"payload": queueItem, "command": message},
-		Id:     message.Id,
-		Target: message.Origin,
-		Type:   ws.Response,
-	})
-
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem}, ws.Response))
 	return nil
 }
 
@@ -162,14 +160,7 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *ws.SocketHub, message *ws.Sock
 		return errors.New(fmt.Sprintf(ERR_FMT, "item has no trouble"))
 	}
 
-	hub.Send(&ws.SocketMessage{
-		Title:  "COMMAND_SUCCESS",
-		Body:   map[string]interface{}{"payload": queueItem.Trouble, "command": message},
-		Id:     message.Id,
-		Target: message.Origin,
-		Type:   ws.Response,
-	})
-
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem.Trouble}, ws.Response))
 	return nil
 }
 

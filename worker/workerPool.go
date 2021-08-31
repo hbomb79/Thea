@@ -48,7 +48,10 @@ func (pool *WorkerPool) PushWorker(workers ...*Worker) {
 func (pool *WorkerPool) WakeupWorkers(stage PipelineStage) {
 	for _, w := range pool.workers {
 		if w.Stage() == stage && w.Status() == Sleeping {
-			w.WakeupChan() <- 1
+			select {
+			case w.WakeupChan() <- 1:
+			default:
+			}
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -77,13 +78,13 @@ type QueueItem struct {
 	cmdContextCancel context.CancelFunc   `json:"-"`
 }
 
-func NewQueueItem(name string, path string, proc *Processor) *QueueItem {
+func NewQueueItem(info fs.FileInfo, path string, proc *Processor) *QueueItem {
 	cmdCtx, cmdCancel := context.WithCancel(context.Background())
 	return &QueueItem{
-		Name:             name,
+		Name:             info.Name(),
 		Path:             path,
 		Status:           Pending,
-		Stage:            worker.Title,
+		Stage:            worker.Import,
 		processor:        proc,
 		CmdContext:       cmdCtx,
 		cmdContextCancel: cmdCancel,
@@ -97,6 +98,7 @@ func (item *QueueItem) SetTaskFeedback(status string) {
 
 func (item *QueueItem) SetStage(stage worker.PipelineStage) {
 	item.Stage = stage
+	item.processor.WorkerPool.WakeupWorkers(stage)
 
 	item.SetTaskFeedback("")
 	item.NotifyUpdate()

@@ -92,6 +92,10 @@ func (worker *Worker) Close() {
 	close(worker.wakeupChan)
 }
 
+func (worker *Worker) Label() string {
+	return worker.label
+}
+
 // sleep puts a worker to sleep until it's wakeupChan is
 // signalled from another goroutine. Returns a boolean that
 // is 'false' if the wakeup channel was closed - indicating

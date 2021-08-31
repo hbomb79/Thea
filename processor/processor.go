@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -134,16 +135,6 @@ func (p *Processor) Start() error {
 		log.Panic("Failed to start PollingWorker - TickInterval is non-positive (make sure 'import_polling_delay' is set in your config)")
 	}
 
-	go func() {
-		ticker := time.NewTicker(time.Millisecond * 500).C
-		for {
-			select {
-			case _ = <-ticker:
-				p.submitUpdates()
-			}
-		}
-	}()
-
 	go func(target <-chan time.Time) {
 		for {
 			p.SynchroniseQueue()
@@ -153,7 +144,8 @@ func (p *Processor) Start() error {
 		}
 	}(time.NewTicker(tickInterval).C)
 
-	go p.listenForUpdates()
+	go p.handleUpdateStream()
+	go p.handleItemModtimes()
 
 	// Start some workers in the pool to handle various tasks
 	threads, workers := p.Config.Concurrent, make([]*worker.Worker, 0)
@@ -238,7 +230,7 @@ func (p *Processor) DiscoverItems() (map[string]fs.FileInfo, error) {
 // add them to the Queue
 func (p *Processor) InjestQueue(presentItems map[string]fs.FileInfo) error {
 	for path, info := range presentItems {
-		if e := p.Queue.Push(NewQueueItem(info.Name(), path, p)); e != nil {
+		if e := p.Queue.Push(NewQueueItem(info, path, p)); e != nil {
 			fmt.Printf("[Processor] (!) Ignoring injestable item - %v\n", e.Error())
 		}
 	}
@@ -250,28 +242,73 @@ func (p *Processor) PruneQueueCache() {
 	// TODO
 }
 
-func (p *Processor) listenForUpdates() {
+func (p *Processor) handleItemModtimes() {
+	ticker := time.NewTicker(time.Second * 5).C
+	checkModtime := func(q *processorQueue, idx int, item *QueueItem) bool {
+		if item.Stage != worker.Import {
+			return false
+		}
+
+		info, err := os.Stat(item.Path)
+		if err != nil {
+			fmt.Printf("[Processor] (!) Failed to get file info for %v during import stage: %v\n", item.Path, err.Error())
+			return false
+		}
+
+		if time.Since(info.ModTime()) > time.Minute*2 {
+			q.AdvanceStage(item)
+			fmt.Printf("[Processor] (O) Item %v passed import checks - now in Title stage\n", item.Name)
+		}
+
+		return false
+	}
+
+main:
+	for {
+		select {
+		case _, ok := <-ticker:
+			if !ok {
+				break main
+			}
+
+			p.Queue.ForEach(checkModtime)
+		}
+	}
+}
+
+func (p *Processor) handleUpdateStream() {
 	if p.Negotiator == nil {
 		fmt.Printf("[Processor] (!) Processor began to listen for updates for transmission, however no Negotiator is attached. Aborting.\n")
 		return
 	}
 
+	ticker := time.NewTicker(time.Millisecond * 500).C
+main:
 	for {
-		update, ok := <-p.UpdateChan
-		if !ok {
-			break
+		select {
+		case update, ok := <-p.UpdateChan:
+			if !ok {
+				// Channel closed
+				break main
+			}
+
+			if update == -1 {
+				// -1 update ID indicates a fundamental change to the queue, rather than
+				// a particular item. Send out a processor update, which will tell all
+				// connected clients to INVALIDATE their current queue index, and refetch from the server
+				p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QUEUE, nil, 0, 0})
+
+				continue
+			}
+
+			p.pendingUpdates[update] = true
+		case _, ok := <-ticker:
+			if !ok {
+				break main
+			}
+
+			p.submitUpdates()
 		}
-
-		if update == -1 {
-			// -1 update ID indicates a fundamental change to the queue, rather than
-			// a particular item. Send out a processor update, which will tell all
-			// connected clients to INVALIDATE their current queue index, and refetch from the server
-			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QUEUE, nil, 0, 0})
-
-			continue
-		}
-
-		p.pendingUpdates[update] = true
 	}
 }
 

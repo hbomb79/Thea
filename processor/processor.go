@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/hbomb79/TPA/profile"
 	"github.com/hbomb79/TPA/worker"
 	"github.com/ilyakaznacheev/cleanenv"
 )
@@ -78,6 +79,7 @@ type Processor struct {
 	Negotiator     Negotiator
 	UpdateChan     chan int
 	pendingUpdates map[int]bool
+	profiles       profile.ProfileList
 }
 
 type Negotiator interface {
@@ -105,6 +107,7 @@ func NewProcessor() *Processor {
 		WorkerPool:     worker.NewWorkerPool(),
 		UpdateChan:     make(chan int),
 		pendingUpdates: make(map[int]bool),
+		profiles:       profile.NewList(),
 	}
 }
 

@@ -79,7 +79,7 @@ type Processor struct {
 	Negotiator     Negotiator
 	UpdateChan     chan int
 	pendingUpdates map[int]bool
-	profiles       profile.ProfileList
+	Profiles       profile.ProfileList
 }
 
 type Negotiator interface {
@@ -89,8 +89,9 @@ type Negotiator interface {
 type processorUpdateType = int
 
 const (
-	ITEM processorUpdateType = iota
-	QUEUE
+	ITEM_UPDATE processorUpdateType = iota
+	QUEUE_UPDATE
+	PROFILE_UPDATE
 )
 
 type ProcessorUpdate struct {
@@ -107,7 +108,7 @@ func NewProcessor() *Processor {
 		WorkerPool:     worker.NewWorkerPool(),
 		UpdateChan:     make(chan int),
 		pendingUpdates: make(map[int]bool),
-		profiles:       profile.NewList(),
+		Profiles:       profile.NewList(),
 	}
 }
 
@@ -299,7 +300,7 @@ main:
 				// -1 update ID indicates a fundamental change to the queue, rather than
 				// a particular item. Send out a processor update, which will tell all
 				// connected clients to INVALIDATE their current queue index, and refetch from the server
-				p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QUEUE, nil, 0, 0})
+				p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QUEUE_UPDATE, nil, 0, 0})
 
 				continue
 			}
@@ -319,10 +320,10 @@ func (p *Processor) submitUpdates() {
 	for k := range p.pendingUpdates {
 		queueItem, idx := p.Queue.FindById(k)
 		if queueItem == nil || idx < 0 {
-			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{UpdateType: ITEM, QueueItem: nil, ItemPosition: -1, ItemId: k})
+			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{UpdateType: ITEM_UPDATE, QueueItem: nil, ItemPosition: -1, ItemId: k})
 		} else {
 			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{
-				UpdateType:   ITEM,
+				UpdateType:   ITEM_UPDATE,
 				QueueItem:    queueItem,
 				ItemPosition: idx,
 				ItemId:       k,

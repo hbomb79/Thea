@@ -11,6 +11,8 @@ type ProfileList interface {
 	InsertProfile(Profile) error
 	RemoveProfile(string) error
 	FindProfile(ProfileFindCallback) (int, Profile)
+	FindProfileByTag(tag string) (int, Profile)
+	MoveProfile(string, int) error
 }
 
 type safeList struct {
@@ -60,6 +62,29 @@ func (list *safeList) RemoveProfile(tag string) error {
 	defer list.Unlock()
 
 	list.profiles = append(list.profiles[:idx], list.profiles[idx+1:len(list.profiles)]...)
+	return nil
+}
+
+// MoveProfile accepts a string (tag) and an int (desiredIndex) paramater. The method
+// moves the target (identified by the tag) to the 'desiredIndex' providing both the tag refers to a Profile that
+// exists, and the desiredIndex is a legal index
+func (list *safeList) MoveProfile(tag string, desiredIndex int) error {
+	index, _ := list.FindProfileByTag(tag)
+	if index == -1 {
+		return fmt.Errorf("MoveProfile failed: tag refers to Profile that does not exist", index)
+	} else if desiredIndex < 0 || desiredIndex >= len(list.profiles) {
+		return fmt.Errorf("MoveProfile failed: cannot move target to index %d as destination index is out of bounds.", desiredIndex)
+	}
+
+	list.Lock()
+	defer list.Unlock()
+
+	target := list.profiles[index]
+	l := append(list.profiles[:index], list.profiles[index+1:len(list.profiles)]...)
+
+	list.profiles = append(l[:desiredIndex+1], l[desiredIndex:]...)
+	list.profiles[desiredIndex] = target
+
 	return nil
 }
 

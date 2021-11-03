@@ -63,6 +63,14 @@ func (tpa *Tpa) setupRoutes() {
 	tpa.socketHub.BindCommand("PROMOTE_ITEM", tpa.wsGateway.WsItemPromote)
 	tpa.socketHub.BindCommand("PAUSE_ITEM", tpa.wsGateway.WsItemPause)
 	tpa.socketHub.BindCommand("CANCEL_ITEM", tpa.wsGateway.WsItemCancel)
+
+	tpa.socketHub.BindCommand("PROFILE_INDEX", tpa.wsGateway.WsProfileIndex)
+	tpa.socketHub.BindCommand("PROFILE_CREATE", tpa.wsGateway.WsProfileCreate)
+	tpa.socketHub.BindCommand("PROFILE_REMOVE", tpa.wsGateway.WsProfileRemove)
+	tpa.socketHub.BindCommand("PROFILE_MOVE", tpa.wsGateway.WsProfileMove)
+	tpa.socketHub.BindCommand("PROFILE_TARGET_CREATE", tpa.wsGateway.WsProfileTargetMove)
+	tpa.socketHub.BindCommand("PROFILE_TARGET_REMOVE", tpa.wsGateway.WsProfileTargetMove)
+	tpa.socketHub.BindCommand("PROFILE_TARGET_MOVE", tpa.wsGateway.WsProfileTargetMove)
 }
 
 func (tpa *Tpa) OnProcessorUpdate(update *processor.ProcessorUpdate) {

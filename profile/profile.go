@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 )
@@ -82,4 +83,14 @@ func (profile *profile) EjectTarget(index int) error {
 	profile.targets = append(profile.targets[:index], profile.targets[index+1:len(profile.targets)]...)
 
 	return nil
+}
+
+func (profile *profile) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Tag     string   `json:"tag"`
+		Targets []Target `json:"targets"`
+	}{
+		profile.Tag(),
+		profile.Targets(),
+	})
 }

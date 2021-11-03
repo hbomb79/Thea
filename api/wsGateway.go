@@ -3,8 +3,10 @@ package api
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/hbomb79/TPA/processor"
+	"github.com/hbomb79/TPA/profile"
 	"github.com/hbomb79/TPA/ws"
 )
 
@@ -177,19 +179,115 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *ws.SocketHub, message *ws.Sock
 			return errors.New(fmt.Sprintf(ERR_FMT, idArg, err.Error()))
 		}
 
-		wsGateway.proc.WorkerPool.WakeupWorkers(item.Stage)
-		hub.Send(&ws.SocketMessage{
-			Title:  "COMMAND_SUCCESS",
-			Id:     message.Id,
-			Target: message.Origin,
-			Type:   ws.Response,
-			Body: map[string]interface{}{
-				"command": message,
-			},
-		})
-
+		hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 		return nil
 	}
 
 	return errors.New(fmt.Sprintf(ERR_FMT, idArg, "item could not be found"))
+}
+
+func (wsGateway *WsGateway) WsProfileIndex(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": wsGateway.proc.Profiles.Profiles()}, ws.Response))
+	return nil
+}
+
+func (wsGateway *WsGateway) WsProfileCreate(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"tag": "string"}); err != nil {
+		return err
+	}
+
+	p := profile.NewProfile(message.Body["tag"].(string))
+	if err := wsGateway.proc.Profiles.InsertProfile(p); err != nil {
+		return err
+	}
+
+	wsGateway.proc.UpdateChan <- -2
+	return nil
+}
+
+func (wsGateway *WsGateway) WsProfileRemove(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"tag": "string"}); err != nil {
+		return err
+	}
+
+	if err := wsGateway.proc.Profiles.RemoveProfile(message.Body["tag"].(string)); err != nil {
+		return err
+	}
+
+	wsGateway.proc.UpdateChan <- -2
+	return nil
+}
+
+func (wsGateway *WsGateway) WsProfileMove(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"tag": "string", "desiredIndex": "int"}); err != nil {
+		return err
+	}
+
+	tag := message.Body["tag"].(string)
+	desiredIndex := int(message.Body["desiredIndex"].(float64))
+
+	if err := wsGateway.proc.Profiles.MoveProfile(tag, desiredIndex); err != nil {
+		return err
+	}
+
+	wsGateway.proc.UpdateChan <- -2
+	return nil
+}
+
+func (wsGateway *WsGateway) WsProfileTargetCreate(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "label": "string"}); err != nil {
+		return err
+	}
+
+	profileTag := message.Body["profileTag"].(string)
+	idx, p := wsGateway.proc.Profiles.FindProfileByTag(profileTag)
+	if idx == -1 || p == nil {
+		return fmt.Errorf("cannot create profile target: profile tag '%s' is invalid", profileTag)
+	}
+
+	target := profile.NewTarget(message.Body["label"].(string))
+	p.InsertTarget(target)
+
+	wsGateway.proc.UpdateChan <- -2
+	return nil
+}
+
+func (wsGateway *WsGateway) WsProfileTargetRemove(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "index": "number"}); err != nil {
+		return err
+	}
+
+	profileTag := message.Body["profileTag"].(string)
+	idx, p := wsGateway.proc.Profiles.FindProfileByTag(profileTag)
+	if idx == -1 || p == nil {
+		return fmt.Errorf("cannot create profile target: profile tag '%s' is invalid", profileTag)
+	}
+
+	if err := p.EjectTarget(idx); err != nil {
+		return err
+	}
+
+	wsGateway.proc.UpdateChan <- -2
+	return nil
+}
+
+func (wsGateway *WsGateway) WsProfileTargetMove(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "index": "number", "desiredIndex": "number"}); err != nil {
+		return err
+	}
+
+	profileTag := message.Body["profileTag"].(string)
+	idx, p := wsGateway.proc.Profiles.FindProfileByTag(profileTag)
+	if idx == -1 || p == nil {
+		return fmt.Errorf("cannot create profile target: profile tag '%s' is invalid", profileTag)
+	}
+
+	index := int(message.Body["index"].(float64))
+	desiredIndex := int(message.Body["desiredIndex"].(float64))
+	if err := p.MoveTarget(index, desiredIndex); err != nil {
+		return err
+	}
+
+	wsGateway.proc.UpdateChan <- -2
+	return nil
 }

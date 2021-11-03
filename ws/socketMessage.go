@@ -52,6 +52,10 @@ func (message *SocketMessage) ValidateArguments(required map[string]string) erro
 					return errors.New(fmt.Sprintf(ERR_FMT, key, value, givenValue))
 				}
 			case "string":
+				if givenValue == "" {
+					return errors.New(fmt.Sprintf(ERR_FMT, key, value, givenValue))
+				}
+
 				break
 			default:
 				return errors.New(fmt.Sprint(ERR_FMT, key, value, "unknown type"))

@@ -68,8 +68,8 @@ func (tpa *Tpa) setupRoutes() {
 	tpa.socketHub.BindCommand("PROFILE_CREATE", tpa.wsGateway.WsProfileCreate)
 	tpa.socketHub.BindCommand("PROFILE_REMOVE", tpa.wsGateway.WsProfileRemove)
 	tpa.socketHub.BindCommand("PROFILE_MOVE", tpa.wsGateway.WsProfileMove)
-	tpa.socketHub.BindCommand("PROFILE_TARGET_CREATE", tpa.wsGateway.WsProfileTargetMove)
-	tpa.socketHub.BindCommand("PROFILE_TARGET_REMOVE", tpa.wsGateway.WsProfileTargetMove)
+	tpa.socketHub.BindCommand("PROFILE_TARGET_CREATE", tpa.wsGateway.WsProfileTargetCreate)
+	tpa.socketHub.BindCommand("PROFILE_TARGET_REMOVE", tpa.wsGateway.WsProfileTargetRemove)
 	tpa.socketHub.BindCommand("PROFILE_TARGET_MOVE", tpa.wsGateway.WsProfileTargetMove)
 }
 

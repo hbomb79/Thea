@@ -18,11 +18,12 @@ import (
 // various user config supplied by file, or
 // manually inside the code.
 type TPAConfig struct {
-	Concurrent ConcurrentConfig `yaml:"concurrency"`
-	Format     FormatterConfig  `yaml:"formatter"`
-	Database   DatabaseConfig   `yaml:"database"`
-	OmdbKey    string           `yaml:"omdb_api_key"`
-	CachePath  string           `yaml:"cache_path"`
+	Concurrent       ConcurrentConfig `yaml:"concurrency"`
+	Format           FormatterConfig  `yaml:"formatter"`
+	Database         DatabaseConfig   `yaml:"database"`
+	OmdbKey          string           `yaml:"omdb_api_key"`
+	CachePath        string           `yaml:"cache_path"`
+	ProfileStorePath string           `yaml:"profile_store_path"`
 }
 
 // ConcurrentConfig is a subset of the configuration that focuses
@@ -108,7 +109,6 @@ func NewProcessor() *Processor {
 		WorkerPool:     worker.NewWorkerPool(),
 		UpdateChan:     make(chan int),
 		pendingUpdates: make(map[int]bool),
-		Profiles:       profile.NewList(),
 	}
 }
 
@@ -133,6 +133,7 @@ func (p *Processor) WithNegotiator(n Negotiator) *Processor {
 // This method will wait on the WaitGroup attached to the WorkerPool
 func (p *Processor) Start() error {
 	p.Queue = NewProcessorQueue(p.Config.CachePath)
+	p.Profiles = profile.NewList(p.Config.ProfileStorePath)
 
 	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
 	if tickInterval <= 0 {
@@ -300,7 +301,12 @@ main:
 				// -1 update ID indicates a fundamental change to the queue, rather than
 				// a particular item. Send out a processor update, which will tell all
 				// connected clients to INVALIDATE their current queue index, and refetch from the server
-				p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QUEUE_UPDATE, nil, 0, 0})
+				p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QUEUE_UPDATE, nil, -1, -1})
+
+				continue
+			} else if update == -2 {
+				p.Profiles.Save()
+				p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{PROFILE_UPDATE, nil, -1, -1})
 
 				continue
 			}

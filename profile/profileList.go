@@ -2,6 +2,8 @@ package profile
 
 import (
 	"fmt"
+	"github.com/hbomb79/TPA/cache"
+	"github.com/mitchellh/mapstructure"
 	"sync"
 )
 
@@ -11,21 +13,37 @@ type ProfileList interface {
 	InsertProfile(Profile) error
 	RemoveProfile(string) error
 	FindProfile(ProfileFindCallback) (int, Profile)
-	FindProfileByTag(tag string) (int, Profile)
+	FindProfileByTag(string) (int, Profile)
 	MoveProfile(string, int) error
+	Save()
 }
 
 type safeList struct {
 	sync.Mutex
 	profiles []Profile
+	cache    *cache.Cache
 }
 
 // NewList returns a new instance of profileList by address, with
 // the slide of Profile instances created ready for use.
-func NewList() ProfileList {
-	return &safeList{
+func NewList(persistentPath string) ProfileList {
+	list := &safeList{
 		profiles: make([]Profile, 0),
+		cache:    cache.New(persistentPath),
 	}
+
+	// Load preserved profiles from the fs cache
+	iterProfiles := list.cache.RetriveItem("profiles").([]interface{})
+	for _, v := range iterProfiles {
+		var p profile
+		if err := mapstructure.Decode(v, &p); err != nil {
+			fmt.Errorf("[ProfileList] (!!) Failure to decode cache content for profile list:\n\t%v\n", err.Error())
+		} else {
+			list.profiles = append(list.profiles, &p)
+		}
+	}
+
+	return list
 }
 
 // Profiles returns an array of all the profiles
@@ -46,6 +64,7 @@ func (list *safeList) InsertProfile(p Profile) error {
 	defer list.Unlock()
 
 	list.profiles = append(list.profiles, p)
+
 	return nil
 }
 
@@ -62,6 +81,7 @@ func (list *safeList) RemoveProfile(tag string) error {
 	defer list.Unlock()
 
 	list.profiles = append(list.profiles[:idx], list.profiles[idx+1:len(list.profiles)]...)
+
 	return nil
 }
 
@@ -71,7 +91,7 @@ func (list *safeList) RemoveProfile(tag string) error {
 func (list *safeList) MoveProfile(tag string, desiredIndex int) error {
 	index, _ := list.FindProfileByTag(tag)
 	if index == -1 {
-		return fmt.Errorf("MoveProfile failed: tag refers to Profile that does not exist", index)
+		return fmt.Errorf("MoveProfile failed: tag refers to Profile that does not exist")
 	} else if desiredIndex < 0 || desiredIndex >= len(list.profiles) {
 		return fmt.Errorf("MoveProfile failed: cannot move target to index %d as destination index is out of bounds.", desiredIndex)
 	}
@@ -113,4 +133,12 @@ func (list *safeList) FindProfileByTag(tag string) (int, Profile) {
 	return list.FindProfile(func(p Profile) bool {
 		return p.Tag() == tag
 	})
+}
+
+// Save will force the internal cache to save the content of the profile list
+// to the file system. This is mainly implemented so that the Processor can
+// order the ProfileList to save it's contents, without having tight-coupling
+func (list *safeList) Save() {
+	list.cache.PushItem("profiles", list.profiles)
+	list.cache.Save()
 }

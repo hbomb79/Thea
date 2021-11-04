@@ -202,6 +202,7 @@ func (wsGateway *WsGateway) WsProfileCreate(hub *ws.SocketHub, message *ws.Socke
 	}
 
 	wsGateway.proc.UpdateChan <- -2
+	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 	return nil
 }
 
@@ -215,6 +216,7 @@ func (wsGateway *WsGateway) WsProfileRemove(hub *ws.SocketHub, message *ws.Socke
 	}
 
 	wsGateway.proc.UpdateChan <- -2
+	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 	return nil
 }
 
@@ -231,6 +233,7 @@ func (wsGateway *WsGateway) WsProfileMove(hub *ws.SocketHub, message *ws.SocketM
 	}
 
 	wsGateway.proc.UpdateChan <- -2
+	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 	return nil
 }
 
@@ -249,6 +252,7 @@ func (wsGateway *WsGateway) WsProfileTargetCreate(hub *ws.SocketHub, message *ws
 	p.InsertTarget(target)
 
 	wsGateway.proc.UpdateChan <- -2
+	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 	return nil
 }
 
@@ -263,11 +267,12 @@ func (wsGateway *WsGateway) WsProfileTargetRemove(hub *ws.SocketHub, message *ws
 		return fmt.Errorf("cannot create profile target: profile tag '%s' is invalid", profileTag)
 	}
 
-	if err := p.EjectTarget(idx); err != nil {
+	if err := p.EjectTarget(int(message.Body["index"].(float64))); err != nil {
 		return err
 	}
 
 	wsGateway.proc.UpdateChan <- -2
+	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 	return nil
 }
 
@@ -289,5 +294,6 @@ func (wsGateway *WsGateway) WsProfileTargetMove(hub *ws.SocketHub, message *ws.S
 	}
 
 	wsGateway.proc.UpdateChan <- -2
+	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 	return nil
 }

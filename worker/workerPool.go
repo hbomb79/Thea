@@ -10,14 +10,14 @@ import (
 // field is a slice that contains all the workers
 // attached to this WorkerPool
 type WorkerPool struct {
-	workers []*Worker
+	workers []Worker
 	Wg      sync.WaitGroup
 }
 
 // NewWorkerPool creates a new WorkerPool struct
 // and initialises the 'workers' slice
 func NewWorkerPool() *WorkerPool {
-	return &WorkerPool{workers: make([]*Worker, 0)}
+	return &WorkerPool{workers: make([]Worker, 0)}
 }
 
 // StartWorkers cycles through all the workers
@@ -27,7 +27,7 @@ func NewWorkerPool() *WorkerPool {
 func (pool *WorkerPool) StartWorkers() {
 	for _, worker := range pool.workers {
 		pool.Wg.Add(1)
-		go func(pool *WorkerPool, w *Worker) {
+		go func(pool *WorkerPool, w Worker) {
 			w.Start()
 			pool.Wg.Done()
 		}(pool, worker)
@@ -37,17 +37,15 @@ func (pool *WorkerPool) StartWorkers() {
 // PushWorker inserts the worker provided in to the worker pool,
 // this method will first lock the mutex to ensure mutually exclusive
 // access to the worker pool slice.
-func (pool *WorkerPool) PushWorker(workers ...*Worker) {
+func (pool *WorkerPool) PushWorker(workers ...Worker) {
 	pool.workers = append(pool.workers, workers...)
 }
 
-// WakeupWorkers will search for workers in the pool
-// that are responsible for the stage of the pipeline
-// provided (stage) and will send on their WakeupChannel
-// to wake up sleeping workers
-func (pool *WorkerPool) WakeupWorkers(stage PipelineStage) {
+// WakeupWorkers will search for sleeping workers in the pool
+// and will send on their WakeupChannel to wake up sleeping workers
+func (pool *WorkerPool) WakeupWorkers() {
 	for _, w := range pool.workers {
-		if w.Stage() == stage && w.Status() == Sleeping {
+		if w.Status() == Sleeping {
 			select {
 			case w.WakeupChan() <- 1:
 			default:

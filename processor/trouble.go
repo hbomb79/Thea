@@ -1,5 +1,7 @@
 package processor
 
+import "github.com/google/uuid"
+
 // When a processor task encounters an error that requires
 // user intervention to continue - a 'trouble' is raised.
 // This trouble is raised, and resolved, via the 'Trouble'
@@ -14,4 +16,5 @@ type Trouble interface {
 	Type() TroubleType
 	Payload() map[string]interface{}
 	ResolutionContext() map[string]interface{}
+	Uuid() *uuid.UUID
 }

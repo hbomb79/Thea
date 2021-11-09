@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/hbomb79/TPA/worker"
 )
 
@@ -27,13 +25,13 @@ const (
 // work/wait worker loop, and raising and notifying troubles
 type baseTask struct{}
 
-type taskFn func(*worker.Worker, *QueueItem) error
+type taskFn func(worker.Worker, *QueueItem) error
 
 // executeTask implements the core worker work/wait loop that
 // searches for work to do - and if some work is available, the
 // 'fn' taskFn is executed. If no work is available, the worker
 // sleeps until woken up again.
-func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn) error {
+func (task *baseTask) executeTask(w worker.Worker, proc *Processor, fn taskFn) error {
 	for {
 	inner:
 		for {
@@ -61,7 +59,7 @@ func (task *baseTask) executeTask(w *worker.Worker, proc *Processor, fn taskFn) 
 				// Unhandled exception!
 				return err
 			} else {
-				// Task finished successfully. Clear the trouble
+				// Task finished successfully. Clear the troubles for this item
 				item.ClearTrouble()
 			}
 		}
@@ -83,7 +81,7 @@ type TitleTask struct {
 
 // Execute will utilise the baseTask.Execute method to run the task repeatedly
 // in a worker work/wait loop
-func (task *TitleTask) Execute(w *worker.Worker) error {
+func (task *TitleTask) Execute(w worker.Worker) error {
 	return task.executeTask(w, task.proc, task.processTitle)
 }
 
@@ -119,7 +117,7 @@ func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 
 // Processes a given queueItem by filtering out irrelevant information from it's
 // title, and finding relevant information such as the season, episode and resolution
-func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) error {
+func (task *TitleTask) processTitle(w worker.Worker, queueItem *QueueItem) error {
 	err, isComplete := task.processTroubleState(queueItem)
 	if err != nil {
 		fmt.Printf("[TitleWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
@@ -136,11 +134,9 @@ func (task *TitleTask) processTitle(w *worker.Worker, queueItem *QueueItem) erro
 	return nil
 }
 
-// advances the item by advancing the stage of the item, and waking up
-// any sleeping workers in the next stage
+// advances the item by advancing the stage of the item
 func (task *TitleTask) advance(item *QueueItem) {
 	task.proc.Queue.AdvanceStage(item)
-	task.proc.WorkerPool.WakeupWorkers(worker.Omdb)
 }
 
 // OmdbTask is the task responsible for querying to OMDB API for information
@@ -262,8 +258,8 @@ func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*Om
 
 // Execute uses the provided baseTask.executeTask method to run this tasks
 // work function in a work/wait worker loop
-func (task *OmdbTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, func(w *worker.Worker, queueItem *QueueItem) error {
+func (task *OmdbTask) Execute(w worker.Worker) error {
+	return task.executeTask(w, task.proc, func(w worker.Worker, queueItem *QueueItem) error {
 		err, isComplete := task.processTroubleState(queueItem)
 		if err != nil {
 			fmt.Printf("[OmdbWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
@@ -287,12 +283,7 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 		return nil, false
 	}
 
-	trbl, ok := queueItem.Trouble.(*OmdbTaskError)
-	if !ok {
-		return fmt.Errorf("items trouble type (%T) does not match for this worker", queueItem.Trouble), false
-	}
-
-	trblCtx := trbl.ResolutionContext()
+	trblCtx := queueItem.Trouble.ResolutionContext()
 	fetchId, omdbStruct, action := trblCtx["fetchId"], trblCtx["omdbStruct"], trblCtx["action"]
 	if fetchId != nil {
 		id, ok := fetchId.(string)
@@ -337,7 +328,7 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 // If multiple results are found a OmdbMultipleResultError is returned; if
 // no results are found then an OmdbNoResultError is returned. If the request
 // fails for another reason, an OmdbRequestError is returned.
-func (task *OmdbTask) search(w *worker.Worker, queueItem *QueueItem) (*OmdbInfo, error) {
+func (task *OmdbTask) search(w worker.Worker, queueItem *QueueItem) (*OmdbInfo, error) {
 	// Peform the search
 	cfg := task.proc.Config
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "s", queueItem.TitleInfo.Title, cfg.OmdbKey))
@@ -403,7 +394,7 @@ func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, err
 
 // find is used to perform a search to Omdb using the title information stored inside
 // of a QueueItem.
-func (task *OmdbTask) find(w *worker.Worker, queueItem *QueueItem) error {
+func (task *OmdbTask) find(w worker.Worker, queueItem *QueueItem) error {
 	if queueItem.TitleInfo == nil {
 		return fmt.Errorf("cannot find OMDB info for queueItem (id: %v). TitleInfo missing!", queueItem.Id)
 	}
@@ -423,108 +414,4 @@ func (task *OmdbTask) find(w *worker.Worker, queueItem *QueueItem) error {
 func (task *OmdbTask) advance(item *QueueItem) {
 	// Release the QueueItem by advancing it to the next pipeline stage
 	task.proc.Queue.AdvanceStage(item)
-
-	// Wakeup any pipeline workers that are sleeping
-	task.proc.WorkerPool.WakeupWorkers(worker.Format)
-}
-
-// FormatTask is a task that is responsible for performing the transcoding of
-// the queue items to MP4 format, to allow for viewing/streaming directly
-// inside of any modern web browsers
-type FormatTask struct {
-	proc *Processor
-	baseTask
-}
-
-type ffmpegProgress struct {
-	Frames   string
-	Elapsed  string
-	Bitrate  string
-	Progress float64
-	Speed    string
-}
-
-// Execute uses the baseTask.executeTask to run this workers
-// task in a worker loop
-func (task *FormatTask) Execute(w *worker.Worker) error {
-	return task.executeTask(w, task.proc, task.format)
-}
-
-// format will take the provided queueItem and format the file in to
-// a new format.
-func (task *FormatTask) format(w *worker.Worker, queueItem *QueueItem) error {
-	outputFormat := task.proc.Config.Format.TargetFormat
-	ffmpegOverwrite := true
-	ffmpegOpts, ffmpegCfg := &ffmpeg.Options{
-		OutputFormat: &outputFormat,
-		Overwrite:    &ffmpegOverwrite,
-	}, &ffmpeg.Config{
-		ProgressEnabled: true,
-		FfmpegBinPath:   task.proc.Config.Format.FfmpegBinaryPath,
-		FfprobeBinPath:  task.proc.Config.Format.FfprobeBinaryPath,
-	}
-
-	itemOutputPath := fmt.Sprintf("%s.%s", queueItem.TitleInfo.OutputPath(), outputFormat)
-	itemOutputPath = filepath.Join(task.proc.Config.Format.OutputPath, itemOutputPath)
-	progress, err := ffmpeg.
-		New(ffmpegCfg).
-		Input(queueItem.Path).
-		Output(itemOutputPath).
-		WithOptions(ffmpegOpts).
-		WithContext(&queueItem.CmdContext).
-		Start(ffmpegOpts)
-
-	if err != nil {
-		// Try and pick out some relevant information from the HUGE
-		// output log from ffmpeg. The error we get contains lots of information
-		// about how the binary was compiled... this is useless info, we just
-		// want the 'message' JSON that is encoded inside.
-		messageMatcher := regexp.MustCompile(`(?s)message: ({.*})`)
-		groups := messageMatcher.FindStringSubmatch(err.Error())
-		if messageMatcher == nil {
-			return &FormatTaskError{NewBaseTaskError(err.Error(), queueItem, FFMPEG_FAILURE)}
-		}
-
-		// ffmpeg error is returned as a JSON encoded string. Unmarshal so we can extract the
-		// error string..
-		var out map[string]interface{}
-		jsonErr := json.Unmarshal([]byte(groups[1]), &out)
-		if jsonErr != nil {
-			// We failed to extract the info.. just use the entire string as our error
-			return &FormatTaskError{NewBaseTaskError(groups[1], queueItem, FFMPEG_FAILURE)}
-		}
-
-		// Extract the exception from this result
-		ffmpegException := out["error"].(map[string]interface{})
-		return &FormatTaskError{NewBaseTaskError(ffmpegException["string"].(string), queueItem, FFMPEG_FAILURE)}
-	}
-
-	for v := range progress {
-		v, err := json.Marshal(ffmpegProgress{
-			v.GetCurrentBitrate(),
-			v.GetCurrentTime(),
-			v.GetCurrentBitrate(),
-			v.GetProgress(),
-			v.GetSpeed(),
-		})
-
-		if err != nil {
-			fmt.Printf("[FfmpegWorker] (!) Failed to marshal struct for ffmpeg progress tick: %v\n", err.Error())
-		} else {
-			queueItem.SetTaskFeedback(string(v))
-		}
-	}
-
-	// Advance our item to the next stage
-	task.advance(queueItem)
-	return nil
-}
-
-// advance will push the queue item to the next pipeline stage. Currently,
-// this means the item will be marked as finished. In the future however this
-// will likely trigger a database hook
-func (task *FormatTask) advance(item *QueueItem) {
-	// Release the QueueItem by advancing it to the next pipeline stage
-	task.proc.Queue.AdvanceStage(item)
-	task.proc.WorkerPool.WakeupWorkers(worker.Database)
 }

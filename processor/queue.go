@@ -223,7 +223,6 @@ func (queue *processorQueue) Reorder(indexOrder []int) error {
 
 	newQueue := make([]*QueueItem, queueLength)
 	for k, v := range indexOrder {
-		// TODO Please optimize this... calling FindById on each iteration is very expensive.
 		if item, idx := queue.FindById(v); item != nil && idx > -1 {
 			newQueue[k] = item
 			continue

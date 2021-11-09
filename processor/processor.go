@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/hbomb79/TPA/profile"
 	"github.com/hbomb79/TPA/worker"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -74,13 +75,15 @@ func (config *TPAConfig) LoadFromFile(configPath string) error {
 // the queue of items, the pool of workers that are
 // processing the queue, and the users configuration
 type Processor struct {
-	Config         *TPAConfig
-	Queue          *processorQueue
-	WorkerPool     *worker.WorkerPool
-	Negotiator     Negotiator
-	UpdateChan     chan int
-	pendingUpdates map[int]bool
-	Profiles       profile.ProfileList
+	Config             *TPAConfig
+	Queue              *processorQueue
+	WorkerPool         *worker.WorkerPool
+	Negotiator         Negotiator
+	UpdateChan         chan int
+	pendingUpdates     map[int]bool
+	Profiles           profile.ProfileList
+	FfmpegCommander    Commander
+	KnownFfmpegOptions map[string]string
 }
 
 type Negotiator interface {
@@ -105,10 +108,16 @@ type ProcessorUpdate struct {
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
 func NewProcessor() *Processor {
+	opts, err := profile.ToArgsMap(&ffmpeg.Options{})
+	if err != nil {
+		fmt.Printf("[Processor] (!) Failed to initialise map of known FFMPEG options!")
+	}
+
 	return &Processor{
-		WorkerPool:     worker.NewWorkerPool(),
-		UpdateChan:     make(chan int),
-		pendingUpdates: make(map[int]bool),
+		WorkerPool:         worker.NewWorkerPool(),
+		UpdateChan:         make(chan int),
+		pendingUpdates:     make(map[int]bool),
+		KnownFfmpegOptions: opts,
 	}
 }
 
@@ -143,28 +152,21 @@ func (p *Processor) Start() error {
 	go func(target <-chan time.Time) {
 		for {
 			p.SynchroniseQueue()
-			p.WorkerPool.WakeupWorkers(worker.Title)
 
 			<-target
 		}
 	}(time.NewTicker(tickInterval).C)
 
+	p.FfmpegCommander = NewCommander(p)
+	p.FfmpegCommander.SetWindowSize(2)
+	p.FfmpegCommander.SetThreadPoolSize(8)
+
+	go p.FfmpegCommander.Start()
 	go p.handleUpdateStream()
 	go p.handleItemModtimes()
 
-	// Start some workers in the pool to handle various tasks
-	threads, workers := p.Config.Concurrent, make([]*worker.Worker, 0)
-	for i := 0; i < threads.Title; i++ {
-		workers = append(workers, worker.NewWorker(fmt.Sprintf("Title:%v", i), &TitleTask{proc: p}, worker.Title, make(chan int)))
-	}
-	for i := 0; i < threads.OMBD; i++ {
-		workers = append(workers, worker.NewWorker(fmt.Sprintf("Omdb:%v", i), &OmdbTask{proc: p}, worker.Omdb, make(chan int)))
-	}
-	for i := 0; i < threads.Format; i++ {
-		workers = append(workers, worker.NewWorker(fmt.Sprintf("Format:%v", i), &FormatTask{proc: p}, worker.Format, make(chan int)))
-	}
-
-	p.WorkerPool.PushWorker(workers...)
+	p.WorkerPool.PushWorker(worker.NewWorker("Title_Parser", &TitleTask{proc: p}, worker.Title, make(chan int)))
+	p.WorkerPool.PushWorker(worker.NewWorker("OMDB_Handler", &OmdbTask{proc: p}, worker.Omdb, make(chan int)))
 	p.WorkerPool.StartWorkers()
 	p.WorkerPool.Wg.Wait()
 
@@ -172,9 +174,9 @@ func (p *Processor) Start() error {
 }
 
 // SynchroniseQueue will first discover all items inside the import directory,
+// synchroniseQueue will first discover all items inside the import directory,
 // and then will injest any that do not already exist in the queue. Any items
 // in the queue that no longer exist in the discovered items will also be cancelled
-// and removed from the queue.
 func (p *Processor) SynchroniseQueue() error {
 	// Reload the queues cache so that our exlusion list
 	// is up to date (in case the cache was deleted or edited externally)
@@ -302,16 +304,14 @@ main:
 				// a particular item. Send out a processor update, which will tell all
 				// connected clients to INVALIDATE their current queue index, and refetch from the server
 				p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{QUEUE_UPDATE, nil, -1, -1})
-
-				continue
 			} else if update == -2 {
 				p.Profiles.Save()
 				p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{PROFILE_UPDATE, nil, -1, -1})
-
-				continue
+			} else {
+				p.pendingUpdates[update] = true
 			}
 
-			p.pendingUpdates[update] = true
+			p.wakeupWorkers()
 		case _, ok := <-ticker:
 			if !ok {
 				break main
@@ -337,5 +337,17 @@ func (p *Processor) submitUpdates() {
 		}
 
 		delete(p.pendingUpdates, k)
+	}
+}
+
+func (p *Processor) wakeupWorkers() {
+	// Processor state has changed - wake up all workers
+	// and notify the commander
+	p.WorkerPool.WakeupWorkers()
+
+	// Non blocking wakeup
+	select {
+	case p.FfmpegCommander.WakeupChan() <- 1:
+	default:
 	}
 }

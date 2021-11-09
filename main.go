@@ -74,12 +74,15 @@ func (tpa *Tpa) setupRoutes() {
 }
 
 func (tpa *Tpa) OnProcessorUpdate(update *processor.ProcessorUpdate) {
+	body := map[string]interface{}{"context": update}
+	if update.UpdateType == processor.PROFILE_UPDATE {
+		body["profiles"] = tpa.proc.Profiles.Profiles()
+	}
+
 	tpa.socketHub.Send(&ws.SocketMessage{
 		Title: "UPDATE",
-		Body: map[string]interface{}{
-			"context": update,
-		},
-		Type: ws.Update,
+		Body:  body,
+		Type:  ws.Update,
 	})
 }
 

@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/hbomb79/TPA/processor"
 	"github.com/hbomb79/TPA/profile"
@@ -257,7 +256,7 @@ func (wsGateway *WsGateway) WsProfileTargetCreate(hub *ws.SocketHub, message *ws
 }
 
 func (wsGateway *WsGateway) WsProfileTargetRemove(hub *ws.SocketHub, message *ws.SocketMessage) error {
-	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "index": "number"}); err != nil {
+	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "targetLabel": "string"}); err != nil {
 		return err
 	}
 
@@ -267,7 +266,7 @@ func (wsGateway *WsGateway) WsProfileTargetRemove(hub *ws.SocketHub, message *ws
 		return fmt.Errorf("cannot create profile target: profile tag '%s' is invalid", profileTag)
 	}
 
-	if err := p.EjectTarget(int(message.Body["index"].(float64))); err != nil {
+	if err := p.EjectTarget(message.Body["targetLabel"].(string)); err != nil {
 		return err
 	}
 
@@ -277,7 +276,7 @@ func (wsGateway *WsGateway) WsProfileTargetRemove(hub *ws.SocketHub, message *ws
 }
 
 func (wsGateway *WsGateway) WsProfileTargetMove(hub *ws.SocketHub, message *ws.SocketMessage) error {
-	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "index": "number", "desiredIndex": "number"}); err != nil {
+	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "targetLabel": "string", "desiredIndex": "number"}); err != nil {
 		return err
 	}
 
@@ -287,9 +286,8 @@ func (wsGateway *WsGateway) WsProfileTargetMove(hub *ws.SocketHub, message *ws.S
 		return fmt.Errorf("cannot create profile target: profile tag '%s' is invalid", profileTag)
 	}
 
-	index := int(message.Body["index"].(float64))
 	desiredIndex := int(message.Body["desiredIndex"].(float64))
-	if err := p.MoveTarget(index, desiredIndex); err != nil {
+	if err := p.MoveTarget(message.Body["targetLabel"].(string), desiredIndex); err != nil {
 		return err
 	}
 

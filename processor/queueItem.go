@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -38,25 +37,39 @@ func convertToInt(input string) int {
 	return v
 }
 
-// QueueItemStatus represents whether or not the
-// QueueItem is currently being worked on, or if
-// it's waiting for a worker to pick it up
-// and begin working on the task
+// The current status of this QueueItem
 type QueueItemStatus int
 
-// If a task is Pending, it's waiting for a worker
-// ... if processing, it's currently being worked on.
-// When a stage in the pipeline is finished with the task,
-// it should set the Stage to the next stage, and set the
-// Status to pending - except for Format stage, which should
-// mark it as completed
 const (
+	// Inidicates that this item is waiting to be worked on. It's currently idle
 	Pending QueueItemStatus = iota
+
+	// TPA is making progress on this item
 	Processing
+
+	// This item has been completed
 	Completed
+
+	// Inidcates that work on this item has HALTED due to an error. The user
+	// should inspect the 'Trouble' parameter to resolve this issue
 	NeedsResolving
+
+	// The user has marked this item for cancellation, but TPA is performing
+	// a non-interuptable task. Once TPA is complete, it will notice this
+	// Status and move the item to 'Cancelled'
 	Cancelling
+
+	// This item has been cancelled and should be removed from the processor queue
 	Cancelled
+
+	// When Paused, TPA (both workers and the commander) will ignore this item entirely
+	Paused
+
+	// Indicates to the user that this item is experiencing a problem *but* it's not
+	// interfering with all progress. The user should still work to solve this problem
+	// as a 'NeedsAttention' status may be increased to 'NeedsResolving' if TPA detects
+	// that work can no longer be made while the problem remains
+	NeedsAttention
 )
 
 // QueueItem contains all the information needed to fully
@@ -64,49 +77,40 @@ const (
 // This includes information found from the file-system, OMDB,
 // and the current processing status/stage
 type QueueItem struct {
-	Id               int                  `json:"id" groups:"api"`
-	Path             string               `json:"path"`
-	Name             string               `json:"name" groups:"api"`
-	Status           QueueItemStatus      `json:"status" groups:"api"`
-	Stage            worker.PipelineStage `json:"stage" groups:"api"`
-	TaskFeedback     string               `json:"taskFeedback" groups:"api"`
-	TitleInfo        *TitleInfo           `json:"title_info"`
-	OmdbInfo         *OmdbInfo            `json:"omdb_info"`
-	Trouble          Trouble              `json:"trouble"`
-	processor        *Processor           `json:"-"`
-	CmdContext       context.Context      `json:"-"`
-	cmdContextCancel context.CancelFunc   `json:"-"`
+	Id         int                  `json:"id" groups:"api"`
+	Path       string               `json:"path"`
+	Name       string               `json:"name" groups:"api"`
+	Status     QueueItemStatus      `json:"status" groups:"api"`
+	Stage      worker.PipelineStage `json:"stage" groups:"api"`
+	TitleInfo  *TitleInfo           `json:"title_info"`
+	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
+	Trouble    Trouble              `json:"trouble"`
+	ProfileTag string               `json:"profile_tag"`
+	processor  *Processor           `json:"-"`
 }
 
 func NewQueueItem(info fs.FileInfo, path string, proc *Processor) *QueueItem {
-	cmdCtx, cmdCancel := context.WithCancel(context.Background())
 	return &QueueItem{
-		Name:             info.Name(),
-		Path:             path,
-		Status:           Pending,
-		Stage:            worker.Import,
-		processor:        proc,
-		CmdContext:       cmdCtx,
-		cmdContextCancel: cmdCancel,
+		Name:      info.Name(),
+		Path:      path,
+		Status:    Pending,
+		Stage:     worker.Import,
+		processor: proc,
 	}
-}
-
-func (item *QueueItem) SetTaskFeedback(status string) {
-	item.TaskFeedback = status
-	item.NotifyUpdate()
 }
 
 func (item *QueueItem) SetStage(stage worker.PipelineStage) {
 	item.Stage = stage
-	item.processor.WorkerPool.WakeupWorkers(stage)
 
-	item.SetTaskFeedback("")
 	item.NotifyUpdate()
 }
 
 func (item *QueueItem) SetStatus(status QueueItemStatus) {
-	item.Status = status
+	if item.Status == status {
+		return
+	}
 
+	item.Status = status
 	if item.Status == Cancelled {
 		// Item has been cancelled and has wrapped up what it was doing
 		// Remove this item from the queue, mark it in the queue cache
@@ -116,14 +120,26 @@ func (item *QueueItem) SetStatus(status QueueItemStatus) {
 		queue.cache.PushItem(item.Path, "cancelled")
 	}
 
-	item.SetTaskFeedback("")
 	item.NotifyUpdate()
+}
+
+func (item *QueueItem) SetProfileTag(tag string) error {
+	if idx, _ := item.processor.Profiles.FindProfileByTag(tag); idx == -1 {
+		return errors.New("profile tag invalid - profile does not exist in Processor.ProfileList")
+	}
+
+	item.ProfileTag = tag
+	item.NotifyUpdate()
+
+	return nil
 }
 
 // SetTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
 func (item *QueueItem) SetTrouble(trouble Trouble) {
+	defer item.NotifyUpdate()
+
 	fmt.Printf("[Trouble] Raising trouble (%T) for QueueItem (%v)!\n", trouble, item.Path)
 	item.Trouble = trouble
 
@@ -206,7 +222,6 @@ func (item *QueueItem) Cancel() error {
 		item.SetStatus(Cancelling)
 	}
 
-	item.cmdContextCancel()
 	return nil
 }
 
@@ -231,7 +246,7 @@ type TitleInfo struct {
 }
 
 // OutputPath is a method to calculate the path to which this
-// item should be output to - based on the TitleInformatio
+// item should be output to - based on the TitleInformation
 func (tInfo *TitleInfo) OutputPath() string {
 	if tInfo.Episodic {
 		fName := fmt.Sprintf("%v_%v_%v_%v_%v", tInfo.Episode, tInfo.Season, tInfo.Title, tInfo.Resolution, tInfo.Year)
@@ -246,7 +261,7 @@ func (tInfo *TitleInfo) OutputPath() string {
 // a file structure, and also to store the information inside
 // of a cache file or a database.
 type OmdbInfo struct {
-	Genre       StringList `decode:"string"`
+	Genre       StringList `decode:"string" mapstructure:"-"`
 	Title       string
 	Description string `json:"plot"`
 	ReleaseYear int

@@ -145,5 +145,5 @@ export function selectedResolver(): string {
     <p>
         If this item doesn't exist in OMDBs database yet, you can instead provide all the details manually below.
     </p>
-    <DynamicForm fields={troubleDetails.expected_args} on:submitted={(event) => resolveWithForm(event.detail)}/>
+    <DynamicForm fields={troubleDetails.expected_args} on:submitted={(event) => resolveWithForm({"replacementStruct": event.detail})}/>
 {/if}

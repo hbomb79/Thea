@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/hbomb79/TPA/cache"
 	"github.com/mitchellh/mapstructure"
+	"reflect"
 	"sync"
 )
 
@@ -33,13 +34,15 @@ func NewList(persistentPath string) ProfileList {
 	}
 
 	// Load preserved profiles from the fs cache
-	iterProfiles := list.cache.RetriveItem("profiles").([]interface{})
-	for _, v := range iterProfiles {
-		var p profile
-		if err := mapstructure.Decode(v, &p); err != nil {
-			fmt.Errorf("[ProfileList] (!!) Failure to decode cache content for profile list:\n\t%v\n", err.Error())
-		} else {
-			list.profiles = append(list.profiles, &p)
+	profileStore := list.cache.RetriveItem("profiles")
+	if profileStore != nil {
+		for _, v := range profileStore.([]interface{}) {
+			var p profile
+			if err := mapstructure.Decode(v, &p); err != nil {
+				fmt.Printf("[ProfileList] (!!) Failure to decode cache content for profile list:\n\t%v\n", err.Error())
+			} else {
+				list.profiles = append(list.profiles, &p)
+			}
 		}
 	}
 
@@ -141,4 +144,44 @@ func (list *safeList) FindProfileByTag(tag string) (int, Profile) {
 func (list *safeList) Save() {
 	list.cache.PushItem("profiles", list.profiles)
 	list.cache.Save()
+}
+
+// ToArgsMap takes a given struct and will go through all
+// fields of the provided input and create an output map where
+// each key is the name of the field, and each value is a string
+// representation of the type of the field (e.g. string, int, bool)
+func ToArgsMap(in interface{}) (map[string]string, error) {
+	out := make(map[string]string)
+
+	v := reflect.ValueOf(in)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	if v.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("toArgsMap only accepts structs - got %T", v)
+	}
+
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		var typeName string
+
+		fi := typ.Field(i)
+		if v, ok := fi.Tag.Lookup("decode"); ok {
+			if v == "-" {
+				// Field wants to be ignored
+				continue
+			}
+
+			// Field has a tag to specify the decode type. Use that instead
+			typeName = v
+		} else {
+			// Use actual type name
+			typeName = fi.Type.Name()
+		}
+
+		out[fi.Name] = typeName
+	}
+
+	return out, nil
 }

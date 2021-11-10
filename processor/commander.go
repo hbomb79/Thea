@@ -290,9 +290,7 @@ func (commander *ffmpegCommander) runHealthChecks() {
 	// Based on the above maps of known instances, interate over each, checking the counts of
 	// healthy and unhealthy instances for each item. Using this information, we can adjust the status of
 	// each QueueItem, or even identify those that are finished and advance their stage
-	fmt.Printf("[Commander] (D) System health (healthy/unhealthy): ")
 	for id := range items {
-		fmt.Printf("#%v: %v/%v ", id, healthyInstances[id], unhealthyInstances[id])
 		item, _ := commander.processor.Queue.FindById(id)
 		if unhealthyInstances[id] == 0 {
 			if healthyInstances[id] == 0 {
@@ -308,7 +306,6 @@ func (commander *ffmpegCommander) runHealthChecks() {
 			}
 		}
 	}
-	fmt.Printf("|\n")
 }
 
 // raiseTrouble is an internal method that will raise a FormatTaskContainerError on

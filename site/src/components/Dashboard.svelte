@@ -19,6 +19,7 @@ import QueueList from "./QueueList.svelte";
 import { commander } from "../commander";
 import { SocketMessageType } from "../store";
 import type { SocketData } from "../store";
+import ServerProfiles from "./ServerProfiles.svelte";
 
 const comp = {
     optionElements: new Array(3),
@@ -26,6 +27,14 @@ const comp = {
     options: ["Home", "Queue", "Settings"],
     selectionOption: 0,
 }
+
+let selectedSetting = -1
+const settingsItems = [
+    ["Profiles", ServerProfiles],
+    ["Server Options", null],
+    ["Server Cache", null],
+    ["Security", null],
+]
 
 let queueState = QueueState.SYNCED
 
@@ -98,10 +107,33 @@ onMount(() => {
         box-shadow: 0px 0px 3px #0000000f;
     }
 }
+
+.settings-items .item {
+    padding: 1rem;
+    color: #9696a5;
+    cursor: pointer;
+    text-align: left;
+    border-radius: 7px;
+    background: #e9eaef54;
+    margin: 11px 1rem;
+    border: solid 1px #8c91b938;
+    transition: all 200ms;
+    transition-property: background, border, box-shadow, color;
+
+    &:hover {
+        background: #ffffff85;
+    }
+
+    &.active {
+        background: white;
+        box-shadow: 0px 0px 7px -5px black;
+        color: #8e82bf;
+    }
+}
 </style>
 
 <div class="dashboard">
-    <div class="wrapper" class:sidebar-open={comp.selectionOption == 1}>
+    <div class="wrapper" class:sidebar-open={comp.selectionOption != 0}>
         <div class="overflow-wrapper">
             <div class="options">
                 {#each comp.options as title, k}
@@ -119,6 +151,13 @@ onMount(() => {
 
                         <div class="queue-items">
                             <QueueList {index} {details} bind:selectedItem={selectedItem} on:index-reorder={handleQueueReorder}/>
+                        </div>
+                    {:else if comp.selectionOption == 2}
+                        <h2 class="header">Settings</h2>
+                        <div class="settings-items">
+                            {#each settingsItems as setting, idx}
+                                <div class="item" class:active={selectedSetting == idx} on:click={() => selectedSetting = idx}>{setting[0]}</div>
+                            {/each}
                         </div>
                     {/if}
                 </div>
@@ -171,6 +210,16 @@ onMount(() => {
                             <QueueItemFull details={details.get(selectedItem)}/>
                         {:else}
                             <h2>Select an item</h2>
+                        {/if}
+                    {:else if comp.selectionOption == 2}
+                        {#if selectedSetting >= 0 && settingsItems[selectedSetting]}
+                            {#if settingsItems[selectedSetting][1] != null}
+                                <svelte:component this={settingsItems[selectedSetting][1]}></svelte:component>
+                            {:else}
+                                <h2>NYI</h2>
+                            {/if}
+                        {:else}
+                            <h2>Select a Setting to change</h2>
                         {/if}
                     {/if}
                 </div>

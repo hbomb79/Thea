@@ -330,7 +330,7 @@ func (commander *ffmpegCommander) raiseTrouble(instance CommanderTask, err error
 	}
 
 	if container == nil {
-		container = &FormatTaskContainerError{NewBaseTaskError(err.Error(), item, FFMPEG_FAILURE), make([]Trouble, 0)}
+		container = &FormatTaskContainerError{NewBaseTaskError("One or more FFMpeg instances are troubled", item, FFMPEG_FAILURE), make([]Trouble, 0)}
 	}
 
 	container.Raise(&FormatTaskError{NewBaseTaskError(err.Error(), instance.Item(), FFMPEG_FAILURE), instance})

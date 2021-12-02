@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/floostack/transcoder/ffmpeg"
 	"path/filepath"
 	"regexp"
-	"strings"
+
+	"github.com/floostack/transcoder/ffmpeg"
 )
+
+const DEFAULT_THREADS_REQUIRED int = 2
 
 type ffmpegProgress struct {
 	Frames   string
@@ -107,7 +109,7 @@ func (ffmpegI *ffmpegInstance) Start(proc *Processor) error {
 	// of ffmpeg, or manual cancellation from the user
 	// Cancellation of the context is deferred to function
 	// return
-	_ = <-ffmpegI.cancelChan
+	<-ffmpegI.cancelChan
 
 	return nil
 }
@@ -152,44 +154,44 @@ var FFMPEG_COMMAND_SUBSTITUTIONS []string = []string{
 	"SOURCE_PATH",
 }
 
-func (ffmpegI *ffmpegInstance) composeCommandArguments(sourceCommand string) string {
-	getVal := func(command string) string {
-		item := ffmpegI.item
-		switch command {
-		case "%DEFAULT_TARGET_EXTENSION%":
-			return "mp4"
-		case "%DEFAULT_THREAD_COUNT%":
-			return "1"
-		case "%DEFAULT_OUTPUT%":
-			return "/"
-		case "%TITLE%":
-			return item.OmdbInfo.Title
-		case "%RESOLUTION%":
-			return item.TitleInfo.Resolution
-		case "%HOME_DIRECTORY%":
-			return ""
-		case "%SEASON_NUMBER%":
-			return fmt.Sprint(item.TitleInfo.Season)
-		case "%EPISODE_NUMBER%":
-			return fmt.Sprint(item.TitleInfo.Episode)
-		case "%SOURCE_PATH%":
-			return item.Path
-		default:
-			fmt.Printf("[Commander] (!) Encountered unknown command substitution '%s' in source command '%s'\n", command, sourceCommand)
-			return command
-		}
-	}
+// func (ffmpegI *ffmpegInstance) composeCommandArguments(sourceCommand string) string {
+// 	getVal := func(command string) string {
+// 		item := ffmpegI.item
+// 		switch command {
+// 		case "%DEFAULT_TARGET_EXTENSION%":
+// 			return "mp4"
+// 		case "%DEFAULT_THREAD_COUNT%":
+// 			return "1"
+// 		case "%DEFAULT_OUTPUT%":
+// 			return "/"
+// 		case "%TITLE%":
+// 			return item.OmdbInfo.Title
+// 		case "%RESOLUTION%":
+// 			return item.TitleInfo.Resolution
+// 		case "%HOME_DIRECTORY%":
+// 			return ""
+// 		case "%SEASON_NUMBER%":
+// 			return fmt.Sprint(item.TitleInfo.Season)
+// 		case "%EPISODE_NUMBER%":
+// 			return fmt.Sprint(item.TitleInfo.Episode)
+// 		case "%SOURCE_PATH%":
+// 			return item.Path
+// 		default:
+// 			fmt.Printf("[Commander] (!) Encountered unknown command substitution '%s' in source command '%s'\n", command, sourceCommand)
+// 			return command
+// 		}
+// 	}
 
-	for _, commandSub := range FFMPEG_COMMAND_SUBSTITUTIONS {
-		sourceCommand = strings.ReplaceAll(
-			sourceCommand,
-			fmt.Sprintf("%%%s%%", commandSub),
-			getVal(commandSub),
-		)
-	}
+// 	for _, commandSub := range FFMPEG_COMMAND_SUBSTITUTIONS {
+// 		sourceCommand = strings.ReplaceAll(
+// 			sourceCommand,
+// 			fmt.Sprintf("%%%s%%", commandSub),
+// 			getVal(commandSub),
+// 		)
+// 	}
 
-	return sourceCommand
-}
+// 	return sourceCommand
+// }
 
 func (ffmpegI *ffmpegInstance) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {

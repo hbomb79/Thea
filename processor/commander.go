@@ -2,16 +2,15 @@ package processor
 
 import (
 	"fmt"
-	"github.com/hbomb79/TPA/profile"
-	"github.com/hbomb79/TPA/worker"
-	_ "github.com/mitchellh/mapstructure"
 	"sync"
 	"time"
+
+	"github.com/hbomb79/TPA/profile"
+	"github.com/hbomb79/TPA/worker"
+	// "github.com/mitchellh/mapstructure"
 )
 
-const DEFAULT_THREADS_REQUIRED int = 2
-
-// Public Commander interface for use outside of this file/package
+// Commander interface for use outside of this file/package
 type Commander interface {
 	Start() error
 	SetWindowSize(int)
@@ -20,16 +19,29 @@ type Commander interface {
 	Instances() []CommanderTask
 }
 
+// CommanderTaskStatus is used as the data type/enum for the status of
+// tasks/processes that the Commander is/was managing
 type CommanderTaskStatus int
 
 const (
+	// PENDING means a task has been created but not started or allocated to any worker
 	PENDING CommanderTaskStatus = iota
+
+	// WORKING indicates a task is now in progress
 	WORKING
-	WAITING_FOR_RESOURCES
+
+	// WAITING means a task has been created however, insufficient resources are available, therefore
+	// the Commander will wait for sufficient resources to be available before starting this task
+	WAITING
+
 	FINISHED
+
+	// TROUBLED tasks require intervention. Inspect 'Trouble' of task via Trouble() method
 	TROUBLED
 )
 
+// CommanderTask is the basic interface of any tasks that the Commander operates
+// on.
 type CommanderTask interface {
 	Start(*Processor) error
 	Item() *QueueItem
@@ -91,7 +103,7 @@ type ffmpegCommander struct {
 func (commander *ffmpegCommander) Start() error {
 	for {
 		select {
-		case _ = <-commander.queueChangedChannel:
+		case <-commander.queueChangedChannel:
 			// Outside queue has changed, perform injest
 			go func() {
 				commander.consumeNewTargets()
@@ -107,7 +119,7 @@ func (commander *ffmpegCommander) Start() error {
 
 				commander.instanceLock.Unlock()
 			}()
-		case _ = <-time.NewTicker(time.Second * 1).C:
+		case <-time.NewTicker(time.Second * 1).C:
 			// Run periodic checks over the targets to give feedback to the user.
 			go func() {
 				commander.runHealthChecks()
@@ -160,14 +172,14 @@ func (commander *ffmpegCommander) tryStartInstances() {
 
 	canStart := true
 	for _, instance := range commander.instances {
-		if instance.Status() != PENDING && instance.Status() != WAITING_FOR_RESOURCES {
+		if instance.Status() != PENDING && instance.Status() != WAITING {
 			// Instances that aren't either PENDING or WAITING_FOR_RESOURCES are
 			// not of our concern
 			continue
 		} else if !canStart || (holdQueueForImportant && !instance.Important()) {
 			// Insufficient resources, or we're holding all queue progress
 			// until an important item is complete.
-			instance.SetStatus(WAITING_FOR_RESOURCES)
+			instance.SetStatus(WAITING)
 
 			continue
 		}
@@ -184,7 +196,7 @@ func (commander *ffmpegCommander) tryStartInstances() {
 		}
 		if !canStart {
 			// Above logic concluded not enough resources. Mark instances as such and continue to next item
-			instance.SetStatus(WAITING_FOR_RESOURCES)
+			instance.SetStatus(WAITING)
 			continue
 		}
 

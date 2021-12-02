@@ -117,7 +117,7 @@ func (ex *TitleTaskError) Resolve(args map[string]interface{}) error {
 	}
 
 	if strings.TrimSpace(result.Title) == "" {
-		return errors.New("TitleInfo 'Title' cannot be empty!")
+		return errors.New("failed to resolve TitleTaskError - TitleInfo 'Title' property cannot be empty")
 	}
 
 	ex.ProvideResolutionContext("info", &result)
@@ -146,7 +146,7 @@ func (ex *OmdbTaskError) Resolve(args map[string]interface{}) error {
 	} else if v, ok := args["replacementStruct"]; ok {
 		var vStruct OmdbInfo
 		if err := mapstructure.Decode(v, &vStruct); err != nil {
-			return fmt.Errorf("Unable to resovle OMDB task error - %v", err.Error())
+			return fmt.Errorf("unable to resovle OMDB task error - %v", err.Error())
 		}
 
 		vStruct.Genre = strings.Split((v.(map[string]interface{}))["Genre"].(string), ",")
@@ -159,26 +159,26 @@ func (ex *OmdbTaskError) Resolve(args map[string]interface{}) error {
 			return nil
 		}
 
-		return errors.New("Unable to resolve OMDB task error - 'action' value of '" + v.(string) + "' is invalid!")
+		return fmt.Errorf("unable to resolve OMDB task error - 'action' value '%v' is invalid", v)
 	} else if v, ok := args["choiceId"]; ok {
 		if ex.troubleType != OMDB_MULTIPLE_RESULT_FAILURE {
-			return errors.New("Unable to resolve OMDB task error - 'choiceId' provided is illegal for this OMDB error")
+			return errors.New("unable to resolve OMDB task error - 'choiceId' provided is illegal for this OMDB error")
 		}
 
 		vIdx, ok := v.(float64)
 		if !ok {
-			return errors.New("Unable to resolve OMDB task error - 'choiceId' is not a valid number!")
+			return errors.New("unable to resolve OMDB task error - 'choiceId' is not a valid number")
 		}
 
 		choiceIdx := int(vIdx)
 		if choiceIdx < 0 || choiceIdx > len(ex.choices)-1 {
-			return errors.New("Unable to resolve OMDB task error - 'choiceId' is out of range!")
+			return errors.New("unable to resolve OMDB task error - 'choiceId' is out of range")
 		}
 
 		ex.ProvideResolutionContext("fetchId", ex.choices[choiceIdx].ImdbId)
 		return nil
 	} else {
-		return errors.New("Unable to resolve OMDB task error - arguments provided are invalid! One of 'imdbId, action, choiceId, replacementStruct' was expected.")
+		return errors.New("unable to resolve OMDB task error - arguments provided are invalid! One of 'imdbId, action, choiceId, replacementStruct' was expected")
 	}
 }
 

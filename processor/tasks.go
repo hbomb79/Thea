@@ -90,13 +90,13 @@ func (task *TitleTask) Execute(w worker.Worker) error {
 // This method will return an error if the processing fails. The second return (bool)
 // indicates whether or not the item has been fully processed. Item trouble is cleared
 // when this method returns
-func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
+func (task *TitleTask) processTroubleState(queueItem *QueueItem) (bool, error) {
 	if queueItem.Trouble != nil {
 		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
 			// Check for the mandatory 'info' key.
 			info, ok := trblCtx["info"]
 			if !ok {
-				return errors.New("resolution context is missing 'info' key as is therefore invalid - ignoring context!"), false
+				return false, errors.New("resolution context is missing 'info' key as is therefore invalid - ignoring context")
 			}
 
 			// Assign the 'info' provided as the items TitleInfo and move on.
@@ -105,20 +105,20 @@ func (task *TitleTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 				queueItem.TitleInfo = titleInfo
 				task.advance(queueItem)
 
-				return nil, true
+				return true, nil
 			}
 
-			return errors.New("resolution contexts 'info' key contains an invalid value! Failed to cast to 'TitleInfo'"), false
+			return false, errors.New("resolution contexts 'info' key contains an invalid value! Failed to cast to 'TitleInfo'")
 		}
 	}
 
-	return nil, false
+	return false, nil
 }
 
 // Processes a given queueItem by filtering out irrelevant information from it's
 // title, and finding relevant information such as the season, episode and resolution
 func (task *TitleTask) processTitle(w worker.Worker, queueItem *QueueItem) error {
-	err, isComplete := task.processTroubleState(queueItem)
+	isComplete, err := task.processTroubleState(queueItem)
 	if err != nil {
 		fmt.Printf("[TitleWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
 	}
@@ -142,8 +142,7 @@ func (task *TitleTask) advance(item *QueueItem) {
 // OmdbTask is the task responsible for querying to OMDB API for information
 // about the queue item we've processed so far.
 type OmdbTask struct {
-	proc   *Processor
-	apiKey string
+	proc *Processor
 	baseTask
 }
 
@@ -260,7 +259,7 @@ func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*Om
 // work function in a work/wait worker loop
 func (task *OmdbTask) Execute(w worker.Worker) error {
 	return task.executeTask(w, task.proc, func(w worker.Worker, queueItem *QueueItem) error {
-		err, isComplete := task.processTroubleState(queueItem)
+		isComplete, err := task.processTroubleState(queueItem)
 		if err != nil {
 			fmt.Printf("[OmdbWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
 		}
@@ -278,9 +277,9 @@ func (task *OmdbTask) Execute(w worker.Worker) error {
 // This method will return an error if the processing fails. The second return (bool)
 // indicates whether or not the item has been fully processed. Trouble is cleared
 // once this method returns.
-func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
+func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (bool, error) {
 	if queueItem.Trouble == nil {
-		return nil, false
+		return false, nil
 	}
 
 	trblCtx := queueItem.Trouble.ResolutionContext()
@@ -288,39 +287,39 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (error, bool) {
 	if fetchId != nil {
 		id, ok := fetchId.(string)
 		if !ok {
-			return errors.New("resolution context contains invalid 'fetchId' field (not string)"), false
+			return false, errors.New("resolution context contains invalid 'fetchId' field (not string)")
 		}
 
 		result, err := task.fetch(id, queueItem)
 		if err != nil {
-			return err, false
+			return false, err
 		}
 
 		queueItem.OmdbInfo = result
 		task.advance(queueItem)
 
-		return nil, true
+		return true, nil
 	} else if omdbStruct != nil {
 		info, ok := omdbStruct.(OmdbInfo)
 		if !ok {
-			return errors.New("resolution context contains invalid 'replacementStruct' field (not an OmdbInfo struct)"), false
+			return false, errors.New("resolution context contains invalid 'replacementStruct' field (not an OmdbInfo struct)")
 		}
 
 		queueItem.OmdbInfo = &info
 		task.advance(queueItem)
 
-		return nil, true
+		return true, nil
 	} else if action != nil {
 		actionVal, ok := action.(string)
 		if !ok {
-			return errors.New("resolution context contains invalid 'action' key (not a string)"), false
+			return false, errors.New("resolution context contains invalid 'action' key (not a string)")
 		} else if actionVal != "retry" {
-			return fmt.Errorf("resolution context contains action with value '%s' which is invalid. Only 'retry' is permitted\n", actionVal), false
+			return false, fmt.Errorf("resolution context contains action with value '%s' which is invalid. Only 'retry' is permitted", actionVal)
 		}
 
-		return nil, false
+		return false, nil
 	} else {
-		return errors.New("resolution context contains none of acceptable fields (choiceId, imdbId, replacementStruct, action)!"), false
+		return false, errors.New("resolution context contains none of acceptable fields (choiceId, imdbId, replacementStruct, action)")
 	}
 }
 
@@ -385,7 +384,7 @@ func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, err
 		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
 	}
 
-	if result.Response == false {
+	if !result.Response {
 		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("fetch failed: OMDB response contained no data (%s)", result.Error), queueItem, OMDB_REQUEST_FAILURE), nil}
 	}
 
@@ -396,7 +395,7 @@ func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, err
 // of a QueueItem.
 func (task *OmdbTask) find(w worker.Worker, queueItem *QueueItem) error {
 	if queueItem.TitleInfo == nil {
-		return fmt.Errorf("cannot find OMDB info for queueItem (id: %v). TitleInfo missing!", queueItem.Id)
+		return fmt.Errorf("cannot find OMDB info for queueItem (id: %v). TitleInfo missing", queueItem.Id)
 	}
 
 	res, err := task.search(w, queueItem)

@@ -60,7 +60,7 @@ func (queue *processorQueue) Push(item *QueueItem) error {
 	defer queue.Unlock()
 
 	if queue.Contains(item.Path) || queue.cache.HasItem(item.Path) {
-		return errors.New(fmt.Sprintf("item (%s) is either already in queue, or marked as complete in cache", item.Path))
+		return fmt.Errorf("item (%s) is either already in queue, or marked as complete in cache", item.Path)
 	}
 
 	item.Id = queue.lastId
@@ -228,7 +228,7 @@ func (queue *processorQueue) Reorder(indexOrder []int) error {
 			continue
 		}
 
-		return fmt.Errorf("indexOrder key %v specifies item ID %v, which does not exist!", k, v)
+		return fmt.Errorf("indexOrder key %v specifies item ID %v, which does not exist", k, v)
 	}
 
 	queue.Items = newQueue

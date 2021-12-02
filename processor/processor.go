@@ -64,7 +64,7 @@ type DatabaseConfig struct {
 func (config *TPAConfig) LoadFromFile(configPath string) error {
 	err := cleanenv.ReadConfig(configPath, config)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Cannot load configuration for ProcessorConfig -  %v\n", err.Error()))
+		return fmt.Errorf("failed to load configuration for ProcessorConfig - %v", err.Error())
 	}
 
 	return nil
@@ -272,14 +272,12 @@ func (p *Processor) handleItemModtimes() {
 
 main:
 	for {
-		select {
-		case _, ok := <-ticker:
-			if !ok {
-				break main
-			}
-
-			p.Queue.ForEach(checkModtime)
+		_, ok := <-ticker
+		if !ok {
+			break main
 		}
+
+		p.Queue.ForEach(checkModtime)
 	}
 }
 

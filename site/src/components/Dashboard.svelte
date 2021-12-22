@@ -1,143 +1,107 @@
 <script lang="ts" context="module">
-export enum QueueState {
-    SYNCED,
-    REORDERING,
-    SYNCING,
-    FAILURE
-}
-
+    export enum QueueState {
+        SYNCED,
+        REORDERING,
+        SYNCING,
+        FAILURE,
+    }
 </script>
+
 <script lang="ts">
-import { onMount } from "svelte";
+    import { onMount } from "svelte";
 
-import healthSvg from '../assets/health.svg';
-import { QueueManager } from "../queue";
-import type { QueueDetails, QueueItem } from "../queue";
-import QueueItemMini from "./QueueItemMini.svelte";
-import QueueItemFull from "./QueueItemFull.svelte";
-import QueueList from "./QueueList.svelte";
-import { commander } from "../commander";
-import { SocketMessageType } from "../store";
-import type { SocketData } from "../store";
-import ServerProfiles from "./ServerProfiles.svelte";
+    import healthSvg from "../assets/health.svg";
+    import { ContentManager } from "../queue";
+    import type { TranscodeProfile } from "../queue";
+    import type { QueueDetails, QueueItem } from "../queue";
+    import QueueItemMini from "./QueueItemMini.svelte";
+    import QueueItemFull from "./QueueItemFull.svelte";
+    import QueueList from "./QueueList.svelte";
+    import { commander } from "../commander";
+    import { SocketMessageType } from "../store";
+    import type { SocketData } from "../store";
+    import ServerSettings from "./ServerSettings.svelte";
 
-const comp = {
-    optionElements: new Array(3),
-    domCompleted: null,
-    options: ["Home", "Queue", "Settings"],
-    selectionOption: 0,
-}
+    const comp = {
+        optionElements: new Array(3),
+        domCompleted: null,
+        options: ["Home", "Queue", "Settings"],
+        selectionOption: 0,
+    };
 
-let selectedSetting = -1
-const settingsItems = [
-    ["Profiles", ServerProfiles],
-    ["Server Options", null],
-    ["Server Cache", null],
-    ["Security", null],
-]
+    let queueState = QueueState.SYNCED;
 
-let queueState = QueueState.SYNCED
+    const contentManager = new ContentManager();
 
-let queue = new QueueManager()
-let details: Map<number, QueueDetails> = null
-let index: QueueItem[] = []
-let selectedItem: number = -1
+    let details: Map<number, QueueDetails> = null;
+    let index: QueueItem[] = [];
+    let profiles: TranscodeProfile[] = [];
+    let selectedItem: number = -1;
 
-const handleQueueReorder = (event: CustomEvent) => {
-    index = event.detail
-    queueState = QueueState.REORDERING
-}
+    const handleQueueReorder = (event: CustomEvent) => {
+        index = event.detail;
+        queueState = QueueState.REORDERING;
+    };
 
-const commitQueueReorder = () => {
-    console.warn("Syncing queue index with server - new index: ", index, "flattened: ", index.flatMap(item => item.id))
-    queueState = QueueState.SYNCING
-    commander.sendMessage({
-        title: "QUEUE_REORDER",
-        type: SocketMessageType.COMMAND,
-        arguments: {
-            index: index.flatMap(item => item.id)
-        }
-    }, (replyData: SocketData): boolean => {
-        if(replyData.type == SocketMessageType.ERR_RESPONSE) {
-            console.warn("Queue reordering failed - requesting up-to-date index from server", replyData)
-            alert(`Failed to reorder queue: ${replyData.arguments.error}`)
+    const commitQueueReorder = () => {
+        console.warn(
+            "Syncing queue index with server - new index: ",
+            index,
+            "flattened: ",
+            index.flatMap((item) => item.id)
+        );
+        queueState = QueueState.SYNCING;
+        commander.sendMessage(
+            {
+                title: "QUEUE_REORDER",
+                type: SocketMessageType.COMMAND,
+                arguments: {
+                    index: index.flatMap((item) => item.id),
+                },
+            },
+            (replyData: SocketData): boolean => {
+                if (replyData.type == SocketMessageType.ERR_RESPONSE) {
+                    console.warn("Queue reordering failed - requesting up-to-date index from server", replyData);
+                    alert(`Failed to reorder queue: ${replyData.arguments.error}`);
 
-            queue.requestIndex()
-        }
+                    contentManager.requestIndex();
+                }
 
-        queueState = QueueState.SYNCED
-        return false
-    })
-}
+                queueState = QueueState.SYNCED;
+                return false;
+            }
+        );
+    };
 
-onMount(() => {
-    comp.optionElements.forEach((item: HTMLElement, index) => {
-        item.addEventListener("click", () => comp.selectionOption = index)
-    })
+    onMount(() => {
+        comp.optionElements.forEach((item: HTMLElement, index) => {
+            item.addEventListener("click", () => (comp.selectionOption = index));
+        });
 
-    queue.itemDetails.subscribe((v) => details = v)
-    queue.itemIndex.subscribe((v) => {
-        if(queueState == QueueState.REORDERING) {
-            console.warn("Queue index change from server was IGNORED as queue is being reordered!")
-            return
-        }
+        contentManager.itemDetails.subscribe((v) => (details = v));
+        contentManager.itemIndex.subscribe((v) => {
+            if (queueState == QueueState.REORDERING) {
+                console.warn("Queue index change from server was IGNORED as queue is being reordered!");
+                return;
+            }
 
-        queueState = QueueState.SYNCED
-        index = v
-    })
-})
+            queueState = QueueState.SYNCED;
+            index = v;
+        });
+        contentManager.serverProfiles.subscribe((v) => {
+            profiles = v;
+        });
+    });
 </script>
 
-
-<style lang="scss">
-@use "../styles/dashboard.scss";
-
-.overflow-wrapper {
-    position: relative;
-    height: 100%;
-
-    .respect-overflow {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: linear-gradient(122deg, #ffffffc7, #ffffff45);
-        border: solid 1px #c4b8db;
-        border-radius: 10px;
-        box-shadow: 0px 0px 3px #0000000f;
-    }
-}
-
-.settings-items .item {
-    padding: 1rem;
-    color: #9696a5;
-    cursor: pointer;
-    text-align: left;
-    border-radius: 7px;
-    background: #e9eaef54;
-    margin: 11px 1rem;
-    border: solid 1px #8c91b938;
-    transition: all 200ms;
-    transition-property: background, border, box-shadow, color;
-
-    &:hover {
-        background: #ffffff85;
-    }
-
-    &.active {
-        background: white;
-        box-shadow: 0px 0px 7px -5px black;
-        color: #8e82bf;
-    }
-}
-</style>
-
-<div class="dashboard">
-    <div class="wrapper" class:sidebar-open={comp.selectionOption != 0}>
+<div class="dashboard tiled-layout">
+    <div class="wrapper" class:sidebar-open={comp.selectionOption == 1}>
         <div class="overflow-wrapper">
             <div class="options">
                 {#each comp.options as title, k}
-                    <div class="option" class:active={comp.selectionOption == k} bind:this={comp.optionElements[k]}>{title}</div>
+                    <div class="option" class:active={comp.selectionOption == k} bind:this={comp.optionElements[k]}>
+                        {title}
+                    </div>
                 {/each}
             </div>
 
@@ -150,14 +114,7 @@ onMount(() => {
                         {/if}
 
                         <div class="queue-items">
-                            <QueueList {index} {details} bind:selectedItem={selectedItem} on:index-reorder={handleQueueReorder}/>
-                        </div>
-                    {:else if comp.selectionOption == 2}
-                        <h2 class="header">Settings</h2>
-                        <div class="settings-items">
-                            {#each settingsItems as setting, idx}
-                                <div class="item" class:active={selectedSetting == idx} on:click={() => selectedSetting = idx}>{setting[0]}</div>
-                            {/each}
+                            <QueueList {index} {details} bind:selectedItem on:index-reorder={handleQueueReorder} />
                         </div>
                     {/if}
                 </div>
@@ -178,21 +135,19 @@ onMount(() => {
                                 <div class="content">
                                     <div class="mini-tile complete">
                                         <div class="main">
-                                            <div class="progress" bind:this={comp.domCompleted}></div>
+                                            <div class="progress" bind:this={comp.domCompleted} />
                                         </div>
                                         <p class="tag">Items Complete</p>
                                     </div>
                                     <div class="mini-tile trouble">
-                                        <div class="main"></div>
+                                        <div class="main" />
                                         <p class="tag">Items Need Assistance</p>
                                     </div>
                                 </div>
                             </div>
                             <div class="tile workers">
                                 <h2 class="header">Workers</h2>
-                                <div class="content" style="min-height:230px;">
-
-                                </div>
+                                <div class="content" style="min-height:230px;" />
                             </div>
                         </div>
                         <div class="column">
@@ -200,30 +155,48 @@ onMount(() => {
                                 <h2 class="header">Queue</h2>
                                 <div class="content">
                                     {#each index as item}
-                                        <QueueItemMini queueDetails={details.get(item.id)}/>
+                                        <QueueItemMini queueDetails={details.get(item.id)} />
                                     {/each}
                                 </div>
                             </div>
                         </div>
                     {:else if comp.selectionOption == 1}
                         {#if selectedItem > -1 && details.has(selectedItem)}
-                            <QueueItemFull details={details.get(selectedItem)}/>
+                            <QueueItemFull details={details.get(selectedItem)} />
                         {:else}
                             <h2>Select an item</h2>
                         {/if}
                     {:else if comp.selectionOption == 2}
-                        {#if selectedSetting >= 0 && settingsItems[selectedSetting]}
-                            {#if settingsItems[selectedSetting][1] != null}
-                                <svelte:component this={settingsItems[selectedSetting][1]}></svelte:component>
-                            {:else}
-                                <h2>NYI</h2>
-                            {/if}
-                        {:else}
-                            <h2>Select a Setting to change</h2>
-                        {/if}
+                        <ServerSettings {profiles} {index} {details} />
                     {/if}
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<svelte:head>
+    <style lang="scss" global>
+        @use "../styles/tiled-layout.scss";
+    </style>
+</svelte:head>
+
+<style lang="scss">
+    @use "../styles/dashboard.scss";
+
+    .overflow-wrapper {
+        position: relative;
+        height: 100%;
+
+        .respect-overflow {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: linear-gradient(122deg, #ffffffc7, #ffffff45);
+            border: solid 1px #c4b8db;
+            border-radius: 10px;
+            box-shadow: 0px 0px 3px #0000000f;
+        }
+    }
+</style>

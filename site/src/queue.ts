@@ -21,11 +21,21 @@ export enum QueueStage {
 }
 
 export enum QueueTroubleType {
-	TITLE_FAILURE,
-	OMDB_NO_RESULT_FAILURE,
-	OMDB_MULTIPLE_RESULT_FAILURE,
-	OMDB_REQUEST_FAILURE,
-	FFMPEG_FAILURE,
+    TITLE_FAILURE,
+    OMDB_NO_RESULT_FAILURE,
+    OMDB_MULTIPLE_RESULT_FAILURE,
+    OMDB_REQUEST_FAILURE,
+    FFMPEG_FAILURE,
+}
+
+export interface TranscodeProfile {
+    tag: string
+    targets: TranscodeTarget[]
+}
+
+export interface TranscodeTarget {
+    label: string
+    command: Map<string, any>
 }
 
 export interface QueueItem {
@@ -78,28 +88,32 @@ export interface QueueTroubleDetails {
 // given by QueueItem, by appending the three above interfaces to it.
 export interface QueueDetails extends QueueItem {
     title_info: QueueTitleInfo
-    omdb_info:  QueueOmdbInfo
+    omdb_info: QueueOmdbInfo
     trouble: QueueTroubleDetails
+    profile_tag: string
 }
-// The QueueManager class is available for use by components
+// The ContentManager class is available for use by components
 // who wish to keep track of the servers queue state. Generally
 // speaking, the class should only be instantiated once - however
 // it's perfecrtly capable of being instantiated multiple times.
-export class QueueManager {
+export class ContentManager {
     private _items: QueueItem[] = []
     private _details: Map<number, QueueDetails> = new Map()
+    private _profiles: TranscodeProfile[] = []
 
     itemIndex: Writable<QueueItem[]>
     itemDetails: Writable<Map<number, QueueDetails>>
+    serverProfiles: Writable<TranscodeProfile[]>
 
     constructor() {
         dataStream.subscribe((data: SocketData) => {
-            if(data.type == SocketMessageType.UPDATE)
+            if (data.type == SocketMessageType.UPDATE)
                 this.handleUpdate(data)
         })
 
         this.itemIndex = writable(this._items)
         this.itemDetails = writable(this._details)
+        this.serverProfiles = writable(this._profiles)
 
         this.itemIndex.subscribe((items) => {
             console.log("itemIndex change:", items)
@@ -112,7 +126,13 @@ export class QueueManager {
             this._details = items
         })
 
+        this.serverProfiles.subscribe((profiles) => {
+            console.log("serverProfiles change:", profiles)
+            this._profiles = profiles
+        })
+
         this.requestIndex()
+        this.requestProfiles()
     }
 
     // hydrateDetails is a method that is called automatically
@@ -127,7 +147,7 @@ export class QueueManager {
         // Find invalid details (details that no longer have a coresponding entry in the index)
         const invalidDetails = []
         this._details.forEach((item, key) => {
-            if(newData.findIndex((i) => item.id == i.id) < 0) {
+            if (newData.findIndex((i) => item.id == i.id) < 0) {
                 // Item no longer exists in new details, this entry must be removed
                 invalidDetails.push(key)
             }
@@ -138,9 +158,12 @@ export class QueueManager {
         this.itemDetails.set(this._details)
     }
 
+    // requestIndex will query the server for the index of items (the queue)
+    // that is currently known to the server. This client is responsible for
+    // identifying new items and hydrating their details (see hydrateDetails).
     requestIndex() {
         const handleReply = (response: SocketData): boolean => {
-            if(response.type == SocketMessageType.RESPONSE) {
+            if (response.type == SocketMessageType.RESPONSE) {
                 this.itemIndex.set(response.arguments.payload.items)
             } else {
                 console.warn("[QueueManager] Invalid reply while fetching queue index.", response)
@@ -155,9 +178,11 @@ export class QueueManager {
         }, handleReply)
     }
 
+    // requestDetails will lodge a query to the server for enhanced details for
+    // a particular QueueItem (specified by the provided itemId).
     requestDetails(itemId: number) {
         const handleReply = (response: SocketData): boolean => {
-            if(response.type == SocketMessageType.RESPONSE) {
+            if (response.type == SocketMessageType.RESPONSE) {
                 this._details.set(itemId, response.arguments.payload)
                 this.itemDetails.set(this._details)
             } else {
@@ -176,17 +201,42 @@ export class QueueManager {
         }, handleReply)
     }
 
+    // requestProfiles will query the server for the list of profiles
+    // the server is matching queue items against when handling their
+    // transcode. These profiles can be modified by the client by sending
+    // messages to the server via the Commander.
+    requestProfiles() {
+        const handleReply = (response: SocketData): boolean => {
+            if (response.type == SocketMessageType.RESPONSE) {
+                this.serverProfiles.set(response.arguments.payload)
+            } else {
+                console.warn("[QueueManager] Invalid reply while fetching profile index.", response)
+            }
+
+            return false;
+        }
+
+        commander.sendMessage({
+            title: "PROFILE_INDEX",
+            type: SocketMessageType.COMMAND
+        }, handleReply)
+    }
+
+    // handleUpdate is called by the ContentManager whenever a packet
+    // is received that indicates an UPDATE has occured on the server.
+    // The update's type is checked and depending on *what* has updated
+    // on the server, the client will query the server for new information
     private handleUpdate(data: SocketData) {
         const update = data.arguments.context
-        if(update.UpdateType == 0) {
+        if (update.UpdateType == 0) {
             const newItem = update.QueueItem as QueueDetails
 
             const idx = this._items.findIndex(item => item.id == update.ItemId)
-            if( update.ItemPosition < 0 || !newItem ) {
+            if (update.ItemPosition < 0 || !newItem) {
                 // Item has been removed from queue! Find the item
                 // in the queue with the ID that matches the one removed
                 // and pull it from the list
-                if(idx < 0) {
+                if (idx < 0) {
                     console.warn("Failed to find item inside of list for removal. Forcing refresh!")
                     this.requestIndex()
 
@@ -195,13 +245,13 @@ export class QueueManager {
 
                 this._items.splice(idx, 1)
                 this.itemIndex.set(this._items)
-            } else if(idx != update.ItemPosition) {
+            } else if (idx != update.ItemPosition) {
                 // The position for this item has changed.. likely due to a item promotion.
                 // Update the order of the queue - to do this we should
                 // simply re-query the server for an up-to-date queue index.
                 this.requestIndex()
             } else {
-                if(idx < 0) {
+                if (idx < 0) {
                     // New item
                     this._items.push(newItem)
                     this.itemIndex.set(this._items)
@@ -212,9 +262,12 @@ export class QueueManager {
                 }
 
             }
-        } else if(update.UpdateType == 1) {
+        } else if (update.UpdateType == 1) {
             console.log("Queue update received from server - refetching item indexes")
             this.requestIndex()
+        } else if (update.UpdateType == 2) {
+            console.log("Profile update received from server - fetching profile information")
+            this.requestProfiles()
         }
     }
 }

@@ -1,0 +1,75 @@
+/*
+This stylesheet can be imported by components throughout the application
+that wish to render a tiled/dashboard-like layout via the use of tiles.
+
+Note that this scss file only provides a rough framework - component level
+SCSS will be required too.
+*/
+
+.tiled-layout {
+    .tiles {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: 0;
+        display: flex;
+        flex-direction: row;
+        padding: 1rem 3rem;
+        align-items: flex-start;
+        justify-content: space-between;
+        overflow-y: auto;
+
+        transition: all 150ms ease-in-out;
+        transition-property: left;
+
+        &.full-size {
+            padding: 0;
+        }
+
+        &::-webkit-scrollbar {
+            width: 12px;
+            background-color: #817d7d66;
+            box-shadow: 0px 0px 8px -5px black;
+        }
+
+        &::-webkit-scrollbar-thumb {
+            background-color: #ffffffb0;
+            border-radius: 7px;
+        }
+
+        &::-webkit-scrollbar-thumb:hover {
+            background-color: #ffffffef;
+        }
+
+        .column {
+            height: 100%;
+            text-align: left;
+            width: 35%;
+            display: flex;
+            flex-direction: column;
+
+            &.main {
+                width: 60%;
+            }
+
+            .tile {
+                width: 100%;
+
+                .header {
+                    font-size: 1rem;
+                    color: #9184c5;
+                    padding-left: 1rem;
+                    font-weight: 500;
+                }
+
+                .content:not(.trans), .content:not(.trans) .mini-tile:not(.trans) {
+                    background: #ffffff;
+                    padding: 0;
+                    border-radius: 4px;
+                    box-shadow: 0px 0px 3px #0000000f;
+                }
+            }
+        }
+    }
+}

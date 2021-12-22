@@ -19,16 +19,25 @@
     import ServerProfiles from "./tiles/ServerProfiles.svelte";
     import ServerCache from "./tiles/ServerCache.svelte";
     import type { QueueDetails, TranscodeProfile, QueueItem } from "../queue";
+    import ServerProfileDetail from "./ServerProfileDetail.svelte";
 
     export let profiles: TranscodeProfile[] = [];
     export let index: QueueItem[] = [];
     export let details: Map<number, QueueDetails> = new Map();
 
     let state: SettingsState = SettingsState.MAIN;
+    let selectedProfile: string = null;
 
     // Change the state of the Settings component to the newly-provided state
-    const changeState = (state: SettingsState) => {
-        console.log("Settings state-change: ", state);
+    const changeState = (newState: SettingsState) => {
+        console.log("Settings state-change: ", newState);
+        state = newState;
+        selectedProfile = null;
+    };
+
+    const selectProfile = (profileTag: string) => {
+        changeState(SettingsState.PROFILE);
+        selectedProfile = profileTag;
     };
 </script>
 
@@ -38,7 +47,13 @@
         <div class="tile profiles">
             <h2 class="header">Profiles</h2>
             <div class="content trans">
-                <ServerProfiles {profiles} {details} on:select={(customEvent) => {}} />
+                <ServerProfiles
+                    {profiles}
+                    {details}
+                    on:select={(ev) => {
+                        selectProfile(ev.detail);
+                    }}
+                />
             </div>
         </div>
     </div>
@@ -54,6 +69,8 @@
             </div>
         </div>
     </div>
+{:else if state == SettingsState.PROFILE}
+    <ServerProfileDetail {profiles} profileTag={selectedProfile} on:deselect={() => changeState(SettingsState.MAIN)} />
 {/if}
 
 <!-- Template End -->

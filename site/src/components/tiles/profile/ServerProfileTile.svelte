@@ -1,7 +1,6 @@
 <script lang="ts">
-    import type { QueueDetails, TranscodeProfile } from "../../../queue";
+    import type { TranscodeProfile } from "../../../queue";
     import CancelIcon from "../../../assets/cancel.svg";
-    import EditIcon from "../../../assets/edit.svg";
     import { createEventDispatcher } from "svelte";
 
     export let profile: TranscodeProfile = null;

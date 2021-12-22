@@ -1,10 +1,14 @@
 <script lang="ts">
     import type { TranscodeProfile, QueueDetails } from "../../queue";
     import CreateIcon from "../../assets/create-icon.svg";
-    import ServerProfile from "./profile/ServerProfile.svelte";
+    import ServerProfileTile from "./profile/ServerProfileTile.svelte";
     import { commander } from "../../commander";
     import { SocketMessageType } from "../../store";
     import type { SocketData } from "../../store";
+    import { createEventDispatcher } from "svelte";
+    import DraggableList from "svelte-dragdrop-list";
+
+    const dispatch = createEventDispatcher();
 
     export let profiles: TranscodeProfile[] = [];
     export let details: Map<number, QueueDetails> = null;
@@ -35,20 +39,41 @@
         );
     };
 
+    const reorderProfile = (ev: CustomEvent) => {
+        console.log("Reordered profiles", profiles, ev.detail);
+        const newOrder = ev.detail;
+
+        profiles.forEach((profile: TranscodeProfile, index: number) => {
+            if (newOrder[index].tag != profile.tag) {
+                // Profile has moved
+                commander.sendMessage({
+                    title: "PROFILE_MOVE",
+                    type: 1,
+                    arguments: {
+                        tag: profile.tag,
+                        desiredIndex: newOrder.findIndex((p: TranscodeProfile) => p.tag == profile.tag),
+                    },
+                });
+            }
+        });
+    };
+
     const selectProfile = (profileTag: string) => {
         console.log("Selecting profile:", profileTag);
+        dispatch("select", profileTag);
     };
 </script>
 
 <ul class="profiles">
-    {#each profiles as profile}
-        <ServerProfile
-            {profile}
-            usages={countUse(profile.tag)}
+    <DraggableList key={(profile) => profile.tag} list={profiles} let:item on:reordered={reorderProfile}>
+        <ServerProfileTile
+            profile={item}
+            usages={countUse(item.tag)}
             on:select={(ev) => selectProfile(ev.detail)}
             on:remove={(ev) => removeProfile(ev.detail)}
+            on:deselect={() => dispatch("deselect")}
         />
-    {/each}
+    </DraggableList>
 
     <li class="profile create">
         {@html CreateIcon}

@@ -20,6 +20,7 @@
     import ServerCache from "./tiles/ServerCache.svelte";
     import type { QueueDetails, TranscodeProfile, QueueItem } from "../queue";
     import ServerProfileDetail from "./ServerProfileDetail.svelte";
+    import { fade } from "svelte/transition";
 
     export let profiles: TranscodeProfile[] = [];
     export let index: QueueItem[] = [];
@@ -44,7 +45,7 @@
 <!-- Template Start -->
 {#if state == SettingsState.MAIN}
     <div class="column main">
-        <div class="tile profiles">
+        <div class="tile profiles" in:fade={{ duration: 150, delay: 100 }}>
             <h2 class="header">Profiles</h2>
             <div class="content trans">
                 <ServerProfiles
@@ -58,11 +59,11 @@
         </div>
     </div>
     <div class="column">
-        <div class="tile misc">
+        <div class="tile misc" in:fade={{ duration: 150, delay: 150 }}>
             <h2 class="header">Config</h2>
             <div class="content trans" />
         </div>
-        <div class="tile cache">
+        <div class="tile cache" in:fade={{ duration: 150, delay: 250 }}>
             <h2 class="header">Cache</h2>
             <div class="content trans">
                 <ServerCache />

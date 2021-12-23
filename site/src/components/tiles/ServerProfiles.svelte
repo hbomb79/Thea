@@ -14,7 +14,7 @@
     export let profiles: TranscodeProfile[] = [];
     export let details: Map<number, QueueDetails> = null;
 
-    const { open, close } = getContext("simple-modal");
+    const { open } = getContext("simple-modal");
 
     const countUse = function (tag: string): number {
         let count = 0;
@@ -70,7 +70,7 @@
         dispatch("select", profileTag);
     };
 
-    const createNewProfile = (profileTag) => {
+    const createNewProfile = (profileTag: string) => {
         console.log("Creating new profile with name", profileTag);
         commander.sendMessage(
             {

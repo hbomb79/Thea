@@ -21,7 +21,7 @@
     }
 
     onMount(() => {
-        inputElement.focus();
+        inputElement?.focus();
     });
 </script>
 

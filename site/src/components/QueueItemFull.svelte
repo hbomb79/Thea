@@ -120,9 +120,9 @@
             <div class="waves">{@html wavesSvg}</div>
             <div class="content">
                 <h2 class="title">
-                    {#if details.omdb_info}
+                    {#if details.omdb_info?.Title}
                         {details.omdb_info.Title}
-                    {:else if details.title_info}
+                    {:else if details.title_info?.Title}
                         {details.title_info.Title}
                     {:else}
                         {details.name}

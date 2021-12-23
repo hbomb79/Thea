@@ -163,7 +163,7 @@
                                     {#each index as item, k}
                                         <div in:fade={{ duration: 120, delay: 120 + k * 100 }}>
                                             <QueueItemMini
-                                                on:click={() => miniItemClick(k)}
+                                                on:click={() => miniItemClick(item.id)}
                                                 queueDetails={details.get(item.id)}
                                             />
                                         </div>

@@ -74,6 +74,11 @@
         );
     };
 
+    const miniItemClick = (itemId: number) => {
+        selectedItem = itemId;
+        comp.selectionOption = 1;
+    };
+
     onMount(() => {
         comp.optionElements.forEach((item: HTMLElement, index) => {
             item.addEventListener("click", () => (comp.selectionOption = index));
@@ -155,8 +160,13 @@
                             <div class="tile queue">
                                 <h2 class="header">Queue</h2>
                                 <div class="content">
-                                    {#each index as item}
-                                        <QueueItemMini queueDetails={details.get(item.id)} />
+                                    {#each index as item, k}
+                                        <div in:fade={{ duration: 120, delay: 120 + k * 100 }}>
+                                            <QueueItemMini
+                                                on:click={() => miniItemClick(k)}
+                                                queueDetails={details.get(item.id)}
+                                            />
+                                        </div>
                                     {/each}
                                 </div>
                             </div>

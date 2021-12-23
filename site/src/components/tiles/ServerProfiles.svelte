@@ -5,13 +5,16 @@
     import { commander } from "../../commander";
     import { SocketMessageType } from "../../store";
     import type { SocketData } from "../../store";
-    import { createEventDispatcher } from "svelte";
+    import { createEventDispatcher, getContext } from "svelte";
     import ReorderableList from "../ReorderableList.svelte";
+    import Dialog from "../modals/Dialog.svelte";
 
     const dispatch = createEventDispatcher();
 
     export let profiles: TranscodeProfile[] = [];
     export let details: Map<number, QueueDetails> = null;
+
+    const { open, close } = getContext("simple-modal");
 
     const countUse = function (tag: string): number {
         let count = 0;
@@ -34,6 +37,10 @@
                 },
             },
             (data: SocketData): boolean => {
+                if (data.type == SocketMessageType.ERR_RESPONSE) {
+                    alert(`Failed to remove profile ${profileTag}: ${data.arguments.error}`);
+                }
+
                 return false;
             }
         );
@@ -62,6 +69,40 @@
         console.log("Selecting profile:", profileTag);
         dispatch("select", profileTag);
     };
+
+    const createNewProfile = (profileTag) => {
+        console.log("Creating new profile with name", profileTag);
+        commander.sendMessage(
+            {
+                title: "PROFILE_CREATE",
+                type: SocketMessageType.COMMAND,
+                arguments: {
+                    tag: profileTag,
+                },
+            },
+            (data: SocketData): boolean => {
+                if (data.type == SocketMessageType.ERR_RESPONSE) {
+                    alert(`Failed to create profile ${profileTag}: ${data.arguments.error}`);
+                }
+
+                return false;
+            }
+        );
+    };
+
+    const openCreateProfileDialog = () => {
+        open(
+            Dialog,
+            {
+                message: "Create new Profile",
+                hasForm: true,
+                onOkay: createNewProfile,
+            },
+            {
+                closeButton: false,
+            }
+        );
+    };
 </script>
 
 <ul class="profiles">
@@ -75,7 +116,7 @@
         />
     </ReorderableList>
 
-    <li class="profile create">
+    <li class="profile create" on:click={openCreateProfileDialog}>
         {@html CreateIcon}
         <span>Create Profile</span>
     </li>
@@ -92,9 +133,18 @@
             align-items: center;
             border-color: transparent;
             color: #707070;
+            cursor: pointer;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.6);
+            margin: 2px;
+            border-radius: 8px;
+
+            transition: all 200ms ease-in-out;
+            transition-property: color background;
 
             &:hover {
                 color: black;
+                background: rgba(255, 255, 255, 1);
 
                 :global(svg) {
                     fill: black;

@@ -1,11 +1,11 @@
-import { writable } from 'svelte/store'
+import { Writable, writable } from 'svelte/store'
 
 // SocketDataArguments is an interface specifying the
 // data members inside of a SocketData 'arguments' key.
 export interface SocketDataArguments {
     payload?: any
     command?: any
-    [key:string]: any
+    [key: string]: any
 }
 
 // socketData is an interface that speifies the data of
@@ -35,18 +35,18 @@ export enum SocketPacketType {
 // we can use the payload correctly (e.g. update queue contents, or show
 // a new trouble, etc)
 export enum SocketMessageType {
-	UPDATE,
-	COMMAND,
-	RESPONSE,
-	ERR_RESPONSE,
-	WELCOME
+    UPDATE,
+    COMMAND,
+    RESPONSE,
+    ERR_RESPONSE,
+    WELCOME
 }
 
 // This interface is used to specify the data members of a
 // packet to be sent downstream via 'socketStream'.
 export interface SocketStreamPacket {
     type: SocketPacketType
-    ev: Event|MessageEvent
+    ev: Event | MessageEvent
 }
 
 // socketStream is how low-level subscribers
@@ -62,7 +62,7 @@ export const socketStream = writable({
 // rather than through a Commander instance.
 const config = SERVER_CONFIG
 const socket = new WebSocket(`ws://${config.host}:${config.port}/api/tpa/v0/ws`)
-export function sendMessage(message:string) {
+export function sendMessage(message: string) {
     if (socket.readyState <= 1) {
         socket.send(message)
 
@@ -74,7 +74,7 @@ export function sendMessage(message:string) {
 
 // open, message and close event listeners that send the
 // new packet downstream via 'socketStream'
-socket.addEventListener('open', function(event) {
+socket.addEventListener('open', function (event) {
     console.log("[Websocket] Connection established", event)
     socketStream.set({
         type: SocketPacketType.OPEN,
@@ -82,7 +82,7 @@ socket.addEventListener('open', function(event) {
     })
 })
 
-socket.addEventListener('message', function(event) {
+socket.addEventListener('message', function (event) {
     console.log("[Websocket] Message recieved: ", event.data)
     socketStream.set({
         type: SocketPacketType.MESSAGE,
@@ -90,11 +90,10 @@ socket.addEventListener('message', function(event) {
     })
 })
 
-socket.addEventListener('close', function(event) {
+socket.addEventListener('close', function (event) {
     console.warn("[Websocket] Connection closed...", event)
     socketStream.set({
         type: SocketPacketType.CLOSE,
         ev: event
     })
 })
-

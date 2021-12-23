@@ -119,7 +119,7 @@
                             <button id="queue-reorder-commit" on:click={commitQueueReorder}>Save Order</button>
                         {/if}
 
-                        <div class="queue-items">
+                        <div class="queue-items" style="width: 350px;">
                             <QueueList {index} {details} bind:selectedItem on:index-reorder={handleQueueReorder} />
                         </div>
                     {/if}

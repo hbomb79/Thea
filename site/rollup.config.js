@@ -44,13 +44,13 @@ export default {
 		file: 'public/build/bundle.js'
 	},
 	plugins: [
-    replace({
-      SERVER_CONFIG: JSON.stringify({
-        isProduction: production,
-        host: process.env.WS_HOST || "localhost",
-        port: process.env.WS_POST || "8080",
-      }),
-    }),
+		replace({
+			SERVER_CONFIG: JSON.stringify({
+				isProduction: production,
+				host: process.env.WS_HOST || "localhost",
+				port: process.env.WS_POST || "8080",
+			}),
+		}),
 		svelte({
 			preprocess: sveltePreprocess({ sourceMap: !production }),
 			compilerOptions: {
@@ -62,10 +62,10 @@ export default {
 		// a separate file - better for performance
 		css({ output: 'bundle.css' }),
 
-    svg({stringify: true}),
-    html({
-      include: "**/*.html"
-    }),
+		svg({ stringify: true }),
+		html({
+			include: "**/*.html"
+		}),
 
 		// If you have external dependencies installed from
 		// npm, you'll most likely need these plugins. In
@@ -74,7 +74,7 @@ export default {
 		// https://github.com/rollup/plugins/tree/master/packages/commonjs
 		resolve({
 			browser: true,
-			dedupe: ['svelte']
+			dedupe: ['svelte', 'svelte/transition', 'svelte/internal']
 		}),
 		commonjs(),
 		typescript({

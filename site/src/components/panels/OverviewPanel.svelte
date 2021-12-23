@@ -101,26 +101,24 @@
 </script>
 
 <div class="stages tile" bind:this={perspectiveContainer}>
-    {#key details}
-        {#each stages as { caption, icon }, index (caption)}
-            <div
-                bind:this={els[index]}
-                class="stage {caption}"
-                class:active={details.stage == index}
-                on:click={handleStageClick}
-                in:fade={{ duration: 150, delay: index * 125 }}
-            >
-                <span class="caption">{caption.toUpperCase()}</span>
-                {@html icon}
-            </div>
+    {#each stages as { caption, icon }, index (caption)}
+        <div
+            bind:this={els[index]}
+            class="stage {caption}"
+            class:active={details.stage == index}
+            on:click={handleStageClick}
+            in:fade={{ duration: 150, delay: index * 125 }}
+        >
+            <span class="caption">{caption.toUpperCase()}</span>
+            {@html icon}
+        </div>
 
-            {#if index < stages.length - 1}
-                <div on:click={() => onCheckClick(index)} class="check-wrapper">
-                    <StageIcon drawLines={true} {details} stageIndex={index} stagger={true} />
-                </div>
-            {/if}
-        {/each}
-    {/key}
+        {#if index < stages.length - 1}
+            <div on:click={() => onCheckClick(index)} class="check-wrapper">
+                <StageIcon drawLines={true} {details} stageIndex={index} stagger={true} />
+            </div>
+        {/if}
+    {/each}
 </div>
 
 <style lang="scss">

@@ -138,7 +138,9 @@
         <div class="main">
             <h2 class="tile-title">Pipeline</h2>
             <div class="item pipeline">
-                <OverviewPanel {details} />
+                {#key details}
+                    <OverviewPanel {details} />
+                {/key}
             </div>
 
             <h2 class="tile-title">Stage Details</h2>

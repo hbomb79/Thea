@@ -259,15 +259,19 @@
                         display: flex;
                         flex-direction: row;
                         align-items: center;
+                        position: relative;
 
                         &:hover {
                             background: white;
                         }
 
-                        :global(.spinner-wrap) {
-                            margin-left: -1.4rem;
+                        .check {
+                            position: absolute;
+                            right: 1rem;
+                            width: 40px;
                         }
                     }
+
                     .content:not(.troubled) {
                         border-top: solid 1px #e0e3fc;
                     }

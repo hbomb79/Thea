@@ -47,6 +47,12 @@ $sidebarWidth: 350px;
                 margin: 0;
                 font-weight: 400;
             }
+
+            button {
+                position: absolute;
+                right: 1.3rem;
+                top: 2rem;
+            }
         }
 
         .options {

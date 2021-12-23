@@ -184,6 +184,10 @@
             </div>
         </div>
     </div>
+
+    <footer>
+        Made with ♥ by <a target="_new" href="https://github.com/hbomb79">hbomb79</a>
+    </footer>
 </div>
 
 <svelte:head>
@@ -209,5 +213,14 @@
             border-radius: 10px;
             box-shadow: 0px 0px 3px #0000000f;
         }
+    }
+
+    footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 8px;
+        color: #9285c5;
     }
 </style>

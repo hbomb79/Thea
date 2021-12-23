@@ -6,7 +6,7 @@
     import { SocketMessageType } from "../../store";
     import type { SocketData } from "../../store";
     import { createEventDispatcher } from "svelte";
-    import DraggableList from "svelte-dragdrop-list";
+    import ReorderableList from "../ReorderableList.svelte";
 
     const dispatch = createEventDispatcher();
 
@@ -65,7 +65,7 @@
 </script>
 
 <ul class="profiles">
-    <DraggableList key={(profile) => profile.tag} list={profiles} let:item on:reordered={reorderProfile}>
+    <ReorderableList key={(profile) => profile.tag} list={profiles} let:item on:reordered={reorderProfile}>
         <ServerProfileTile
             profile={item}
             usages={countUse(item.tag)}
@@ -73,7 +73,7 @@
             on:remove={(ev) => removeProfile(ev.detail)}
             on:deselect={() => dispatch("deselect")}
         />
-    </DraggableList>
+    </ReorderableList>
 
     <li class="profile create">
         {@html CreateIcon}

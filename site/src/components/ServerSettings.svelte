@@ -70,7 +70,13 @@
         </div>
     </div>
 {:else if state == SettingsState.PROFILE}
-    <ServerProfileDetail {profiles} profileTag={selectedProfile} on:deselect={() => changeState(SettingsState.MAIN)} />
+    <div>
+        <ServerProfileDetail
+            {profiles}
+            profileTag={selectedProfile}
+            on:deselect={() => changeState(SettingsState.MAIN)}
+        />
+    </div>
 {/if}
 
 <!-- Template End -->

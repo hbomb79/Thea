@@ -78,22 +78,51 @@
         opacity: 0;
     }
 
+    @keyframes stageCheckLineLeft {
+        0% {
+            opacity: 0;
+            width: 0px;
+            right: 112px;
+        }
+
+        100% {
+            opacity: 1;
+            width: 80px;
+            right: 32px;
+        }
+    }
+
+    @keyframes stageCheckLineRight {
+        0% {
+            opacity: 0;
+            width: 0px;
+        }
+
+        100% {
+            opacity: 1;
+            width: 80px;
+        }
+    }
+
     &.draw-lines {
         &:before, &:after {
             content: '';
             height: 2px;
             position: absolute;
             top: 18px;
-            width: 80px;
+            width: 0px;
+            opacity: 0;
             background-color: #abc3fb;
         }
 
-        &:before {
-            right: 32px;
+        &::before {
+            animation: stageCheckLineLeft 100ms normal forwards ease-out;
         }
 
-        &:after {
+        &::after {
             left: 32px;
+            animation: stageCheckLineRight 100ms normal forwards ease-out;
+            animation-delay: 100ms;
         }
     }
 }

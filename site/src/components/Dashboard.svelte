@@ -21,6 +21,7 @@
     import { SocketMessageType } from "../store";
     import type { SocketData } from "../store";
     import ServerSettings from "./ServerSettings.svelte";
+    import { fade } from "svelte/transition";
 
     const comp = {
         optionElements: new Array(3),
@@ -122,7 +123,7 @@
                 <div class="tiles" class:full-size={comp.selectionOption == 1}>
                     {#if comp.selectionOption == 0}
                         <div class="column main">
-                            <div class="tile overview">
+                            <div class="tile overview" in:fade={{ duration: 250 }}>
                                 <h2 class="header">Overview</h2>
                                 <div class="content">
                                     <h2>System Health</h2>
@@ -131,7 +132,7 @@
                                     {@html healthSvg}
                                 </div>
                             </div>
-                            <div class="tile status">
+                            <div class="tile status" in:fade={{ duration: 250, delay: 100 }}>
                                 <div class="content">
                                     <div class="mini-tile complete">
                                         <div class="main">
@@ -145,12 +146,12 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="tile workers">
+                            <div class="tile workers" in:fade={{ duration: 250, delay: 150 }}>
                                 <h2 class="header">Workers</h2>
                                 <div class="content" style="min-height:230px;" />
                             </div>
                         </div>
-                        <div class="column">
+                        <div class="column" in:fade={{ duration: 250, delay: 175 }}>
                             <div class="tile queue">
                                 <h2 class="header">Queue</h2>
                                 <div class="content">

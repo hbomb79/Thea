@@ -103,7 +103,7 @@ $sidebarWidth: 350px;
 
                     p {
                         margin: 0 0 0 2rem;
-                        color: #edf2fe;
+                        color: #bfd9ff;
                         font-size: 1.1rem;
                     }
 
@@ -161,6 +161,12 @@ $sidebarWidth: 350px;
             .tile.queue {
                 display: flex;
                 flex-direction: column;
+
+                .content{
+                    background: none;
+                    box-shadow: none;
+                    padding: 0;
+                }
             }
         }
     }

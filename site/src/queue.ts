@@ -28,9 +28,31 @@ export enum QueueTroubleType {
     FFMPEG_FAILURE,
 }
 
+export enum MatchType {
+    EQUALS,
+    NOT_EQUALS,
+    MATCHES,
+    DOES_NOT_MATCH,
+    LESS_THAN,
+    GREATER_THAN
+}
+
+export enum ModifierType {
+    AND,
+    OR
+}
+
+export interface ProfileMatchCriterion {
+    key: string
+    matchType: MatchType
+    modifier: ModifierType
+    matchTarget: any
+}
+
 export interface TranscodeProfile {
     tag: string
     targets: TranscodeTarget[]
+    matchCriteria: ProfileMatchCriterion[]
 }
 
 export interface TranscodeTarget {

@@ -2,18 +2,20 @@
  * Commander is a exported object that allows components to send
  * and wait on replies from the websocket
  */
-import {sendMessage as socketSend, SocketData, SocketPacketType, socketStream, SocketStreamPacket} from './store'
-import {writable} from 'svelte/store'
+import { sendMessage as socketSend, SocketData, SocketMessageType, SocketPacketType, socketStream, SocketStreamPacket } from './store'
+import { writable } from 'svelte/store'
 
 // commandCallback is a function type alias that defines a callback
 // for a socket command
-export type CommandCallback = (arg0: SocketData)=>boolean
+export type CommandCallback = (arg0: SocketData) => boolean
 
 // Below are the exported subscribables that
 // allow components to be updated when messages
 // are received, or when the socket state changes
 export const dataStream = writable({} as SocketData)
 export const statusStream = writable(SocketPacketType.INIT)
+export const ffmpegOptionsStream = writable({})
+export const ffmpegMatchKeysStream = writable([])
 
 // Commander is a class that is intended to be used as a singleton
 // instance for the entire application (see export below class def.)
@@ -33,9 +35,16 @@ class Commander {
     constructor() {
         this.lastId = 0;
         this.callbacks = new Map<number, CommandCallback>()
+
         socketStream.subscribe((data) => this.handlePacket(data))
+        dataStream.subscribe(data => {
+            if (data.type == SocketMessageType.WELCOME) {
+                ffmpegOptionsStream.set(data.arguments.ffmpegOptions)
+                ffmpegMatchKeysStream.set(data.arguments.ffmpegMatchKeys)
+            }
+        })
     }
-    
+
     // Send a socket message (in the form SocketData).
     // Optionally, a callback can be provided which will be called
     // if/when we receive a reply from the server with the same
@@ -46,9 +55,9 @@ class Commander {
     // whether or not the received message passed to the callback will
     // be published on the dataStream - if true is returned, it will NOT
     // be published.
-    sendMessage(message:SocketData, callback?:CommandCallback){
-        if(callback != undefined) {
-            if(!message.id) {
+    sendMessage(message: SocketData, callback?: CommandCallback) {
+        if (callback != undefined) {
+            if (!message.id) {
                 this.lastId++
                 message.id = this.lastId
             }
@@ -62,8 +71,8 @@ class Commander {
 
     // handlePacket will examine a new packet from socketStream
     // and decide whether to publish it to the status or data stream
-    handlePacket(packet:SocketStreamPacket):void {
-        switch(packet.type) {
+    handlePacket(packet: SocketStreamPacket): void {
+        switch (packet.type) {
             case SocketPacketType.INIT:
             case SocketPacketType.OPEN:
                 // Websocket has been opened! Forward this
@@ -74,7 +83,7 @@ class Commander {
                 // We received a message from the server
                 const ev = packet.ev as MessageEvent
                 const obj = this.parseMessage(ev.data)
-                if(obj) this.handleMessage(obj)
+                if (obj) this.handleMessage(obj)
 
                 break
             case SocketPacketType.CLOSE:
@@ -91,11 +100,11 @@ class Commander {
     // parseMessage is used to take the data of a socket message and
     // parse it from string -> JSON
     // null is returned on failure and a warning is emitted in the console
-    parseMessage(message:string) {
+    parseMessage(message: string) {
         try {
             const obj = JSON.parse(message) as SocketData
             return obj
-        } catch(e) {
+        } catch (e) {
             console.warn("[Commander] Failed to parse SocketStream data to valid JSON: ", e)
 
             return null
@@ -109,12 +118,12 @@ class Commander {
     // The message will then be published to the dataStream if:
     // - There is no callback for this message
     // - There is a callback and the return value of the callback is FALSE
-    handleMessage(message:SocketData):void {
-        if(message.id && this.callbacks[message.id]) {
+    handleMessage(message: SocketData): void {
+        if (message.id && this.callbacks[message.id]) {
             const cancelPropogate = this.callbacks[message.id](message)
             delete this.callbacks[message.id]
 
-            if(cancelPropogate) return
+            if (cancelPropogate) return
         }
 
         dataStream.set(message)

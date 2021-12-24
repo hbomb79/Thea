@@ -17,7 +17,7 @@
     import QueueItemMini from "./QueueItemMini.svelte";
     import QueueItemFull from "./QueueItemFull.svelte";
     import QueueList from "./QueueList.svelte";
-    import { commander } from "../commander";
+    import { commander, ffmpegOptionsStream } from "../commander";
     import { SocketMessageType } from "../store";
     import type { SocketData } from "../store";
     import ServerSettings from "./ServerSettings.svelte";
@@ -39,6 +39,10 @@
     let index: QueueItem[] = [];
     let profiles: TranscodeProfile[] = [];
     let selectedItem: number = -1;
+
+    ffmpegOptionsStream.subscribe((options) => {
+        console.log("ffmpeg options changed!", options);
+    });
 
     const handleQueueReorder = (event: CustomEvent) => {
         index = event.detail;

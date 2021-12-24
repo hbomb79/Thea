@@ -107,13 +107,7 @@
 
 <ul class="profiles">
     <ReorderableList key={(profile) => profile.tag} list={profiles} let:item on:reordered={reorderProfile}>
-        <ServerProfileTile
-            profile={item}
-            usages={countUse(item.tag)}
-            on:select={(ev) => selectProfile(ev.detail)}
-            on:remove={(ev) => removeProfile(ev.detail)}
-            on:deselect={() => dispatch("deselect")}
-        />
+        <ServerProfileTile profile={item} usages={countUse(item.tag)} on:remove={(ev) => removeProfile(ev.detail)} />
     </ReorderableList>
 
     <li class="profile create" on:click={openCreateProfileDialog}>

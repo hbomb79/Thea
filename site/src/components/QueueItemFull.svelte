@@ -15,6 +15,10 @@
     import { SocketMessageType } from "../store";
     import type { SocketData } from "../store";
     import { fade } from "svelte/transition";
+    import { getContext } from "svelte";
+    import ConfirmationPopup from "./modals/ConfirmationPopup.svelte";
+
+    const { open } = getContext("simple-modal");
 
     export let details: QueueDetails = null;
     const stages = [
@@ -105,7 +109,15 @@
                 pauseItem();
                 break;
             case Action.CANCEL:
-                cancelItem();
+                open(
+                    ConfirmationPopup,
+                    {
+                        title: "Cancel Item",
+                        body: "Are you sure you wish to cancel this item?<br/><br/><b>All progress will be lost and the item will be removed from the queue.</b><br/><br/><i>This action cannot be reversed, however if you later wish to process this item, remove it from the server cache (go to Settings > Cache > Edit Cache).</i>",
+                        onOkay: () => cancelItem,
+                    },
+                    { closeButton: false }
+                );
                 break;
             case Action.NONE:
             default:

@@ -2,8 +2,10 @@ package profile
 
 import (
 	"fmt"
-	"github.com/floostack/transcoder/ffmpeg"
 	"sync"
+
+	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/mitchellh/mapstructure"
 )
 
 type Profile interface {
@@ -13,6 +15,7 @@ type Profile interface {
 	EjectTarget(string) error
 	FindTarget(string) *Target
 	Tag() string
+	SetMatchConditions(interface{}) error
 }
 
 type Target struct {
@@ -28,10 +31,36 @@ func NewTarget(label string) *Target {
 	}
 }
 
+type MatchType int
+
+const (
+	EQUALS MatchType = iota
+	NOT_EQUALS
+	MATCHES
+	DOES_NOT_MATCH
+	LESS_THAN
+	GREATER_THAN
+)
+
+type ModifierType int
+
+const (
+	AND ModifierType = iota
+	OR
+)
+
+type MatchComponent struct {
+	Key         string       `json:"key"`
+	MatchType   MatchType    `json:"matchType"`
+	Modifier    ModifierType `json:"modifier"`
+	MatchTarget interface{}  `json:"matchTarget"`
+}
+
 type profile struct {
 	sync.Mutex
-	FfmpegTargets []*Target `mapstructure:"targets" json:"targets"`
-	ProfileTag    string    `mapstructure:"tag" json:"tag"`
+	FfmpegTargets []*Target         `mapstructure:"targets" json:"targets"`
+	MatchCriteria []*MatchComponent `mapstructure:"matchCriteria" json:"matchCriteria"`
+	ProfileTag    string            `mapstructure:"tag" json:"tag"`
 }
 
 // NewProfile accepts a single string argument (tag) and returns a new profile
@@ -39,6 +68,7 @@ type profile struct {
 func NewProfile(tag string) Profile {
 	return &profile{
 		FfmpegTargets: make([]*Target, 0),
+		MatchCriteria: make([]*MatchComponent, 0),
 		ProfileTag:    tag,
 	}
 }
@@ -60,7 +90,7 @@ func (profile *profile) InsertTarget(t *Target) error {
 	defer profile.Unlock()
 
 	if idx, _ := profile.find(t.Label); idx != -1 {
-		return fmt.Errorf("InsertTarget failed: cannot insert new target with label %v as this label already exists inside this profile.", t.Label)
+		return fmt.Errorf("InsertTarget failed: cannot insert new target with label %v as this label already exists inside this profile", t.Label)
 	}
 
 	profile.FfmpegTargets = append(profile.FfmpegTargets, t)
@@ -78,10 +108,10 @@ func (profile *profile) FindTarget(label string) *Target {
 func (profile *profile) MoveTarget(label string, desiredIndex int) error {
 	index, target := profile.find(label)
 	if index == -1 {
-		return fmt.Errorf("MoveTarget failed: cannot move target with label %v as target cannot be found.", label)
+		return fmt.Errorf("MoveTarget failed: cannot move target with label %v as target cannot be found", label)
 	}
 	if desiredIndex < 0 || desiredIndex >= len(profile.FfmpegTargets) {
-		return fmt.Errorf("MoveTarget failed: cannot move target to index %d as destination index is out of bounds.", desiredIndex)
+		return fmt.Errorf("MoveTarget failed: cannot move target to index %d as destination index is out of bounds", desiredIndex)
 	}
 
 	profile.Lock()
@@ -106,6 +136,20 @@ func (profile *profile) EjectTarget(label string) error {
 	defer profile.Unlock()
 
 	profile.FfmpegTargets = append(profile.FfmpegTargets[:index], profile.FfmpegTargets[index+1:len(profile.FfmpegTargets)]...)
+
+	return nil
+}
+
+func (profile *profile) SetMatchConditions(conditions interface{}) error {
+	var output []*MatchComponent
+	fmt.Printf("Set match conditions to %#v\n", conditions)
+	err := mapstructure.Decode(conditions, &output)
+	if err != nil {
+		return fmt.Errorf("failed to SetMatchConditions: %v", err.Error())
+	}
+	fmt.Printf("Match Conditions from %#v decoded to %#v\n\n", conditions, output)
+
+	profile.MatchCriteria = output
 
 	return nil
 }

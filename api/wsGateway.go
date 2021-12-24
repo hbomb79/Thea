@@ -295,3 +295,28 @@ func (wsGateway *WsGateway) WsProfileTargetMove(hub *ws.SocketHub, message *ws.S
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 	return nil
 }
+
+func (wsGateway *WsGateway) WsProfileSetMatchConditions(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"profileTag": "string"}); err != nil {
+		return err
+	}
+
+	index, profile := wsGateway.proc.Profiles.FindProfileByTag(message.Body["profileTag"].(string))
+	if index == -1 || profile == nil {
+		return fmt.Errorf("cannot set match conditions for profile because tag '%v' is invalid", message.Body["profileTag"])
+	}
+
+	matchConditions, ok := message.Body["matchConditions"]
+	if !ok {
+		return fmt.Errorf("cannot set match conditions on profile '%v' because matchConditions key is missing from payload", message.Body["profileTag"])
+	}
+
+	err := profile.SetMatchConditions(matchConditions)
+	if err != nil {
+		return fmt.Errorf("cannot set match conditions on profile '%v': %v", message.Body["profileTag"], err.Error())
+	}
+
+	wsGateway.proc.UpdateChan <- -2
+	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
+	return nil
+}

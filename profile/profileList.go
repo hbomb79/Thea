@@ -2,10 +2,11 @@ package profile
 
 import (
 	"fmt"
-	"github.com/hbomb79/TPA/cache"
-	"github.com/mitchellh/mapstructure"
 	"reflect"
 	"sync"
+
+	"github.com/hbomb79/TPA/cache"
+	"github.com/mitchellh/mapstructure"
 )
 
 type ProfileFindCallback func(Profile) bool
@@ -96,7 +97,7 @@ func (list *safeList) MoveProfile(tag string, desiredIndex int) error {
 	if index == -1 {
 		return fmt.Errorf("MoveProfile failed: tag refers to Profile that does not exist")
 	} else if desiredIndex < 0 || desiredIndex >= len(list.profiles) {
-		return fmt.Errorf("MoveProfile failed: cannot move target to index %d as destination index is out of bounds.", desiredIndex)
+		return fmt.Errorf("MoveProfile failed: cannot move target to index %d as destination index is out of bounds", desiredIndex)
 	}
 
 	list.Lock()
@@ -177,7 +178,11 @@ func ToArgsMap(in interface{}) (map[string]string, error) {
 			typeName = v
 		} else {
 			// Use actual type name
-			typeName = fi.Type.Name()
+			if fi.Type.Kind() == reflect.Ptr {
+				typeName = fi.Type.Elem().String()
+			} else {
+				typeName = fi.Type.String()
+			}
 		}
 
 		out[fi.Name] = typeName

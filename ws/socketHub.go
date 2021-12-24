@@ -14,15 +14,16 @@ type SocketHandler func(*SocketHub, *SocketMessage) error
 // the websocket upgrading, connecting, pushing and
 // receiving of messages.
 type SocketHub struct {
-	handlers     map[string]SocketHandler
-	upgrader     *websocket.Upgrader
-	clients      []*socketClient
-	registerCh   chan *socketClient
-	deregisterCh chan *socketClient
-	sendCh       chan *SocketMessage
-	receiveCh    chan *SocketMessage
-	doneCh       chan int
-	running      bool
+	handlers           map[string]SocketHandler
+	upgrader           *websocket.Upgrader
+	clients            []*socketClient
+	registerCh         chan *socketClient
+	deregisterCh       chan *socketClient
+	sendCh             chan *SocketMessage
+	receiveCh          chan *SocketMessage
+	doneCh             chan int
+	connectionCallback func() map[string]interface{}
+	running            bool
 }
 
 // Returns a new SocketHub with the channels,
@@ -38,6 +39,14 @@ func NewSocketHub() *SocketHub {
 		},
 		running: false,
 	}
+}
+
+// WithConnectionPayload sets a callback that will be executed each time a new client
+// connects to this socketHub. This allows the client to be furnished with a payload
+// of the servers current state, without having to wait for an UPDATE packet from the
+// server (which may never come if the content does not change).
+func (hub *SocketHub) WithConnectionCallback(callback func() map[string]interface{}) {
+	hub.connectionCallback = callback
 }
 
 // Binds a provided particular command to a particular socker handler
@@ -161,10 +170,19 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	// Register the client and open the read loop
 	hub.registerCh <- client
 
-	// Send welcome message to this client
+	// Send welcome message to this client with a composed
+	// map of new-client properties.
+	// These props can be used to supply the client with it's
+	// initial state
+	var body map[string]interface{}
+	if hub.connectionCallback != nil {
+		body = hub.connectionCallback()
+	}
+	body["client"] = id
+
 	hub.Send(&SocketMessage{
 		Title:  "CONNECTION_ESTABLISHED",
-		Body:   map[string]interface{}{"client": id},
+		Body:   body,
 		Target: &id,
 		Type:   Welcome,
 	})

@@ -31,9 +31,17 @@ func NewTpa() *Tpa {
 	}
 }
 
+func (tpa *Tpa) newClientConnection() map[string]interface{} {
+	return map[string]interface{}{
+		"ffmpegOptions":   tpa.proc.KnownFfmpegOptions,
+		"ffmpegMatchKeys": processor.FFMPEG_COMMAND_SUBSTITUTIONS,
+	}
+}
+
 func (tpa *Tpa) Start() {
 	// Start websocket, router and processor
 	tpa.setupRoutes()
+	tpa.socketHub.WithConnectionCallback(tpa.newClientConnection)
 
 	go tpa.socketHub.Start()
 	go tpa.httpRouter.Start(&api.RouterOptions{
@@ -68,6 +76,7 @@ func (tpa *Tpa) setupRoutes() {
 	tpa.socketHub.BindCommand("PROFILE_CREATE", tpa.wsGateway.WsProfileCreate)
 	tpa.socketHub.BindCommand("PROFILE_REMOVE", tpa.wsGateway.WsProfileRemove)
 	tpa.socketHub.BindCommand("PROFILE_MOVE", tpa.wsGateway.WsProfileMove)
+	tpa.socketHub.BindCommand("PROFILE_SET_MATCH_CONDITIONS", tpa.wsGateway.WsProfileSetMatchConditions)
 	tpa.socketHub.BindCommand("PROFILE_TARGET_CREATE", tpa.wsGateway.WsProfileTargetCreate)
 	tpa.socketHub.BindCommand("PROFILE_TARGET_REMOVE", tpa.wsGateway.WsProfileTargetRemove)
 	tpa.socketHub.BindCommand("PROFILE_TARGET_MOVE", tpa.wsGateway.WsProfileTargetMove)
@@ -77,6 +86,7 @@ func (tpa *Tpa) OnProcessorUpdate(update *processor.ProcessorUpdate) {
 	body := map[string]interface{}{"context": update}
 	if update.UpdateType == processor.PROFILE_UPDATE {
 		body["profiles"] = tpa.proc.Profiles.Profiles()
+		body["targetOpts"] = tpa.proc.KnownFfmpegOptions
 	}
 
 	tpa.socketHub.Send(&ws.SocketMessage{

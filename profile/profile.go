@@ -2,6 +2,8 @@ package profile
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"sync"
 
 	"github.com/floostack/transcoder/ffmpeg"
@@ -20,6 +22,7 @@ type Profile interface {
 
 type Target struct {
 	Label          string          `mapstructure:"label" json:"label"`
+	OutputPath     string          `mapstructure:"outputPath" json:"outputPath"`
 	FFmpegOptions  *ffmpeg.Options `mapstructure:"command" json:"command"`
 	ThreadBlocking bool            `mapstructure:"blocking" json:"blocking"`
 }
@@ -31,6 +34,20 @@ func NewTarget(label string) *Target {
 	}
 }
 
+func (t *Target) SetCommand(command interface{}) error {
+	var output *ffmpeg.Options
+	fmt.Printf("Set target %v command to %#v\n", t.Label, command)
+	err := mapstructure.Decode(command, &output)
+	if err != nil {
+		return fmt.Errorf("failed to Command: %v", err.Error())
+	}
+	fmt.Printf("Target command from %#v decoded to %#v\n\n", command, output)
+
+	t.FFmpegOptions = output
+
+	return nil
+}
+
 type MatchType int
 
 const (
@@ -40,6 +57,8 @@ const (
 	DOES_NOT_MATCH
 	LESS_THAN
 	GREATER_THAN
+	IS_PRESENT
+	IS_NOT_PRESENT
 )
 
 type ModifierType int
@@ -149,8 +168,33 @@ func (profile *profile) SetMatchConditions(conditions interface{}) error {
 	}
 	fmt.Printf("Match Conditions from %#v decoded to %#v\n\n", conditions, output)
 
-	profile.MatchCriteria = output
+	if err := profile.validateMatchConditions(output); err != nil {
+		return fmt.Errorf("failed to SetMatchConditions: %v", err.Error())
+	}
 
+	profile.MatchCriteria = output
+	return nil
+}
+
+func (profile *profile) validateMatchConditions(conditions []*MatchComponent) error {
+	// Validate that the match conditions provided make sense.
+	const ERR_FMT = "Failed to validate provided match components - "
+	for _, cond := range conditions {
+		switch cond.MatchType {
+		case MATCHES:
+		case DOES_NOT_MATCH:
+			// Regexp
+			if _, err := regexp.Compile(cond.MatchTarget.(string)); err != nil {
+				return fmt.Errorf("%vMatchComponent %v expects the target to be Regexp compliant, got '%v' while trying to parse '%v' as a regular expression", ERR_FMT, cond.Key, err.Error(), cond.MatchTarget)
+			}
+		case LESS_THAN:
+		case GREATER_THAN:
+			// Number
+			if _, err := strconv.Atoi(cond.MatchTarget.(string)); err != nil {
+				return fmt.Errorf("%vMatchComponent %v expects the target to be a valid int, got '%v' while trying to parse '%v' as an int", ERR_FMT, cond.Key, err.Error(), cond.MatchTarget)
+			}
+		}
+	}
 	return nil
 }
 

@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -18,6 +20,7 @@ type RouterOptions struct {
 type Router struct {
 	Mux    *mux.Router
 	routes []*routerListener
+	server *http.Server
 }
 
 type routerListener struct {
@@ -59,12 +62,20 @@ func (router *Router) Start(opts *RouterOptions) error {
 	router.buildRoutes(opts)
 
 	host := fmt.Sprintf("%v:%v", opts.ApiHost, opts.ApiPort)
-	err := http.ListenAndServe(host, trimTrailingSlashesMiddleware(router.Mux))
-	if err != nil {
+	router.server = &http.Server{Addr: host, Handler: trimTrailingSlashesMiddleware(router.Mux)}
+	if err := router.server.ListenAndServe(); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (router *Router) Stop() {
+	fmt.Printf("[HTTP] (X) Closing HTTP router\n")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+
+	router.server.Shutdown(ctx)
 }
 
 // buildRoutes is used internally to take the list of routes

@@ -1,15 +1,19 @@
 package processor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/hbomb79/TPA/pkg"
 	"github.com/hbomb79/TPA/profile"
 	"github.com/hbomb79/TPA/worker"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -19,44 +23,36 @@ import (
 // various user config supplied by file, or
 // manually inside the code.
 type TPAConfig struct {
-	Concurrent       ConcurrentConfig `yaml:"concurrency"`
-	Format           FormatterConfig  `yaml:"formatter"`
-	Database         DatabaseConfig   `yaml:"database"`
-	OmdbKey          string           `yaml:"omdb_api_key"`
-	CachePath        string           `yaml:"cache_path"`
-	ProfileStorePath string           `yaml:"profile_store_path"`
+	Concurrent       ConcurrentConfig   `yaml:"concurrency" env-required:"true"`
+	Format           FormatterConfig    `yaml:"formatter"`
+	Database         pkg.DatabaseConfig `yaml:"database" env-required:"true"`
+	OmdbKey          string             `yaml:"omdb_api_key" env:"OMDB_API_KEY" env-required:"true"`
+	ExternalDatabase bool               `yaml:"external_database" env:"EXTERNAL_DATABASE"`
+	CacheDirPath     string             `yaml:"cache_dir" env:"CACHE_DIR" env-default:".cache/tpa/"`
+	ConfigDirPath    string             `yaml:"config_dir" env:"CONFIG_DIR" env-default:".config/tpa/"`
+	ApiHostAddr      string             `yaml:"host" env:"HOST_ADDR" env-default:"0.0.0.0"`
+	ApiHostPort      string             `yaml:"port" env:"HOST_PORT" env-default:"8080"`
 }
 
 // ConcurrentConfig is a subset of the configuration that focuses
 // only on the concurrency related configs (number of threads to use
 // for each stage of the pipeline)
 type ConcurrentConfig struct {
-	Title  int `yaml:"title_threads"`
-	OMBD   int `yaml:"omdb_threads"`
-	Format int `yaml:"ffmpeg_threads"`
+	Title  int `yaml:"title_threads" env:"CONCURRENCY_TITLE_THREADS" env-default:"1"`
+	OMBD   int `yaml:"omdb_threads" env:"CONCURRENCY_OMDB_THREADS" env-default:"1"`
+	Format int `yaml:"ffmpeg_threads" env:"CONCURRENCY_FFMPEG_THREADS" env-default:"8"`
 }
 
 // FormatterConfig is the 'misc' container of the configuration, encompassing configuration
 // not covered by either 'ConcurrentConfig' or 'DatabaseConfig'. Mainly configuration
 // paramters for the FFmpeg executable.
 type FormatterConfig struct {
-	ImportPath         string `yaml:"import_path"`
-	OutputPath         string `yaml:"output_path"`
-	CacheFile          string `yaml:"cache_file"`
-	TargetFormat       string `yaml:"target_format"`
-	ImportDirTickDelay int    `yaml:"import_polling_delay"`
-	FfmpegBinaryPath   string `yaml:"ffmpeg_binary"`
-	FfprobeBinaryPath  string `yaml:"ffprobe_binary"`
-}
-
-// DatabaseConfig is a subset of the configuration focusing solely
-// on database connection items
-type DatabaseConfig struct {
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	Name     string `yaml:"name"`
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
+	ImportPath         string `yaml:"import_path" env:"FORMAT_IMPORT_PATH" env-required:"true"`
+	OutputPath         string `yaml:"default_output_dir" env:"FORMAT_DEFAULT_OUTPUT_DIR" env-required:"true"`
+	TargetFormat       string `yaml:"target_format" env:"FORMAT_TARGET_FORMAT" env-default:"mp4"`
+	ImportDirTickDelay int    `yaml:"import_polling_delay" env:"FORMAT_IMPORT_POLLING_DELAY" env-default:"3600"`
+	FfmpegBinaryPath   string `yaml:"ffmpeg_binary" env:"FORMAT_FFMPEG_BINARY_PATH" env-default:"/usr/bin/ffmpeg"`
+	FfprobeBinaryPath  string `yaml:"ffprobe_binary" env:"FORMAT_FFPROBE_BINARY_PATH" env-default:"/usr/bin/ffprobe"`
 }
 
 // Loads a configuration file formatted in YAML in to a
@@ -84,6 +80,12 @@ type Processor struct {
 	Profiles           profile.ProfileList
 	FfmpegCommander    Commander
 	KnownFfmpegOptions map[string]string
+	DatabaseServer     pkg.DatabaseServer
+	ctxCancel          context.CancelFunc
+	ctx                context.Context
+	running            bool
+	serviceWg          *sync.WaitGroup
+	managerWg          *sync.WaitGroup
 }
 
 type Negotiator interface {
@@ -113,11 +115,18 @@ func NewProcessor() *Processor {
 		fmt.Printf("[Processor] (!) Failed to initialise map of known FFMPEG options!")
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &Processor{
 		WorkerPool:         worker.NewWorkerPool(),
 		UpdateChan:         make(chan int),
 		pendingUpdates:     make(map[int]bool),
 		KnownFfmpegOptions: opts,
+		DatabaseServer:     pkg.NewDatabaseServer(),
+		managerWg:          &sync.WaitGroup{},
+		serviceWg:          &sync.WaitGroup{},
+		ctx:                ctx,
+		ctxCancel:          cancel,
 	}
 }
 
@@ -125,7 +134,6 @@ func NewProcessor() *Processor {
 // to the value provided.
 func (p *Processor) WithConfig(cfg *TPAConfig) *Processor {
 	p.Config = cfg
-
 	return p
 }
 
@@ -141,40 +149,83 @@ func (p *Processor) WithNegotiator(n Negotiator) *Processor {
 // responsible for the various tasks inside the program
 // This method will wait on the WaitGroup attached to the WorkerPool
 func (p *Processor) Start() error {
-	p.Queue = NewProcessorQueue(p.Config.CachePath)
-	p.Profiles = profile.NewList(p.Config.ProfileStorePath)
+	defer p.shutdown()
 
-	tickInterval := time.Duration(p.Config.Format.ImportDirTickDelay * int(time.Second))
-	if tickInterval <= 0 {
-		log.Panic("Failed to start PollingWorker - TickInterval is non-positive (make sure 'import_polling_delay' is set in your config)")
+	dbErr := make(chan error, 1)
+	if !p.Config.ExternalDatabase {
+		fmt.Printf("[Processor] Initialising embedded database...\n")
+		_, err := pkg.InitialiseDockerDatabase(pkg.DatabaseConfig(p.Config.Database), dbErr)
+		if err != nil {
+			return err
+		}
 	}
 
-	go func(target <-chan time.Time) {
-		for {
-			p.SynchroniseQueue()
+	if err := p.DatabaseServer.Connect(p.Config.Database); err != nil {
+		return err
+	}
 
-			<-target
-		}
-	}(time.NewTicker(tickInterval).C)
+	var cacheDir string = p.Config.CacheDirPath
+	var configDir string = p.Config.ConfigDirPath
+	if dir, err := os.UserCacheDir(); err == nil {
+		cacheDir = dir
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		configDir = dir
+	}
+
+	p.Queue = NewProcessorQueue(filepath.Join(cacheDir, "/tpa/cache.json"))
+	p.Profiles = profile.NewList(filepath.Join(configDir, "/tpa/profiles.json"))
 
 	p.FfmpegCommander = NewCommander(p)
 	p.FfmpegCommander.SetWindowSize(2)
 	p.FfmpegCommander.SetThreadPoolSize(8)
 
-	go p.FfmpegCommander.Start()
-	go p.handleUpdateStream()
-	go p.handleItemModtimes()
-
 	p.WorkerPool.PushWorker(worker.NewWorker("Title_Parser", &TitleTask{proc: p}, worker.Title, make(chan int)))
 	p.WorkerPool.PushWorker(worker.NewWorker("OMDB_Handler", &OmdbTask{proc: p}, worker.Omdb, make(chan int)))
-	p.WorkerPool.StartWorkers()
-	p.WorkerPool.Wg.Wait()
+
+	// When constructing our WaitGroups, we use two because our ticker-based item detection
+	// should be stopped before the managers to avoid closing in-use channels. This way we can
+	// stop the source of the information before we stop the consumers.
+	p.serviceWg.Add(3)
+	go p.handleUpdateStream(p.ctx, p.serviceWg)
+	go p.handleItemModtimes(p.ctx, p.serviceWg)
+	go p.handleQueueSync(p.ctx, p.serviceWg, time.Duration(p.Config.Format.ImportDirTickDelay*int(time.Second)))
+
+	p.managerWg.Add(2)
+	go p.FfmpegCommander.Start(p.managerWg)
+	go p.WorkerPool.StartWorkers(p.managerWg)
+
+	exit := make(chan os.Signal, 1) // we need to reserve to buffer size 1, so the notifier are not blocked
+	signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case <-exit:
+		fmt.Printf("[Processor] (!!) SIGTERM/Interrupt caught! Shutting down...\n")
+	case msg := <-dbErr:
+		fmt.Printf("[Processor] (!!) Database failure: %v\nShutting down...\n", msg)
+	}
 
 	return nil
 }
 
+func (p *Processor) shutdown() {
+	fmt.Print("[Processor] (X) Closing all data streams...\n")
+	p.ctxCancel()
+	p.serviceWg.Wait()
+
+	fmt.Print("[Processor] (X) Closing all managers...\n")
+	p.WorkerPool.CloseWorkers()
+	if p.FfmpegCommander != nil {
+		p.FfmpegCommander.Stop()
+	}
+
+	fmt.Print("[Processor] (X) Closing all containers...\n")
+	pkg.Docker.Shutdown(time.Second * 15)
+
+	p.managerWg.Wait()
+}
+
 // SynchroniseQueue will first discover all items inside the import directory,
-// synchroniseQueue will first discover all items inside the import directory,
 // and then will injest any that do not already exist in the queue. Any items
 // in the queue that no longer exist in the discovered items will also be cancelled
 func (p *Processor) SynchroniseQueue() error {
@@ -237,9 +288,7 @@ func (p *Processor) DiscoverItems() (map[string]fs.FileInfo, error) {
 // add them to the Queue
 func (p *Processor) InjestQueue(presentItems map[string]fs.FileInfo) error {
 	for path, info := range presentItems {
-		if e := p.Queue.Push(NewQueueItem(info, path, p)); e != nil {
-			fmt.Printf("[Processor] (!) Ignoring injestable item - %v\n", e.Error())
-		}
+		p.Queue.Push(NewQueueItem(info, path, p))
 	}
 
 	return nil
@@ -249,7 +298,19 @@ func (p *Processor) PruneQueueCache() {
 	// TODO
 }
 
-func (p *Processor) handleItemModtimes() {
+func (p *Processor) handleQueueSync(ctx context.Context, wg *sync.WaitGroup, tickInterval time.Duration) {
+	defer wg.Done()
+	go func(target <-chan time.Time) {
+		for {
+			p.SynchroniseQueue()
+
+			<-target
+		}
+	}(time.NewTicker(tickInterval).C)
+}
+
+func (p *Processor) handleItemModtimes(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
 	ticker := time.NewTicker(time.Second * 5).C
 	checkModtime := func(q *processorQueue, idx int, item *QueueItem) bool {
 		if item.Stage != worker.Import {
@@ -270,18 +331,18 @@ func (p *Processor) handleItemModtimes() {
 		return false
 	}
 
-main:
 	for {
-		_, ok := <-ticker
-		if !ok {
-			break main
+		select {
+		case <-ticker:
+			p.Queue.ForEach(checkModtime)
+		case <-ctx.Done():
+			return
 		}
-
-		p.Queue.ForEach(checkModtime)
 	}
 }
 
-func (p *Processor) handleUpdateStream() {
+func (p *Processor) handleUpdateStream(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
 	if p.Negotiator == nil {
 		fmt.Printf("[Processor] (!) Processor began to listen for updates for transmission, however no Negotiator is attached. Aborting.\n")
 		return
@@ -310,12 +371,10 @@ main:
 			}
 
 			p.wakeupWorkers()
-		case _, ok := <-ticker:
-			if !ok {
-				break main
-			}
-
+		case <-ticker:
 			p.submitUpdates()
+		case <-ctx.Done():
+			return
 		}
 	}
 }

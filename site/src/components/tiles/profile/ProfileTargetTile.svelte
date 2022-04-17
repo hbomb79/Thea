@@ -1,17 +1,46 @@
 <script lang="ts">
-    import { createEventDispatcher } from "svelte";
+    import { createEventDispatcher, getContext } from "svelte";
     import type { TranscodeTarget } from "../../../queue";
+    import TargetProps from "../../modals/TargetProps.svelte";
 
     export let target: TranscodeTarget = null;
     const dispatch = createEventDispatcher();
 
-    const modifiedProps = (): number => {
+    const { open } = getContext("simple-modal");
+
+    const modifiedProps = (com: Object): number => {
         let count = 0;
-        Object.keys(target.command).forEach((key) => {
-            if (target.command[key]) count++;
+        Object.keys(com).forEach((key) => {
+            if (com[key]) count++;
         });
 
         return count;
+    };
+
+    $: modified = modifiedProps(target.command);
+
+    const openPropDialog = () => {
+        open(
+            TargetProps,
+            {
+                onOkay: (modifiedMap: Map<string, any>) => {
+                    console.log("Dialog SAVED", modifiedMap, target.command);
+                    Object.entries(modifiedMap).forEach((v) => {
+                        const [key, value] = v;
+                        target.command[key] = value;
+                    });
+
+                    dispatch("propertiesChanged", modifiedMap);
+                },
+                onCancel: () => {
+                    console.log("Dialog cancelled");
+                },
+                availableProperties: { ...target.command },
+            },
+            {
+                closeButton: false,
+            }
+        );
     };
 </script>
 
@@ -19,8 +48,8 @@
     <h2 class="label">{target.label}</h2>
 
     <div class="command">
-        <button>
-            <i><b>{modifiedProps()}</b> modified options</i>
+        <button on:click|preventDefault={openPropDialog}>
+            <i><b>{modified}</b> modified options</i>
             <br />
             <b>Modify</b>
         </button>

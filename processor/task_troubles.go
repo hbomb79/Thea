@@ -19,6 +19,7 @@ const (
 	OMDB_MULTIPLE_RESULT_FAILURE
 	OMDB_REQUEST_FAILURE
 	FFMPEG_FAILURE
+	COMMANDER_FAILURE
 )
 
 type baseTaskError struct {
@@ -254,4 +255,20 @@ func (ex *FormatTaskError) Resolve(map[string]interface{}) error {
 
 func (ex *FormatTaskError) MarshalJSON() ([]byte, error) {
 	return marshalToJson(ex)
+}
+
+type ProfileSelectionError struct {
+	baseTaskError
+}
+
+func (ex *ProfileSelectionError) Resolve(args map[string]interface{}) error {
+	if _, ok := args["retry"]; ok {
+		ex.ProvideResolutionContext("retry", true)
+		return nil
+	} else if v, ok := args["profileTag"]; ok {
+		ex.ProvideResolutionContext("profileTag", v.(string))
+		return nil
+	} else {
+		return errors.New("unable to resolve ProfileSelectionError - arguments provided are invalid! One of 'action, profileTag' was expected")
+	}
 }

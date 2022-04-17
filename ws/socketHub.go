@@ -73,7 +73,7 @@ func (hub *SocketHub) Start() {
 	hub.clients = make([]*socketClient, 0)
 	hub.running = true
 
-	defer hub.Close()
+	defer hub.close()
 loop:
 	for {
 		select {
@@ -201,14 +201,8 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Closes the sockethub by deregistering and closing all
-// connected clients and sockets
+// Signals the SocketHub to close
 func (hub *SocketHub) Close() {
-	if !hub.running {
-		fmt.Printf("[Websocket] (!) Attempted to close a socket hub that is not running!\n")
-		return
-	}
-
 	// Send done notification to the hub
 	// We do this non-blocking because if the
 	// hub closes, it calls this function to close
@@ -216,6 +210,15 @@ func (hub *SocketHub) Close() {
 	select {
 	case hub.doneCh <- 1:
 	default:
+	}
+}
+
+// Closes the sockethub by deregistering and closing all
+// connected clients and sockets
+func (hub *SocketHub) close() {
+	if !hub.running {
+		fmt.Printf("[Websocket] (!) Attempted to close a socket hub that is not running!\n")
+		return
 	}
 
 	// Close all the clients

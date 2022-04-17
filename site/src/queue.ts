@@ -34,7 +34,9 @@ export enum MatchType {
     MATCHES,
     DOES_NOT_MATCH,
     LESS_THAN,
-    GREATER_THAN
+    GREATER_THAN,
+    IS_PRESENT,
+    IS_NOT_PRESENT
 }
 
 export enum ModifierType {

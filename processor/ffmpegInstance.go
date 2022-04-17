@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/hbomb79/TPA/profile"
 )
 
-const DEFAULT_THREADS_REQUIRED int = 2
+const DEFAULT_THREADS_REQUIRED int = 1
 
 type ffmpegProgress struct {
 	Frames   string
@@ -35,16 +37,12 @@ type ffmpegInstance struct {
 
 func (ffmpegI *ffmpegInstance) Start(proc *Processor) error {
 	queueItem := ffmpegI.item
-	outputFormat := proc.Config.Format.TargetFormat
 
 	ffmpegCfg := &ffmpeg.Config{
 		ProgressEnabled: true,
 		FfmpegBinPath:   proc.Config.Format.FfmpegBinaryPath,
 		FfprobeBinPath:  proc.Config.Format.FfprobeBinaryPath,
 	}
-
-	itemOutputPath := fmt.Sprintf("%s.%s", queueItem.TitleInfo.OutputPath(), outputFormat)
-	itemOutputPath = filepath.Join(proc.Config.Format.OutputPath, itemOutputPath)
 
 	pIdx, p := proc.Profiles.FindProfileByTag(ffmpegI.profileTag)
 	if pIdx == -1 {
@@ -59,7 +57,7 @@ func (ffmpegI *ffmpegInstance) Start(proc *Processor) error {
 	progress, err := ffmpeg.
 		New(ffmpegCfg).
 		Input(queueItem.Path).
-		Output(itemOutputPath).
+		Output(ffmpegI.GetOutputPath()).
 		WithContext(&cmdContext).
 		Start(t.FFmpegOptions)
 
@@ -115,12 +113,12 @@ func (ffmpegI *ffmpegInstance) Start(proc *Processor) error {
 }
 
 func (ffmpegI *ffmpegInstance) ThreadsRequired() int {
-	// threads := ffmpegI.context.target.FFmpegOptions.Threads
-	// if threads == nil {
-	return DEFAULT_THREADS_REQUIRED
-	// } else {
-	// 	return *threads
-	// }
+	threads := ffmpegI.getTargetInstance().FFmpegOptions.Threads
+	if threads == nil {
+		return DEFAULT_THREADS_REQUIRED
+	} else {
+		return *threads
+	}
 }
 
 func (ffmpegI *ffmpegInstance) Stop() {
@@ -136,7 +134,7 @@ func (ffmpegI *ffmpegInstance) Stop() {
 	// if we're unlucky enough to experience a race condition to cancel
 	select {
 	case ffmpegI.cancelChan <- 1:
-		fmt.Printf("[Commander] (O) Cancelled ffmpeg instance %v\n", ffmpegI)
+		fmt.Printf("[Commander] (X) Cancelled ffmpeg instance %v\n", ffmpegI)
 	default:
 		fmt.Printf("[Commander] (!) Failed to cancel ffmpeg instance %v\nInstance may already be closed\n", ffmpegI)
 	}
@@ -145,53 +143,56 @@ func (ffmpegI *ffmpegInstance) Stop() {
 var FFMPEG_COMMAND_SUBSTITUTIONS []string = []string{
 	"DEFAULT_TARGET_EXTENSION",
 	"DEFAULT_THREAD_COUNT",
-	"DEFAULT_OUTPUT",
+	"DEFAULT_OUTPUT_DIR",
 	"TITLE",
 	"RESOLUTION",
 	"HOME_DIRECTORY",
 	"SEASON_NUMBER",
 	"EPISODE_NUMBER",
 	"SOURCE_PATH",
+	"OUTPUT_PATH",
 }
 
-// func (ffmpegI *ffmpegInstance) composeCommandArguments(sourceCommand string) string {
-// 	getVal := func(command string) string {
-// 		item := ffmpegI.item
-// 		switch command {
-// 		case "%DEFAULT_TARGET_EXTENSION%":
-// 			return "mp4"
-// 		case "%DEFAULT_THREAD_COUNT%":
-// 			return "1"
-// 		case "%DEFAULT_OUTPUT%":
-// 			return "/"
-// 		case "%TITLE%":
-// 			return item.OmdbInfo.Title
-// 		case "%RESOLUTION%":
-// 			return item.TitleInfo.Resolution
-// 		case "%HOME_DIRECTORY%":
-// 			return ""
-// 		case "%SEASON_NUMBER%":
-// 			return fmt.Sprint(item.TitleInfo.Season)
-// 		case "%EPISODE_NUMBER%":
-// 			return fmt.Sprint(item.TitleInfo.Episode)
-// 		case "%SOURCE_PATH%":
-// 			return item.Path
-// 		default:
-// 			fmt.Printf("[Commander] (!) Encountered unknown command substitution '%s' in source command '%s'\n", command, sourceCommand)
-// 			return command
-// 		}
-// 	}
+func (ffmpegI *ffmpegInstance) composeCommandArguments(sourceCommand string) string {
+	getVal := func(command string) string {
+		item := ffmpegI.item
+		switch command {
+		case "%DEFAULT_TARGET_EXTENSION%":
+			return "mp4"
+		case "%DEFAULT_THREAD_COUNT%":
+			return "1"
+		case "%DEFAULT_OUTPUT_DIR%":
+			return "/"
+		case "%TITLE%":
+			return item.OmdbInfo.Title
+		case "%RESOLUTION%":
+			return item.TitleInfo.Resolution
+		case "%HOME_DIRECTORY%":
+			return ""
+		case "%SEASON_NUMBER%":
+			return fmt.Sprint(item.TitleInfo.Season)
+		case "%EPISODE_NUMBER%":
+			return fmt.Sprint(item.TitleInfo.Episode)
+		case "%SOURCE_PATH%":
+			return item.Path
+		case "%OUTPUT_PATH%":
+			return item.TitleInfo.OutputPath()
+		default:
+			fmt.Printf("[Commander] (!) Encountered unknown command substitution '%s' in source command '%s'\n", command, sourceCommand)
+			return command
+		}
+	}
 
-// 	for _, commandSub := range FFMPEG_COMMAND_SUBSTITUTIONS {
-// 		sourceCommand = strings.ReplaceAll(
-// 			sourceCommand,
-// 			fmt.Sprintf("%%%s%%", commandSub),
-// 			getVal(commandSub),
-// 		)
-// 	}
+	for _, commandSub := range FFMPEG_COMMAND_SUBSTITUTIONS {
+		sourceCommand = strings.ReplaceAll(
+			sourceCommand,
+			fmt.Sprintf("%%%s%%", commandSub),
+			getVal(commandSub),
+		)
+	}
 
-// 	return sourceCommand
-// }
+	return sourceCommand
+}
 
 func (ffmpegI *ffmpegInstance) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
@@ -245,6 +246,36 @@ func (ffmpegI *ffmpegInstance) SetStatus(s CommanderTaskStatus) {
 
 func (ffmpegI *ffmpegInstance) SetProfileTag(string) {
 	// ffmpegI.profileTag =
+}
+
+func (ffmpegI *ffmpegInstance) GetOutputPath() string {
+	outputFormat := ffmpegI.item.processor.Config.Format.TargetFormat
+	targetInstance := ffmpegI.getTargetInstance()
+	var itemOutputPath string
+	if targetInstance == nil {
+		itemOutputPath = fmt.Sprintf("%s.%s", ffmpegI.item.TitleInfo.OutputPath(), outputFormat)
+		itemOutputPath = filepath.Join(ffmpegI.item.processor.Config.Format.OutputPath, itemOutputPath)
+	} else {
+		itemOutputPath = targetInstance.OutputPath
+	}
+
+	itemOutputPath = ffmpegI.composeCommandArguments(itemOutputPath)
+	return itemOutputPath
+}
+
+func (ffmpegI *ffmpegInstance) getProfileInstance() profile.Profile {
+	_, profile := ffmpegI.item.processor.Profiles.FindProfileByTag(ffmpegI.profileTag)
+
+	return profile
+}
+
+func (ffmpegI *ffmpegInstance) getTargetInstance() *profile.Target {
+	profile := ffmpegI.getProfileInstance()
+	if profile == nil {
+		return nil
+	}
+
+	return profile.FindTarget(ffmpegI.targetLabel)
 }
 
 func newFfmpegInstance(item *QueueItem, profileTag string, targetLabel string) CommanderTask {

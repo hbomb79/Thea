@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -24,14 +25,17 @@ func NewWorkerPool() *WorkerPool {
 // currently inside the WorkerPool and creates
 // a goroutine for each. The 'Start' method of
 // each worker is executed concurrently.
-func (pool *WorkerPool) StartWorkers() {
+func (pool *WorkerPool) StartWorkers(pWg *sync.WaitGroup) {
+	defer pWg.Done()
 	for _, worker := range pool.workers {
 		pool.Wg.Add(1)
 		go func(pool *WorkerPool, w Worker) {
+			defer pool.Wg.Done()
 			w.Start()
-			pool.Wg.Done()
 		}(pool, worker)
 	}
+
+	pool.Wg.Wait()
 }
 
 // PushWorker inserts the worker provided in to the worker pool,
@@ -59,6 +63,7 @@ func (pool *WorkerPool) WakeupWorkers() {
 // While doing this, the WorkerPool's mutex is locked.
 func (pool *WorkerPool) CloseWorkers() {
 	for _, w := range pool.workers {
+		fmt.Printf("[WorkerPool] (X) Closing worker [%v]...\n", w.Label())
 		w.Close()
 	}
 }

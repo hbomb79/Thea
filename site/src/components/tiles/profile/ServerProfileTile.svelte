@@ -47,6 +47,27 @@
         );
     };
 
+    const updateTargetCommand = (target: TranscodeTarget, command: any) => {
+        commander.sendMessage(
+            {
+                title: "PROFILE_TARGET_UPDATE_COMMAND",
+                type: SocketMessageType.COMMAND,
+                arguments: {
+                    profileTag: profile.tag,
+                    targetLabel: target.label,
+                    command: command,
+                },
+            },
+            (response: SocketData): boolean => {
+                if (response.type == SocketMessageType.ERR_RESPONSE) {
+                    alert(`Failed to update target ${target.label} command to ${command}: ${response.arguments.error}`);
+                }
+
+                return false;
+            }
+        );
+    };
+
     const dispatch = createEventDispatcher();
     let isOpen: boolean = false;
 </script>
@@ -78,6 +99,7 @@
                         {target}
                         on:move-down={() => moveTarget(target, index + 1)}
                         on:move-up={() => moveTarget(target, index - 1)}
+                        on:propertiesChanged={(event) => updateTargetCommand(target, event.detail)}
                     />
                 {/each}
             </div>

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/hbomb79/TPA/api"
 	"github.com/hbomb79/TPA/processor"
@@ -40,19 +41,39 @@ func (tpa *Tpa) newClientConnection() map[string]interface{} {
 
 func (tpa *Tpa) Start() {
 	// Start websocket, router and processor
+	fmt.Printf("[Main] (I) Configuring HTTP and Websocket routes...\n")
 	tpa.setupRoutes()
 	tpa.socketHub.WithConnectionCallback(tpa.newClientConnection)
 
-	go tpa.socketHub.Start()
-	go tpa.httpRouter.Start(&api.RouterOptions{
-		ApiPort: 8080,
-		ApiHost: "0.0.0.0",
-		ApiRoot: "/api/tpa",
-	})
+	wg := &sync.WaitGroup{}
 
-	if err := tpa.proc.Start(); err != nil {
-		log.Panicf(fmt.Sprintf("Failed to initialise Processor - %v\n", err.Error()))
-	}
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		tpa.socketHub.Start()
+	}()
+	go func() {
+		defer wg.Done()
+		tpa.httpRouter.Start(&api.RouterOptions{
+			ApiPort: 8080,
+			ApiHost: "0.0.0.0",
+			ApiRoot: "/api/tpa",
+		})
+	}()
+
+	fmt.Printf("[Main] (O) Starting processor\n")
+	go func() {
+		defer wg.Done()
+		if err := tpa.proc.Start(); err != nil {
+			fmt.Printf("Failed to initialise Processor - %v\n", err.Error())
+		}
+
+		fmt.Printf("[Main] (X) Processor shutting down, cleaning up...\n")
+		tpa.socketHub.Close()
+		tpa.httpRouter.Stop()
+	}()
+
+	wg.Wait()
 }
 
 // setupRoutes initialises the routes and commands for the HTTP
@@ -77,6 +98,7 @@ func (tpa *Tpa) setupRoutes() {
 	tpa.socketHub.BindCommand("PROFILE_REMOVE", tpa.wsGateway.WsProfileRemove)
 	tpa.socketHub.BindCommand("PROFILE_MOVE", tpa.wsGateway.WsProfileMove)
 	tpa.socketHub.BindCommand("PROFILE_SET_MATCH_CONDITIONS", tpa.wsGateway.WsProfileSetMatchConditions)
+	tpa.socketHub.BindCommand("PROFILE_TARGET_UPDATE_COMMAND", tpa.wsGateway.WsProfiletargetUpdateCommand)
 	tpa.socketHub.BindCommand("PROFILE_TARGET_CREATE", tpa.wsGateway.WsProfileTargetCreate)
 	tpa.socketHub.BindCommand("PROFILE_TARGET_REMOVE", tpa.wsGateway.WsProfileTargetRemove)
 	tpa.socketHub.BindCommand("PROFILE_TARGET_MOVE", tpa.wsGateway.WsProfileTargetMove)
@@ -107,7 +129,9 @@ func main() {
 	//redirectLogToFile(filepath.Join(homeDir, "tpa.log"))
 
 	procCfg := new(processor.TPAConfig)
-	procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml"))
+	if err := procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml")); err != nil {
+		panic(err)
+	}
 
 	tpa := NewTpa()
 	tpa.proc.WithConfig(procCfg).WithNegotiator(tpa)

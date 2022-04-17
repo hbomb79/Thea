@@ -320,3 +320,33 @@ func (wsGateway *WsGateway) WsProfileSetMatchConditions(hub *ws.SocketHub, messa
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 	return nil
 }
+
+func (wsGateway *WsGateway) WsProfiletargetUpdateCommand(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "targetLabel": "string"}); err != nil {
+		return err
+	}
+
+	index, profile := wsGateway.proc.Profiles.FindProfileByTag(message.Body["profileTag"].(string))
+	if index == -1 || profile == nil {
+		return fmt.Errorf("cannot update target command for profile because tag '%v' is invalid", message.Body["profileTag"])
+	}
+
+	target := profile.FindTarget(message.Body["targetLabel"].(string))
+	if target == nil {
+		return fmt.Errorf("cannot update target command for profile '%v' because targetLabel '%v' is invalid", message.Body["profileTag"], message.Body["targetLabel"])
+	}
+
+	command, ok := message.Body["command"]
+	if !ok {
+		return fmt.Errorf("cannot update target command on profile '%v.%v' because command key is missing from payload", message.Body["profileTag"], message.Body["targetLabel"])
+	}
+
+	err := target.SetCommand(command)
+	if err != nil {
+		return fmt.Errorf("cannot update target command on target '%v': %v", message.Body["targetLabel"], err.Error())
+	}
+
+	wsGateway.proc.UpdateChan <- -2
+	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
+	return nil
+}

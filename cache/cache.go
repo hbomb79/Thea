@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 )
 
 // The Cache is a struct from the cache package that allows other parts
@@ -97,12 +98,15 @@ func (cache *Cache) Save() {
 
 // Load will check the local filesystem (cache.filePath) for an existing cache
 // and loads it in to memory if found. If not found, an empty cache map is
-// constructed which can be saved to the filesystem with 'Save'
+// constructed which is then saved to the filesystem with 'save'
 func (cache *Cache) Load() {
 	if err := cache.load(); err != nil {
 		fmt.Printf("[Cache] (!!) Unable to load cache file(%s): %s. Using empty cache!\n", cache.filePath, err.Error())
 
 		cache.content = make(map[string]interface{})
+		if err = cache.save(); err != nil {
+			fmt.Printf("[Cache] (!!) Cache cannot be saved! %v\n", err.Error())
+		}
 	}
 }
 
@@ -116,7 +120,7 @@ func (cache *Cache) load() error {
 	}
 	defer handle.Close()
 
-	fileCnt, err := ioutil.ReadAll(handle)
+	fileCnt, _ := ioutil.ReadAll(handle)
 	json.Unmarshal(fileCnt, &cache.content)
 	return nil
 }
@@ -124,6 +128,10 @@ func (cache *Cache) load() error {
 // save is a private method that will encode the data for this cache to JSON
 // and saves the output string to the 'filePath' of this Cache.
 func (cache *Cache) save() error {
+	if err := os.MkdirAll(filepath.Dir(cache.filePath), os.ModePerm); err != nil {
+		return err
+	}
+
 	handle, err := os.OpenFile(cache.filePath, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0755)
 	if err != nil {
 		return err

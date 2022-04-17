@@ -67,7 +67,7 @@
     {#if matchComponents}
         {#each matchComponents as match, index}
             <li class="match">
-                <div class="content">
+                <div class="components">
                     <!-- svelte-ignore a11y-no-onchange -->
                     <select on:change={(e) => matchKeyInputChange(match, e)} bind:value={match.key} disabled={syncing}>
                         {#each matchKeys as matchKey}
@@ -90,9 +90,10 @@
                         type="text"
                         on:change={(e) => matchTargetInputChange(match, e)}
                         bind:value={match.matchTarget}
-                        disabled={syncing}
+                        disabled={syncing || match.matchType >= MatchType.IS_PRESENT}
                     />
                     <button
+                        class="del"
                         on:click|preventDefault={() => {
                             matchComponents.splice(index, 1);
                             syncMatchComponents();
@@ -115,5 +116,36 @@
     {:else}
         <b>Something has gone wrong.</b>
     {/if}
-    <button disabled={syncing} on:click|preventDefault={appendNewMatchComponent}>Add Condtion +</button>
+    <div class="new">
+        <button disabled={syncing} on:click|preventDefault={appendNewMatchComponent}>Add Condtion +</button>
+    </div>
 </ul>
+
+<style lang="scss">
+    ul {
+        list-style: none;
+        margin: 0;
+    }
+
+    .components {
+        padding: 1rem 0;
+    }
+
+    select,
+    input,
+    button {
+        background: white;
+        border-color: #e3dff9;
+        color: #9487c6;
+        margin: 0px 8px;
+    }
+
+    .del {
+        float: right;
+    }
+
+    .modifier,
+    .new {
+        text-align: center;
+    }
+</style>

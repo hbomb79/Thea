@@ -12,7 +12,8 @@ import (
 
 // Commander interface for use outside of this file/package
 type Commander interface {
-	Start() error
+	Start(*sync.WaitGroup) error
+	Stop()
 	SetWindowSize(int)
 	SetThreadPoolSize(int)
 	WakeupChan() chan int
@@ -95,41 +96,76 @@ type ffmpegCommander struct {
 
 	// Mutex for use when code is reading/mutating instance information
 	instanceLock sync.Mutex
+
+	healthTicker time.Ticker
+
+	doneChannel chan int
 }
 
 // Start is the main entry point for the Commander. This method is blocking
 // and will only return once the queueChangedChannel is closed (manually, or via
 // the Stop method which is preferred). TODO: Stop method.
-func (commander *ffmpegCommander) Start() error {
+func (commander *ffmpegCommander) Start(parentWg *sync.WaitGroup) error {
+	defer parentWg.Done()
+	fmt.Printf("[Commander] (O) Listening on all data channels.\n")
+	wg := &sync.WaitGroup{}
+main:
 	for {
 		select {
 		case <-commander.queueChangedChannel:
 			// Outside queue has changed, perform injest
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				commander.consumeNewTargets()
 			}()
 		case target := <-commander.spawnChannel:
 			// A thread is requesting an itemTarget be spawned
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
+
 				commander.instanceLock.Lock()
+				defer commander.instanceLock.Unlock()
 
 				fmt.Printf("[Commander] (+) Newly discovered target %#v\n", target)
 				instance := newFfmpegInstance(target.item, target.profileTag, target.targetLabel)
 				commander.instances = append(commander.instances, instance)
-
-				commander.instanceLock.Unlock()
 			}()
-		case <-time.NewTicker(time.Second * 1).C:
+		case <-commander.healthTicker.C:
 			// Run periodic checks over the targets to give feedback to the user.
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				commander.runHealthChecks()
 			}()
+
+		case <-commander.doneChannel:
+			fmt.Print("[Commander] STOP signal received!\n")
+			break main
 		}
 
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			commander.tryStartInstances()
 		}()
 	}
+
+	fmt.Printf("[Commander] (X) Channel loop terminated - Waiting for running actions to stop...\n")
+	wg.Wait()
+	fmt.Printf("[Commander] (X) Terminating ffmpeg instances...\n")
+	for _, ffmpegI := range commander.instances {
+		ffmpegI.Stop()
+	}
+	fmt.Printf("[Commander] (X) Closed.\n")
+
+	return nil
+}
+
+// Stop will stop all activities from the commander by terminating each ffmpeg instance
+func (commander *ffmpegCommander) Stop() {
+	commander.doneChannel <- 1
 }
 
 // startInstance is an internal method that will attempt to start an ffmpegInstance,
@@ -221,7 +257,7 @@ func (commander *ffmpegCommander) consumeNewTargets() {
 }
 
 // extractItemsFromWindow scans over the processor queue, injesting items
-// up to the limit of the sliding window defined (windowSize). Paused and completed
+// up to the limit of the sliding window defined (windowSize). Paused, troubled and completed
 // items in the queue do not contribute to this window, and are skipped with no effect
 // on the algorithm.
 func (commander *ffmpegCommander) extractItemsFromWindow() []*QueueItem {
@@ -252,7 +288,10 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 	for _, item := range items {
 		profile := commander.selectBestProfile(item)
 		if profile == nil {
-			fmt.Printf("[Commander] (!!) QueueItem %s has invalid profile tag '%s'. Profile tag not found, cannot complete transcode!\n", item.Name, item.ProfileTag)
+			if item.Trouble == nil || item.Trouble.Type() != COMMANDER_FAILURE {
+				fmt.Printf("[Commander] (!!) QueueItem %s has invalid profile tag '%s'. Profile tag not found, cannot complete transcode!\n", item.Name, item.ProfileTag)
+				item.SetTrouble(&ProfileSelectionError{NewBaseTaskError(fmt.Sprintf("Invalid profile tag '%s' - not found", item.ProfileTag), item, COMMANDER_FAILURE)})
+			}
 			continue
 		}
 
@@ -299,11 +338,11 @@ func (commander *ffmpegCommander) runHealthChecks() {
 		}
 	}
 
-	// Based on the above maps of known instances, interate over each, checking the counts of
+	// Based on the above maps of known instances, interate over each item in this stage, checking the counts of
 	// healthy and unhealthy instances for each item. Using this information, we can adjust the status of
 	// each QueueItem, or even identify those that are finished and advance their stage
-	for id := range items {
-		item, _ := commander.processor.Queue.FindById(id)
+	for _, item := range commander.extractItemsFromWindow() {
+		id := item.Id
 		if unhealthyInstances[id] == 0 {
 			if healthyInstances[id] == 0 {
 				commander.processor.Queue.AdvanceStage(item)
@@ -394,5 +433,7 @@ func NewCommander(proc *Processor) Commander {
 		spawnChannel:        make(chan *taskData),
 		processor:           proc,
 		instances:           make([]CommanderTask, 0),
+		healthTicker:        *time.NewTicker(time.Second * 2),
+		doneChannel:         make(chan int),
 	}
 }

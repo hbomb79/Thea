@@ -116,7 +116,7 @@ func (worker *taskWorker) Sleep() (isAlive bool) {
 	if _, isAlive = <-worker.wakeupChan; isAlive {
 		worker.currentStatus = Working
 	} else {
-		log.Printf("Wakeup channel for worker '%v' has been closed - worker is exiting\n", worker.label)
+		fmt.Printf("[Worker] (X) Wakeup channel for worker '%v' has been closed - worker is exiting\n", worker.label)
 		worker.currentStatus = Finished
 	}
 

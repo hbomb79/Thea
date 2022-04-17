@@ -226,13 +226,6 @@ func (hub *SocketHub) close() {
 		client.Close()
 	}
 
-	// Close all the channels
-	close(hub.deregisterCh)
-	close(hub.registerCh)
-	close(hub.receiveCh)
-	close(hub.sendCh)
-	close(hub.doneCh)
-
 	// Reset the clients slice
 	hub.clients = nil
 	hub.running = false

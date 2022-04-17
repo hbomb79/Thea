@@ -2,8 +2,10 @@ package pkg
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/go-connections/nat"
 )
 
@@ -19,6 +21,8 @@ type DatabaseConfig struct {
 
 func InitialiseDockerDatabase(config DatabaseConfig, errChannel chan error) (DockerContainer, error) {
 	// Setup container cofiguration
+	dbDataPath := "/home/haz/tpa_db_data"
+	os.MkdirAll(dbDataPath, os.ModeDir)
 	containerConfig := &container.Config{
 		Image: "postgres:14.1-alpine",
 		Env: []string{
@@ -37,6 +41,13 @@ func InitialiseDockerDatabase(config DatabaseConfig, errChannel chan error) (Doc
 				HostIP:   config.Host,
 				HostPort: config.Port,
 			}},
+		},
+		Mounts: []mount.Mount{
+			{
+				Type:   mount.TypeBind,
+				Source: dbDataPath,
+				Target: "/var/lib/postgresql/data",
+			},
 		},
 	}
 

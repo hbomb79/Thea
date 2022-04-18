@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hbomb79/TPA/worker"
 )
@@ -35,6 +36,16 @@ func (task *baseTask) executeTask(w worker.Worker, proc *Processor, fn taskFn) e
 	for {
 	inner:
 		for {
+			// Test the wakeup channel of this worker; reading on a closed channel will indicate that this worker is closing
+			// and we should break our event loop (isAlive/w.Sleep in the outer loop will also ensure this).
+			select {
+			case _, ok := <-w.WakeupChan():
+				if !ok {
+					break inner
+				}
+			default:
+			}
+
 			item := proc.Queue.Pick(w.Stage())
 			if item == nil {
 				break inner
@@ -395,16 +406,21 @@ func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, err
 // of a QueueItem.
 func (task *OmdbTask) find(w worker.Worker, queueItem *QueueItem) error {
 	if queueItem.TitleInfo == nil {
-		return fmt.Errorf("cannot find OMDB info for queueItem (id: %v). TitleInfo missing", queueItem.Id)
+		return fmt.Errorf("cannot find OMDB info for queueItem (id: %v). TitleInfo missing", queueItem.ItemID)
 	}
 
 	res, err := task.search(w, queueItem)
+	// Emulate a large delay in this take. On server shutdown, we want this worker to wait for
+	// this task to complete before shutting down.
+	fmt.Printf("[Task] Searching for QueueItem %s in OMDB...\n", queueItem.Name)
+	time.Sleep(time.Second * 5)
 	if err != nil {
 		return err
 	}
 
 	queueItem.OmdbInfo = res
 	task.advance(queueItem)
+	fmt.Printf("[Task] Done for QueueItem %s\n", queueItem.Name)
 	return nil
 }
 
@@ -412,5 +428,61 @@ func (task *OmdbTask) find(w worker.Worker, queueItem *QueueItem) error {
 // for that stage
 func (task *OmdbTask) advance(item *QueueItem) {
 	// Release the QueueItem by advancing it to the next pipeline stage
+	task.proc.Queue.AdvanceStage(item)
+}
+
+type DatabaseTask struct {
+	proc *Processor
+	baseTask
+}
+
+// Execute will utilise the baseTask.Execute method to run the task repeatedly
+// in a worker work/wait loop
+func (task *DatabaseTask) Execute(w worker.Worker) error {
+	return task.executeTask(w, task.proc, task.commitToDatabase)
+}
+
+// processTroubleState will check if the queue item is troubled, and if so, will
+// query the trouble for information about how the user wishes it to be resolved.
+// This method will return an error if the processing fails. The second return (bool)
+// indicates whether or not the item has been fully processed. Item trouble is cleared
+// when this method returns
+func (task *DatabaseTask) processTroubleState(queueItem *QueueItem) (bool, error) {
+	if queueItem.Trouble != nil {
+		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
+			_, ok := trblCtx["retry"]
+			if !ok {
+				return false, nil
+			}
+
+			return false, errors.New("resolution contexts 'retry' key missing")
+		}
+	}
+
+	return false, nil
+}
+
+// Processes a given queueItem by filtering out irrelevant information from it's
+// title, and finding relevant information such as the season, episode and resolution
+func (task *DatabaseTask) commitToDatabase(w worker.Worker, queueItem *QueueItem) error {
+	isComplete, err := task.processTroubleState(queueItem)
+	if err != nil {
+		fmt.Printf("[Database Task] (!) Warn: unable to process items trouble state: %s\n", err.Error())
+	}
+
+	if isComplete {
+		return nil
+	}
+
+	if err := queueItem.CommitToDatabase(); err != nil {
+		return &DatabaseTaskError{NewBaseTaskError(err.Error(), queueItem, DATABASE_FAILURE)}
+	}
+
+	task.advance(queueItem)
+	return nil
+}
+
+// advances the item by advancing the stage of the item
+func (task *DatabaseTask) advance(item *QueueItem) {
 	task.proc.Queue.AdvanceStage(item)
 }

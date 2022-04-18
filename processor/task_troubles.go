@@ -20,6 +20,7 @@ const (
 	OMDB_REQUEST_FAILURE
 	FFMPEG_FAILURE
 	COMMANDER_FAILURE
+	DATABASE_FAILURE
 )
 
 type baseTaskError struct {
@@ -85,7 +86,7 @@ func marshalToJson(trouble Trouble) ([]byte, error) {
 		trouble.Args(),
 		trouble.Type(),
 		trouble.Payload(),
-		trouble.Item().Id,
+		trouble.Item().ItemID,
 	}
 
 	return json.Marshal(res)
@@ -271,4 +272,21 @@ func (ex *ProfileSelectionError) Resolve(args map[string]interface{}) error {
 	} else {
 		return errors.New("unable to resolve ProfileSelectionError - arguments provided are invalid! One of 'action, profileTag' was expected")
 	}
+}
+
+func (ex *ProfileSelectionError) MarshalJSON() ([]byte, error) {
+	return marshalToJson(ex)
+}
+
+type DatabaseTaskError struct {
+	baseTaskError
+}
+
+func (ex *DatabaseTaskError) Resolve(args map[string]interface{}) error {
+	if _, ok := args["retry"]; ok {
+		ex.ProvideResolutionContext("retry", true)
+		return nil
+	}
+
+	return errors.New("unable to resolve DatabaseTaskError - arguments provided are invalid! 'retry' was expected")
 }

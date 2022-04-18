@@ -206,7 +206,7 @@ func (ffmpegI *ffmpegInstance) MarshalJSON() ([]byte, error) {
 		ffmpegI.progress,
 		ffmpegI.status,
 		ffmpegI.trouble,
-		ffmpegI.item.Id,
+		ffmpegI.item.ItemID,
 		ffmpegI.profileTag,
 		ffmpegI.targetLabel,
 	})

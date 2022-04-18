@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hbomb79/TPA/worker"
+	"gorm.io/gorm"
 )
 
 // Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
@@ -77,16 +78,17 @@ const (
 // This includes information found from the file-system, OMDB,
 // and the current processing status/stage
 type QueueItem struct {
-	Id         int                  `json:"id" groups:"api"`
+	gorm.Model
+	ItemID     int                  `json:"id" groups:"api" gorm:"-"`
 	Path       string               `json:"path"`
 	Name       string               `json:"name" groups:"api"`
-	Status     QueueItemStatus      `json:"status" groups:"api"`
-	Stage      worker.PipelineStage `json:"stage" groups:"api"`
+	Status     QueueItemStatus      `json:"status" groups:"api" gorm:"-"`
+	Stage      worker.PipelineStage `json:"stage" groups:"api" gorm:"-"`
 	TitleInfo  *TitleInfo           `json:"title_info"`
 	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
-	Trouble    Trouble              `json:"trouble"`
+	Trouble    Trouble              `json:"trouble" gorm:"-"`
 	ProfileTag string               `json:"profile_tag"`
-	processor  *Processor           `json:"-"`
+	processor  *Processor           `json:"-" gorm:"-"`
 }
 
 func NewQueueItem(info fs.FileInfo, path string, proc *Processor) *QueueItem {
@@ -225,24 +227,35 @@ func (item *QueueItem) Cancel() error {
 	return nil
 }
 
+func (item *QueueItem) CommitToDatabase() error {
+	db := item.processor.DatabaseServer.GetInstance()
+	if err := db.Debug().Save(item).Error; err != nil {
+		return fmt.Errorf("failed to commit item %s to database: %s", item.Name, err.Error())
+	}
+
+	return nil
+}
+
 func (item *QueueItem) Pause() error {
 	return errors.New("NYI")
 }
 
 func (item *QueueItem) NotifyUpdate() {
-	item.processor.UpdateChan <- item.Id
+	item.processor.UpdateChan <- item.ItemID
 }
 
 // TitleInfo contains the information about the import QueueItem
 // that is gleamed from the pathname given; such as the title and
 // if the show is an episode or a movie.
 type TitleInfo struct {
-	Title      string
-	Episodic   bool
-	Season     int
-	Episode    int
-	Year       int
-	Resolution string
+	gorm.Model
+	QueueItemID uint
+	Title       string
+	Episodic    bool
+	Season      int
+	Episode     int
+	Year        int
+	Resolution  string
 }
 
 // OutputPath is a method to calculate the path to which this
@@ -261,7 +274,9 @@ func (tInfo *TitleInfo) OutputPath() string {
 // a file structure, and also to store the information inside
 // of a cache file or a database.
 type OmdbInfo struct {
-	Genre       StringList `decode:"string" mapstructure:"-"`
+	gorm.Model
+	QueueItemID uint
+	Genre       StringList `decode:"string" mapstructure:"-" gorm:"-"`
 	Title       string
 	Description string `json:"plot"`
 	ReleaseYear int
@@ -269,8 +284,8 @@ type OmdbInfo struct {
 	ImdbId      string
 	Type        string
 	PosterUrl   string           `json:"poster"`
-	Response    OmdbResponseType `decode:"bool"`
-	Error       string
+	Response    OmdbResponseType `decode:"bool" gorm:"-"`
+	Error       string           `gorm:"-"`
 }
 
 type StringList []string

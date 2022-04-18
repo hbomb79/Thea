@@ -92,7 +92,7 @@ func (c *dockerContainer) Start(ctx context.Context, cli client.APIClient) error
 	io.Copy(os.Stdout, out)
 	c.setStatus(PULLED)
 
-	resp, err := cli.ContainerCreate(ctx, c.containerConf, c.containerHostConf, nil, nil, "")
+	resp, err := cli.ContainerCreate(ctx, c.containerConf, c.containerHostConf, nil, nil, c.label)
 	if err != nil {
 		return fmt.Errorf("failed to create container for %s: %v", c, err.Error())
 	}

@@ -71,6 +71,11 @@ func (router *Router) Start(opts *RouterOptions) error {
 }
 
 func (router *Router) Stop() {
+	if router.server == nil {
+		fmt.Printf("[HTTP] (X) HTTP Router is already closed!\n")
+		return
+	}
+
 	fmt.Printf("[HTTP] (X) Closing HTTP router\n")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()

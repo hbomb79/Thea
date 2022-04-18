@@ -47,32 +47,45 @@ func (tpa *Tpa) Start() {
 
 	wg := &sync.WaitGroup{}
 
-	wg.Add(3)
-	go func() {
-		defer wg.Done()
-		tpa.socketHub.Start()
-	}()
-	go func() {
-		defer wg.Done()
-		tpa.httpRouter.Start(&api.RouterOptions{
-			ApiPort: 8080,
-			ApiHost: "0.0.0.0",
-			ApiRoot: "/api/tpa",
-		})
-	}()
-
 	fmt.Printf("[Main] (O) Starting processor\n")
+	procReady := make(chan bool)
+
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := tpa.proc.Start(); err != nil {
+		if err := tpa.proc.Start(procReady); err != nil {
 			fmt.Printf("Failed to initialise Processor - %v\n", err.Error())
 		}
+
+		close(procReady)
 
 		fmt.Printf("[Main] (X) Processor shutting down, cleaning up...\n")
 		tpa.socketHub.Close()
 		tpa.httpRouter.Stop()
 	}()
 
+	// Wait for processor to be fully online before constructing other services that rely
+	// on certain fields being set/populated.
+	v, ok := <-procReady
+	if v && ok {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tpa.socketHub.Start()
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tpa.httpRouter.Start(&api.RouterOptions{
+				ApiPort: 8080,
+				ApiHost: "0.0.0.0",
+				ApiRoot: "/api/tpa",
+			})
+		}()
+	}
+
+	// Wait for all processes to finish
 	wg.Wait()
 }
 

@@ -63,7 +63,7 @@ func (queue *processorQueue) Push(item *QueueItem) error {
 		return fmt.Errorf("item (%s) is either already in queue, or marked as complete in cache", item.Path)
 	}
 
-	item.Id = queue.lastId
+	item.ItemID = queue.lastId
 	queue.Items = append(queue.Items, item)
 	queue.lastId++
 
@@ -74,7 +74,7 @@ func (queue *processorQueue) Remove(item *QueueItem) error {
 	queue.Lock()
 	defer queue.Unlock()
 
-	item, idx := queue.FindById(item.Id)
+	item, idx := queue.FindById(item.ItemID)
 	if item == nil || idx < 0 {
 		return errors.New("cannot remove: does not exist in queue")
 	}
@@ -113,7 +113,7 @@ func (queue *processorQueue) AdvanceStage(item *QueueItem) {
 
 	if item.Stage == worker.Finish {
 		item.SetStatus(Completed)
-	} else if item.Stage == worker.Format {
+	} else if item.Stage == worker.Database {
 		item.SetStage(worker.Finish)
 		item.SetStatus(Completed)
 
@@ -200,7 +200,7 @@ func (queue *processorQueue) ForEach(cb ItemFn) {
 // of the QueueItem in the queue is returned. If not found, nil and -1 is returned
 func (queue *processorQueue) FindById(id int) (*QueueItem, int) {
 	for idx, item := range queue.Items {
-		if item.Id == id {
+		if item.ItemID == id {
 			return item, idx
 		}
 	}

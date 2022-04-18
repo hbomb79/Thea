@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 )
 
@@ -13,6 +14,8 @@ import (
  * The docker package provides utilities for TPA with regards to creating, fetching and spawning docker images/containers
  * locally. This is used to spawn services such as TPAs PostgreSQL database, or the NPM front end.
  */
+
+const DOCKER_NETWORK = "tpa_network"
 
 type DockerManager interface {
 	SpawnContainer(DockerContainer) error
@@ -43,6 +46,15 @@ func newDockerManager() DockerManager {
 	if err != nil {
 		panic(err)
 	}
+
+	_, err = c.NetworkCreate(ctx, DOCKER_NETWORK, types.NetworkCreate{
+		CheckDuplicate: true,
+		Driver:         "bridge",
+	})
+	if err != nil {
+		panic(err)
+	}
+
 	broker := NewBroker[*dockerContainerStatus]()
 	go broker.Start()
 	return &docker{
@@ -69,6 +81,10 @@ func (docker *docker) SpawnContainer(container DockerContainer) error {
 		return err
 	}
 
+	if err := docker.cli.NetworkConnect(docker.ctx, DOCKER_NETWORK, container.ID(), nil); err != nil {
+		fmt.Printf("[Docker] (!) Failed to connect container %s to network: %s\n", container, err.Error())
+	}
+
 	go docker.monitorContainer(container, docker.wg)
 
 	fmt.Printf("[Docker] Waiting for container %s to come UP\n", container)
@@ -87,6 +103,7 @@ func (docker *docker) Shutdown(timeout time.Duration) {
 	}
 
 	docker.wg.Wait()
+	docker.cli.NetworkRemove(docker.ctx, DOCKER_NETWORK)
 }
 
 func (docker *docker) CloseContainer(name string, timeout time.Duration) {

@@ -83,7 +83,6 @@ type Processor struct {
 	DatabaseServer     pkg.DatabaseServer
 	ctxCancel          context.CancelFunc
 	ctx                context.Context
-	running            bool
 	serviceWg          *sync.WaitGroup
 	managerWg          *sync.WaitGroup
 }
@@ -148,21 +147,30 @@ func (p *Processor) WithNegotiator(n Negotiator) *Processor {
 // Start will start the workers inside the WorkerPool
 // responsible for the various tasks inside the program
 // This method will wait on the WaitGroup attached to the WorkerPool
-func (p *Processor) Start() error {
+func (p *Processor) Start(readyChan chan bool) error {
 	defer p.shutdown()
 
-	dbErr := make(chan error, 1)
+	dbErr := make(chan error)
 	if !p.Config.ExternalDatabase {
 		fmt.Printf("[Processor] Initialising embedded database...\n")
-		_, err := pkg.InitialiseDockerDatabase(pkg.DatabaseConfig(p.Config.Database), dbErr)
+		_, err := pkg.InitialiseDockerDatabase(p.Config.Database, dbErr)
 		if err != nil {
 			return err
 		}
 	}
 
+	fmt.Printf("[Processor] Initialising embedded pgAdmin server...\n")
+	_, err := pkg.InitialiseDockerPgAdmin(dbErr)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("[Processor] Connecting to database with GORM...\n")
 	if err := p.DatabaseServer.Connect(p.Config.Database); err != nil {
 		return err
 	}
+	fmt.Printf("[Processor] Auto-migrating database...\n")
+	p.DatabaseServer.GetInstance().AutoMigrate(&QueueItem{}, &TitleInfo{}, &OmdbInfo{})
 
 	var cacheDir string = p.Config.CacheDirPath
 	var configDir string = p.Config.ConfigDirPath
@@ -182,10 +190,11 @@ func (p *Processor) Start() error {
 
 	p.WorkerPool.PushWorker(worker.NewWorker("Title_Parser", &TitleTask{proc: p}, worker.Title, make(chan int)))
 	p.WorkerPool.PushWorker(worker.NewWorker("OMDB_Handler", &OmdbTask{proc: p}, worker.Omdb, make(chan int)))
+	p.WorkerPool.PushWorker(worker.NewWorker("Database_Committer", &DatabaseTask{proc: p}, worker.Database, make(chan int)))
 
-	// When constructing our WaitGroups, we use two because our ticker-based item detection
-	// should be stopped before the managers to avoid closing in-use channels. This way we can
-	// stop the source of the information before we stop the consumers.
+	// When constructing our WaitGroups, we use two groups so that we can shutdown the senders of data before the receivers.
+	// In many places in TPA we intentionally send in a blocking manner, closing the receivers before the senders would result
+	// in deadlocking sender threads - this will mean TPA can never shutdown and will hang indefinitely.
 	p.serviceWg.Add(3)
 	go p.handleUpdateStream(p.ctx, p.serviceWg)
 	go p.handleItemModtimes(p.ctx, p.serviceWg)
@@ -198,6 +207,7 @@ func (p *Processor) Start() error {
 	exit := make(chan os.Signal, 1) // we need to reserve to buffer size 1, so the notifier are not blocked
 	signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
 
+	readyChan <- true
 	select {
 	case <-exit:
 		fmt.Printf("[Processor] (!!) SIGTERM/Interrupt caught! Shutting down...\n")
@@ -209,20 +219,19 @@ func (p *Processor) Start() error {
 }
 
 func (p *Processor) shutdown() {
-	fmt.Print("[Processor] (X) Closing all data streams...\n")
-	p.ctxCancel()
-	p.serviceWg.Wait()
-
 	fmt.Print("[Processor] (X) Closing all managers...\n")
 	p.WorkerPool.CloseWorkers()
 	if p.FfmpegCommander != nil {
 		p.FfmpegCommander.Stop()
 	}
+	p.managerWg.Wait()
 
 	fmt.Print("[Processor] (X) Closing all containers...\n")
 	pkg.Docker.Shutdown(time.Second * 15)
 
-	p.managerWg.Wait()
+	fmt.Print("[Processor] (X) Closing all data streams...\n")
+	p.ctxCancel()
+	p.serviceWg.Wait()
 }
 
 // SynchroniseQueue will first discover all items inside the import directory,

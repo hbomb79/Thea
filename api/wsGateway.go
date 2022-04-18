@@ -100,7 +100,7 @@ func (wsGateway *WsGateway) WsItemPromote(hub *ws.SocketHub, message *ws.SocketM
 		return errors.New(fmt.Sprintf(ERR_FMT, err.Error()))
 	}
 
-	wsGateway.proc.UpdateChan <- queueItem.Id
+	wsGateway.proc.UpdateChan <- queueItem.ItemID
 	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem}, ws.Response))
 	return nil
 }

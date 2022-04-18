@@ -329,12 +329,12 @@ func (commander *ffmpegCommander) runHealthChecks() {
 	// a map of known items (by ID) so we know which items we're currently running instances for
 	items, healthyInstances, unhealthyInstances := make(map[int]bool), make(map[int]int), make(map[int]int)
 	for _, instance := range commander.instances {
-		items[instance.Item().Id] = true
+		items[instance.Item().ItemID] = true
 
 		if instance.Status() == TROUBLED {
-			unhealthyInstances[instance.Item().Id]++
+			unhealthyInstances[instance.Item().ItemID]++
 		} else if instance.Status() != FINISHED {
-			healthyInstances[instance.Item().Id]++
+			healthyInstances[instance.Item().ItemID]++
 		}
 	}
 
@@ -342,9 +342,16 @@ func (commander *ffmpegCommander) runHealthChecks() {
 	// healthy and unhealthy instances for each item. Using this information, we can adjust the status of
 	// each QueueItem, or even identify those that are finished and advance their stage
 	for _, item := range commander.extractItemsFromWindow() {
-		id := item.Id
+		id := item.ItemID
 		if unhealthyInstances[id] == 0 {
 			if healthyInstances[id] == 0 {
+				// Before advancing we should check to make sure that the reason this item appears finished
+				// is because it actually hasn't _started_ yet. This is certain to be the case when an item
+				// is troubled.
+				if item.Trouble != nil {
+					continue
+				}
+
 				commander.processor.Queue.AdvanceStage(item)
 			} else {
 				item.SetStatus(Processing)
@@ -395,7 +402,7 @@ func (commander *ffmpegCommander) raiseTrouble(instance CommanderTask, err error
 // data (QueueItem, profile and target) - they need not be identical objects (i.e. same address)
 func (commander *ffmpegCommander) findTask(target *taskData) (int, CommanderTask) {
 	for idx, instance := range commander.instances {
-		if instance.Item().Id == target.item.Id && instance.ProfileTag() == target.profileTag && instance.TargetLabel() == target.targetLabel {
+		if instance.Item().ItemID == target.item.ItemID && instance.ProfileTag() == target.profileTag && instance.TargetLabel() == target.targetLabel {
 			return idx, instance
 		}
 	}

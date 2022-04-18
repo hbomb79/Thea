@@ -22,7 +22,10 @@ type DatabaseConfig struct {
 func InitialiseDockerDatabase(config DatabaseConfig, errChannel chan error) (DockerContainer, error) {
 	// Setup container cofiguration
 	dbDataPath := "/home/haz/tpa_db_data"
-	os.MkdirAll(dbDataPath, os.ModeDir)
+	if err := os.MkdirAll(dbDataPath, os.ModeDir); err != nil {
+		return nil, err
+	}
+
 	containerConfig := &container.Config{
 		Image: "postgres:14.1-alpine",
 		Env: []string{
@@ -53,6 +56,46 @@ func InitialiseDockerDatabase(config DatabaseConfig, errChannel chan error) (Doc
 
 	// Spawn docker container for postgres
 	db := NewDockerContainer("db", "postgres:14.1-alpine", containerConfig, hostConfig)
+	if err := Docker.SpawnContainer(db); err != nil {
+		return nil, err
+	}
+
+	// Watch for container crash (teardown)
+	go func() {
+		st, err := Docker.WaitForContainer(db, CRASHED)
+		if st != CRASHED || err != nil {
+			return
+		}
+
+		errChannel <- fmt.Errorf("container %s has crashed", db)
+	}()
+
+	return db, nil
+}
+
+func InitialiseDockerPgAdmin(errChannel chan error) (DockerContainer, error) {
+	// Setup container cofiguration
+	containerConfig := &container.Config{
+		Image: "dpage/pgadmin4",
+		Env: []string{
+			"PGADMIN_DEFAULT_EMAIL=admin@admin.com",
+			"PGADMIN_DEFAULT_PASSWORD=root",
+		},
+		ExposedPorts: nat.PortSet{
+			"80": struct{}{},
+		},
+	}
+	hostConfig := &container.HostConfig{
+		PortBindings: nat.PortMap{
+			"80": []nat.PortBinding{{
+				HostIP:   "0.0.0.0",
+				HostPort: "5050",
+			}},
+		},
+	}
+
+	// Spawn docker container for postgres
+	db := NewDockerContainer("pgAdmin", "dpage/pgadmin4", containerConfig, hostConfig)
 	if err := Docker.SpawnContainer(db); err != nil {
 		return nil, err
 	}

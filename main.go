@@ -1,16 +1,18 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/hbomb79/TPA/api"
+	"github.com/hbomb79/TPA/pkg"
 	"github.com/hbomb79/TPA/processor"
 	"github.com/hbomb79/TPA/ws"
 )
+
+var logger = pkg.Log.GetLogger("Main", pkg.ALL)
 
 type Tpa struct {
 	proc        *processor.Processor
@@ -21,7 +23,10 @@ type Tpa struct {
 }
 
 func NewTpa() *Tpa {
-	proc := processor.NewProcessor()
+	proc, err := processor.NewProcessor()
+	if err != nil {
+		panic(err)
+	}
 
 	return &Tpa{
 		proc:        proc,
@@ -41,25 +46,21 @@ func (tpa *Tpa) newClientConnection() map[string]interface{} {
 
 func (tpa *Tpa) Start() {
 	// Start websocket, router and processor
-	fmt.Printf("[Main] (I) Configuring HTTP and Websocket routes...\n")
-	tpa.setupRoutes()
-	tpa.socketHub.WithConnectionCallback(tpa.newClientConnection)
-
 	wg := &sync.WaitGroup{}
 
-	fmt.Printf("[Main] (O) Starting processor\n")
+	logger.Emit(pkg.INFO, "Starting Processor\n")
 	procReady := make(chan bool)
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		if err := tpa.proc.Start(procReady); err != nil {
-			fmt.Printf("Failed to initialise Processor - %v\n", err.Error())
+			logger.Emit(pkg.FATAL, "Failed to start Processor: %v", err.Error())
 		}
 
 		close(procReady)
 
-		fmt.Printf("[Main] (X) Processor shutting down, cleaning up...\n")
+		logger.Emit(pkg.STOP, "Processor shutdown, cleaning up supporting services...\n")
 		tpa.socketHub.Close()
 		tpa.httpRouter.Stop()
 	}()
@@ -68,6 +69,10 @@ func (tpa *Tpa) Start() {
 	// on certain fields being set/populated.
 	v, ok := <-procReady
 	if v && ok {
+		logger.Emit(pkg.INFO, "Confguring HTTP and Websocket routes...\n")
+		tpa.setupRoutes()
+		tpa.socketHub.WithConnectionCallback(tpa.newClientConnection)
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -139,7 +144,6 @@ func main() {
 	if err != nil {
 		log.Panicf(err.Error())
 	}
-	//redirectLogToFile(filepath.Join(homeDir, "tpa.log"))
 
 	procCfg := new(processor.TPAConfig)
 	if err := procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml")); err != nil {
@@ -150,15 +154,4 @@ func main() {
 	tpa.proc.WithConfig(procCfg).WithNegotiator(tpa)
 
 	tpa.Start()
-}
-
-func redirectLogToFile(path string) {
-	// Redirect log output to file
-
-	fh, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Panicf(err.Error())
-	}
-
-	log.SetOutput(fh)
 }

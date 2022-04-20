@@ -9,10 +9,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/hbomb79/TPA/pkg"
 	"github.com/hbomb79/TPA/worker"
 )
+
+var taskLogger = pkg.Log.GetLogger("Task", pkg.CORE)
 
 const (
 	// The URL used to query OMDB. First %s is the query type (s for seach, t for title, i for id),
@@ -131,7 +133,7 @@ func (task *TitleTask) processTroubleState(queueItem *QueueItem) (bool, error) {
 func (task *TitleTask) processTitle(w worker.Worker, queueItem *QueueItem) error {
 	isComplete, err := task.processTroubleState(queueItem)
 	if err != nil {
-		fmt.Printf("[TitleWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
+		taskLogger.Emit(pkg.WARNING, "Unable to process items trouble state: %s\n", err.Error())
 	}
 
 	if !isComplete {
@@ -272,7 +274,7 @@ func (task *OmdbTask) Execute(w worker.Worker) error {
 	return task.executeTask(w, task.proc, func(w worker.Worker, queueItem *QueueItem) error {
 		isComplete, err := task.processTroubleState(queueItem)
 		if err != nil {
-			fmt.Printf("[OmdbWorker] (!) Warn: unable to process items trouble state: %s\n", err.Error())
+			taskLogger.Emit(pkg.WARNING, "Unable to process items trouble state: %s\n", err.Error())
 		}
 
 		if isComplete {
@@ -410,17 +412,12 @@ func (task *OmdbTask) find(w worker.Worker, queueItem *QueueItem) error {
 	}
 
 	res, err := task.search(w, queueItem)
-	// Emulate a large delay in this take. On server shutdown, we want this worker to wait for
-	// this task to complete before shutting down.
-	fmt.Printf("[Task] Searching for QueueItem %s in OMDB...\n", queueItem.Name)
-	time.Sleep(time.Second * 5)
 	if err != nil {
 		return err
 	}
 
 	queueItem.OmdbInfo = res
 	task.advance(queueItem)
-	fmt.Printf("[Task] Done for QueueItem %s\n", queueItem.Name)
 	return nil
 }
 
@@ -467,7 +464,7 @@ func (task *DatabaseTask) processTroubleState(queueItem *QueueItem) (bool, error
 func (task *DatabaseTask) commitToDatabase(w worker.Worker, queueItem *QueueItem) error {
 	isComplete, err := task.processTroubleState(queueItem)
 	if err != nil {
-		fmt.Printf("[Database Task] (!) Warn: unable to process items trouble state: %s\n", err.Error())
+		taskLogger.Emit(pkg.WARNING, "Unable to process items trouble state: %s\n", err.Error())
 	}
 
 	if isComplete {

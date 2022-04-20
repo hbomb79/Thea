@@ -9,9 +9,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hbomb79/TPA/pkg"
 	"github.com/hbomb79/TPA/worker"
 	"gorm.io/gorm"
 )
+
+var itemLogger = pkg.Log.GetLogger("QueueItem", pkg.CORE)
+
+func init() {
+	pkg.DB.RegisterModel(&QueueItem{}, &TitleInfo{}, &OmdbInfo{}, &ExportDetail{})
+}
 
 // Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
 // used to remove the surrounding quotes from the provided byte slice
@@ -79,16 +86,25 @@ const (
 // and the current processing status/stage
 type QueueItem struct {
 	gorm.Model
-	ItemID     int                  `json:"id" groups:"api" gorm:"-"`
-	Path       string               `json:"path"`
-	Name       string               `json:"name" groups:"api"`
-	Status     QueueItemStatus      `json:"status" groups:"api" gorm:"-"`
-	Stage      worker.PipelineStage `json:"stage" groups:"api" gorm:"-"`
-	TitleInfo  *TitleInfo           `json:"title_info"`
-	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
-	Trouble    Trouble              `json:"trouble" gorm:"-"`
-	ProfileTag string               `json:"profile_tag"`
-	processor  *Processor           `json:"-" gorm:"-"`
+	ItemID        int                  `json:"id" groups:"api" gorm:"-"`
+	Path          string               `json:"path"`
+	Name          string               `json:"name" groups:"api"`
+	Status        QueueItemStatus      `json:"status" groups:"api" gorm:"-"`
+	Stage         worker.PipelineStage `json:"stage" groups:"api" gorm:"-"`
+	TitleInfo     *TitleInfo           `json:"title_info"`
+	OmdbInfo      *OmdbInfo            `json:"omdb_info"`
+	Trouble       Trouble              `json:"trouble" gorm:"-"`
+	ProfileTag    string               `json:"profile_tag"`
+	processor     *Processor           `json:"-" gorm:"-"`
+	ExportDetails []*ExportDetail      `json:"export_details"`
+}
+
+type ExportDetail struct {
+	gorm.Model   `json:"-"`
+	QueueItemID  uint   `json:"-"`
+	TargetLabel  string `json:"target_label"`
+	ProfileLabel string `json:"profile_label"`
+	Path         string `json:"path"`
 }
 
 func NewQueueItem(info fs.FileInfo, path string, proc *Processor) *QueueItem {
@@ -142,7 +158,7 @@ func (item *QueueItem) SetProfileTag(tag string) error {
 func (item *QueueItem) SetTrouble(trouble Trouble) {
 	defer item.NotifyUpdate()
 
-	fmt.Printf("[Trouble] Raising trouble (%T) for QueueItem (%v)!\n", trouble, item.Path)
+	itemLogger.Emit(pkg.WARNING, "Raising trouble %T for QueueItem %s\n", trouble, item)
 	item.Trouble = trouble
 
 	// If the item is cancelled/cancelling, we don't want to override that status
@@ -228,9 +244,9 @@ func (item *QueueItem) Cancel() error {
 }
 
 func (item *QueueItem) CommitToDatabase() error {
-	db := item.processor.DatabaseServer.GetInstance()
+	db := pkg.DB.GetInstance()
 	if err := db.Debug().Save(item).Error; err != nil {
-		return fmt.Errorf("failed to commit item %s to database: %s", item.Name, err.Error())
+		return fmt.Errorf("failed to commit item %s to database: %s", item, err.Error())
 	}
 
 	return nil
@@ -242,6 +258,10 @@ func (item *QueueItem) Pause() error {
 
 func (item *QueueItem) NotifyUpdate() {
 	item.processor.UpdateChan <- item.ItemID
+}
+
+func (item *QueueItem) String() string {
+	return fmt.Sprintf("{%d PK=%d name=%s}", item.ItemID, item.ID, item.Name)
 }
 
 // TitleInfo contains the information about the import QueueItem

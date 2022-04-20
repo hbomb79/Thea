@@ -2,11 +2,14 @@ package cache
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/hbomb79/TPA/pkg"
 )
+
+var logger = pkg.Log.GetLogger("Cache", pkg.CORE)
 
 // The Cache is a struct from the cache package that allows other parts
 // of the TPA to store persistent information about items inside the queue.
@@ -92,7 +95,7 @@ func (cache *Cache) IterItems(cb func(*Cache, string, interface{}) bool) {
 // as a public wrapper
 func (cache *Cache) Save() {
 	if err := cache.save(); err != nil {
-		fmt.Printf("[Cache] (!!) Failed to save cache! %s\n", err.Error())
+		logger.Emit(pkg.ERROR, "Failed to save cache! %s\n", err.Error())
 	}
 }
 
@@ -101,11 +104,11 @@ func (cache *Cache) Save() {
 // constructed which is then saved to the filesystem with 'save'
 func (cache *Cache) Load() {
 	if err := cache.load(); err != nil {
-		fmt.Printf("[Cache] (!!) Unable to load cache file(%s): %s. Using empty cache!\n", cache.filePath, err.Error())
+		logger.Emit(pkg.WARNING, "Unable to load cache file(%s): %s. Using empty cache!\n", cache.filePath, err.Error())
 
 		cache.content = make(map[string]interface{})
 		if err = cache.save(); err != nil {
-			fmt.Printf("[Cache] (!!) Cache cannot be saved! %v\n", err.Error())
+			logger.Emit(pkg.ERROR, "Cache cannot be saved! %v\n", err.Error())
 		}
 	}
 }

@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -63,7 +62,6 @@ func (pool *WorkerPool) WakeupWorkers() {
 // While doing this, the WorkerPool's mutex is locked.
 func (pool *WorkerPool) CloseWorkers() {
 	for _, w := range pool.workers {
-		fmt.Printf("[WorkerPool] (X) Closing worker [%v]...\n", w.Label())
 		w.Close()
 	}
 }

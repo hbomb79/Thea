@@ -46,14 +46,35 @@ func (e ContainerStatus) String() string {
 }
 
 type DockerContainer interface {
+	// Start will pull the required Docker image and attempt to create and start
+	// a container via the Docker SDK. An error will be returned from this method if
+	// this process fails, however monitoring of this container occurs asynchronously
+	// so no error will be returned if the container crashes after successfully starting.
 	Start(context.Context, client.APIClient) error
+
+	// Close shuts down this container by killing the running container (if running), and
+	// removing the container from the docker daemon via the Docker SDK. If closing or removing
+	// the container fails, this method will return an error.
 	Close(context.Context, client.APIClient, time.Duration) error
+
+	// MessageChannel returns the channel used by a running container to broadcast new
+	// messages from the stdout/stderr of the container. A DEAD container will have a closed
+	// message channel.
 	MessageChannel() chan []byte
+
+	// StatusChannel returns the channel used by a container to broadcast it's status (see ContainerStatus)
+	// A channel that has broadcast a DEAD state will soon close this channel.
 	StatusChannel() chan ContainerStatus
+
+	// Label returns the label of this container
 	Label() string
+
+	// ID returns the container ID of this container.
 	ID() string
+
+	// Status returns the current status of this container. To receive updates of this status in real-time, use
+	// the StatusChannel()
 	Status() ContainerStatus
-	monitorContainer(ctx context.Context, cli client.APIClient)
 }
 
 type dockerContainer struct {
@@ -67,6 +88,8 @@ type dockerContainer struct {
 	containerHostConf *dCont.HostConfig
 }
 
+// NewDockerContainer creates a new DockerContainer instance. This instance can later be started manually, or via a Docker
+// container management system (see pkg.Docker).
 func NewDockerContainer(label string, image string, conf *dCont.Config, hostConf *dCont.HostConfig) DockerContainer {
 	return &dockerContainer{
 		statusChannel:     make(chan ContainerStatus, 5),
@@ -120,16 +143,12 @@ func (c *dockerContainer) Close(ctx context.Context, cli client.APIClient, timeo
 		}
 
 		c.setStatus(DOWN)
-	} else {
-		fmt.Printf("Container already stopped/never started, skipping.\n")
 	}
 
 	if c.canRemove() {
 		if err := cli.ContainerRemove(ctx, c.containerID, types.ContainerRemoveOptions{}); err != nil {
 			return fmt.Errorf("failed to remove container %s: %v", c, err.Error())
 		}
-	} else {
-		fmt.Printf("Container already removed/never created, skipping.\n")
 	}
 	c.setStatus(DEAD)
 
@@ -193,7 +212,6 @@ func (container *dockerContainer) monitorContainer(ctx context.Context, cli clie
 		Details:    false,
 	})
 	if err != nil {
-		fmt.Printf("[Docker] (!) Unable to open container %s for log reading - %v\n", container, err.Error())
 		container.setStatus(CRASHED)
 		return
 	}

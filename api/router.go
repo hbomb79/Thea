@@ -9,7 +9,10 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/hbomb79/TPA/pkg"
 )
+
+var logger = pkg.Log.GetLogger("HTTP", pkg.CORE)
 
 type RouterOptions struct {
 	ApiRoot string
@@ -58,7 +61,7 @@ func (router *Router) Start(opts *RouterOptions) error {
 		return err
 	}
 
-	fmt.Printf("[HTTP] (I) Starting HTTP router\n")
+	logger.Emit(pkg.NEW, "Starting HTTP router\n")
 	router.buildRoutes(opts)
 
 	host := fmt.Sprintf("%v:%v", opts.ApiHost, opts.ApiPort)
@@ -72,11 +75,11 @@ func (router *Router) Start(opts *RouterOptions) error {
 
 func (router *Router) Stop() {
 	if router.server == nil {
-		fmt.Printf("[HTTP] (X) HTTP Router is already closed!\n")
+		logger.Emit(pkg.WARNING, "HTTP Router is already closed!\n")
 		return
 	}
 
-	fmt.Printf("[HTTP] (X) Closing HTTP router\n")
+	logger.Emit(pkg.STOP, "Closing HTTP router\n")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 
@@ -91,7 +94,7 @@ func (router *Router) Stop() {
 func (router *Router) buildRoutes(opts *RouterOptions) {
 	for _, route := range router.routes {
 		routePath := strings.ReplaceAll(fmt.Sprintf("%s/%s", opts.ApiRoot, route.path), "//", "/")
-		fmt.Printf("[HTTP] (+) Building Mux route %v %v\n", routePath, route.methods)
+		logger.Emit(pkg.NEW, "Building Mux route %v %v\n", routePath, route.methods)
 
 		muxRoute := router.Mux.HandleFunc(routePath, route.handler)
 		if len(route.methods) > 0 {

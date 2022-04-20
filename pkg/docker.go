@@ -10,6 +10,8 @@ import (
 	"github.com/docker/docker/client"
 )
 
+var dockerLogger = Log.GetLogger("Docker", CORE)
+
 /**
  * The docker package provides utilities for TPA with regards to creating, fetching and spawning docker images/containers
  * locally. This is used to spawn services such as TPAs PostgreSQL database, or the NPM front end.
@@ -82,18 +84,18 @@ func (docker *docker) SpawnContainer(container DockerContainer) error {
 	}
 
 	if err := docker.cli.NetworkConnect(docker.ctx, DOCKER_NETWORK, container.ID(), nil); err != nil {
-		fmt.Printf("[Docker] (!) Failed to connect container %s to network: %s\n", container, err.Error())
+		dockerLogger.Emit(ERROR, "Failed to connect container %s to network: %s\n", container, err.Error())
 	}
 
 	go docker.monitorContainer(container, docker.wg)
 
-	fmt.Printf("[Docker] Waiting for container %s to come UP\n", container)
+	dockerLogger.Emit(INFO, "Waiting for container %s to come UP\n", container)
 	if _, err := docker.WaitForContainer(container, UP); err != nil {
-		fmt.Printf("[Docker] Container %s failed to come online: %v\n", container, err.Error())
+		dockerLogger.Emit(ERROR, "Container %s failed to come online: %v\n", container, err.Error())
 		return err
 	}
 
-	fmt.Printf("[Docker] Container %s is UP!\n", container)
+	dockerLogger.Emit(SUCCESS, "Container %s is UP!\n", container)
 	return nil
 }
 
@@ -146,16 +148,16 @@ func (docker *docker) WaitForContainer(container DockerContainer, statuses ...Co
 }
 
 func (docker *docker) closeContainer(cont DockerContainer, timeout time.Duration) {
-	fmt.Printf("[Docker] Closing container %s...\n", cont)
+	dockerLogger.Emit(STOP, "Closing container %s...\n", cont)
 	cont.Close(docker.ctx, docker.cli, timeout)
 
-	fmt.Printf("[Docker] Waiting for container %s to change state to DEAD...\n", cont)
+	dockerLogger.Emit(STOP, "Waiting for container %s to change state to DEAD...\n", cont)
 	docker.WaitForContainer(cont, DEAD)
 }
 
 func (docker *docker) monitorContainer(container DockerContainer, wg *sync.WaitGroup) {
 	defer func() {
-		fmt.Printf("[Container %s] - Status management DETACHED\n", container)
+		dockerLogger.Emit(INFO, "Container %s - Status management DETACHED\n", container)
 		wg.Done()
 	}()
 
@@ -165,14 +167,14 @@ func (docker *docker) monitorContainer(container DockerContainer, wg *sync.WaitG
 			if !ok {
 				return
 			}
-			fmt.Printf("[Container %s] - Status change: %s\n", container, stat)
+			dockerLogger.Emit(INFO, "Container %s - Status change: %s\n", container, stat)
 
 			docker.broker.Publish(&dockerContainerStatus{containerLabel: container.Label(), status: stat})
 		case stat, ok := <-container.MessageChannel():
 			if !ok {
 				return
 			}
-			fmt.Printf("[Docker] %s: %s\n", container, stat)
+			dockerLogger.Emit(INFO, "%s: %s\n", container, stat)
 		}
 	}
 }

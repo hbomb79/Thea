@@ -1,12 +1,14 @@
 package ws
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/hbomb79/TPA/pkg"
 )
+
+var socketLogger = pkg.Log.GetLogger("WebSocket", pkg.CORE)
 
 type SocketHandler func(*SocketHub, *SocketMessage) error
 
@@ -59,10 +61,10 @@ func (hub *SocketHub) BindCommand(command string, handler SocketHandler) *Socket
 // for incoming clients and messages
 func (hub *SocketHub) Start() {
 	if hub.running {
-		fmt.Printf("[Websocket] (!) Attempting to start socketHub when already running! Ignoring request.\n")
+		socketLogger.Emit(pkg.WARNING, "Attempting to start socketHub when already running! Ignoring request.\n")
 		return
 	}
-	fmt.Printf("[Websocket] (I) Opening SocketHub!\n")
+	socketLogger.Emit(pkg.INFO, "Opening SocketHub!\n")
 
 	// Open channels and make clients slice
 	hub.sendCh = make(chan *SocketMessage)
@@ -83,10 +85,10 @@ loop:
 			if message.Target != nil {
 				if _, client := hub.findClient(message.Target); client != nil {
 					if err := client.SendMessage(message); err != nil {
-						fmt.Printf("[Websocket] (!!) Failed to send message to target {%v}: %v\n", message.Target, err.Error())
+						socketLogger.Emit(pkg.ERROR, "Failed to send message to target {%v}: %v\n", message.Target, err.Error())
 					}
 				} else {
-					fmt.Printf("[Websocket] (!) Attempted to send message to target {%v}, but no matching client was found.\n", message.Target)
+					socketLogger.Emit(pkg.WARNING, "Attempted to send message to target {%v}, but no matching client was found.\n", message.Target)
 				}
 
 				break
@@ -100,28 +102,28 @@ loop:
 			// Register the client by pushing the received client in to the
 			// 'clients' slice
 			if idx, _ := hub.findClient(client.id); idx > -1 {
-				fmt.Printf("[Websocket] (!!) Attempted to register client that is already registered (duplicate uuid)! Illegal!\n")
+				socketLogger.Emit(pkg.ERROR, "Attempted to register client that is already registered (duplicate uuid)! Illegal!\n")
 				client.Close()
 
 				break
 			}
 
 			hub.clients = append(hub.clients, client)
-			fmt.Printf("[Websocket] (+) Registered new client {%v}\n", client.id)
+			socketLogger.Emit(pkg.NEW, "Registered new client {%v}\n", client.id)
 		case client := <-hub.deregisterCh:
 			// Deregister the client by removing the received client and closing it's sockets
 			// and channels
 			if idx, _ := hub.findClient(client.id); idx != -1 {
 				hub.clients = append(hub.clients[:idx], hub.clients[idx+1:]...)
-				fmt.Printf("[Websocket] (-) Deregistered client {%v}\n", client.id)
+				socketLogger.Emit(pkg.REMOVE, "Deregistered client {%v}\n", client.id)
 
 				break
 			}
 
-			fmt.Printf("[Websocket] (!) Attempted to deregister unknown client {%v}\n", client.id)
+			socketLogger.Emit(pkg.WARNING, "Attempted to deregister unknown client {%v}\n", client.id)
 		case <-hub.doneCh:
 			// Shutdown the socket hub, closing all clients and breaking this select loop
-			fmt.Printf("[Websocket] (-) Shutting down socket hub! Closing all clients.\n")
+			socketLogger.Emit(pkg.REMOVE, "Shutting down socket hub! Closing all clients.\n")
 			break loop
 		}
 	}
@@ -133,7 +135,7 @@ loop:
 // a matching ID
 func (hub *SocketHub) Send(message *SocketMessage) {
 	if !hub.running {
-		fmt.Printf("[Websocket] (!) Attempted to send message via socket hub, however the hub is offline. Ignoring message.\n")
+		socketLogger.Emit(pkg.WARNING, "Attempted to send message via socket hub, however the hub is offline. Ignoring message.\n")
 		return
 	}
 
@@ -143,7 +145,7 @@ func (hub *SocketHub) Send(message *SocketMessage) {
 // Upgrades a given HTTP request to a websocket and adds the new clients to the hub
 func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	if !hub.running {
-		fmt.Printf("[Websocket] (!!) Failed to upgrade incoming HTTP request to a websocket: SocketHub has not been started!\n")
+		socketLogger.Emit(pkg.ERROR, "Failed to upgrade incoming HTTP request to a websocket: SocketHub has not been started!\n")
 		return
 	}
 
@@ -151,14 +153,14 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	// upgraded the connection to a websocket.
 	id, err := uuid.NewRandom()
 	if err != nil {
-		fmt.Printf("[Websocket] (!!) Failed to generate UUID for new connection - aborting!\n")
+		socketLogger.Emit(pkg.ERROR, "Failed to generate UUID for new connection - aborting!\n")
 		return
 	}
 
 	// UUID success, upgrade the connection to a websocket
 	sock, err := hub.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Printf("[Websocket] (!!) Failed to upgrade incoming HTTP request to a websocket: %v\n", err.Error())
+		socketLogger.Emit(pkg.ERROR, "Failed to upgrade incoming HTTP request to a websocket: %v\n", err.Error())
 		return
 	}
 
@@ -197,7 +199,7 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Start the read loop for the client
 	if err := client.Read(hub.receiveCh); err != nil {
-		fmt.Printf("[Websocket] (!) Client {%v} closed, error: %v\n", client.id, err.Error())
+		socketLogger.Emit(pkg.WARNING, "Client {%v} closed, error: %v\n", client.id, err.Error())
 	}
 }
 
@@ -217,7 +219,7 @@ func (hub *SocketHub) Close() {
 // connected clients and sockets
 func (hub *SocketHub) close() {
 	if !hub.running {
-		fmt.Printf("[Websocket] (!) Attempted to close a socket hub that is not running!\n")
+		socketLogger.Emit(pkg.WARNING, "Attempted to close a socket hub that is not running!\n")
 		return
 	}
 
@@ -229,7 +231,7 @@ func (hub *SocketHub) close() {
 	// Reset the clients slice
 	hub.clients = nil
 	hub.running = false
-	fmt.Printf("[Websocket] (X) Socket hub is now closed!\n")
+	socketLogger.Emit(pkg.STOP, "Socket hub is now closed!\n")
 }
 
 // handleMessage is an internal method that accepts a message
@@ -237,7 +239,7 @@ func (hub *SocketHub) close() {
 // exists. If none exists, a warning is printed to the console
 func (hub *SocketHub) handleMessage(command *SocketMessage) {
 	if command.Type != Command {
-		fmt.Printf("[Websocket] (!) SocketHub received a message from client {%v} of type {%v} - this type is not allowed, only commands can be sent to the server!\n", command.Origin, command.Type)
+		socketLogger.Emit(pkg.WARNING, "SocketHub received a message from client {%v} of type {%v} - this type is not allowed, only commands can be sent to the server!\n", command.Origin, command.Type)
 		return
 	}
 
@@ -253,17 +255,17 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 
 	if handler, ok := hub.handlers[command.Title]; ok {
 		if err := handler(hub, command); err != nil {
-			fmt.Printf("[Websocket] (!!) Handler for command '%v' returned error - %v\n", command.Title, err.Error())
+			socketLogger.Emit(pkg.ERROR, "Handler for command '%v' returned error - %v\n", command.Title, err.Error())
 			replyWithError(err.Error())
 		} else {
-			fmt.Printf("[Websocket] (OK) Handler for command '%v' executed successfully\n", command.Title)
+			socketLogger.Emit(pkg.SUCCESS, "Handler for command '%v' executed successfully\n", command.Title)
 		}
 
 		return
 	}
 
 	replyWithError("Unknown command")
-	fmt.Printf("[Websocket] (!) No handler found for command '%v'\n", command.Title)
+	socketLogger.Emit(pkg.WARNING, "No handler found for command '%v'\n", command.Title)
 }
 
 // findClient returns a socketClient with the matching uuid if

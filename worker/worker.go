@@ -1,9 +1,10 @@
 package worker
 
 import (
-	"fmt"
-	"log"
+	"github.com/hbomb79/TPA/pkg"
 )
+
+var workerLogger = pkg.Log.GetLogger("Worker", pkg.CORE)
 
 // Each stage represents a certain stage in the pipeline
 type PipelineStage int
@@ -67,14 +68,14 @@ func NewWorker(label string, task WorkerTaskMeta, pipelineStage PipelineStage, w
 }
 
 func (worker *taskWorker) Start() {
-	fmt.Printf("[Worker] Starting worker for stage %v with label %v\n", worker.pipelineStage, worker.label)
+	workerLogger.Emit(pkg.NEW, "Starting worker for stage %v with label %v\n", worker.pipelineStage, worker.label)
 	worker.currentStatus = Working
 	if err := worker.task.Execute(worker); err != nil {
-		log.Panicf("[Error] Worker for stage %v with label %v has reported an error(%T): %v\n", worker.pipelineStage, worker.label, err, err.Error())
+		workerLogger.Emit(pkg.ERROR, "Worker for stage %v with label %v has reported an error(%T): %v\n", worker.pipelineStage, worker.label, err, err.Error())
 	}
 
 	worker.currentStatus = Finished
-	fmt.Printf("[Worker] Worker for stage %v with label %v has stopped\n", worker.pipelineStage, worker.label)
+	workerLogger.Emit(pkg.STOP, "Worker for stage %v with label %v has stopped\n", worker.pipelineStage, worker.label)
 }
 
 // Stage method returns the current status of this worker,
@@ -116,7 +117,7 @@ func (worker *taskWorker) Sleep() (isAlive bool) {
 	if _, isAlive = <-worker.wakeupChan; isAlive {
 		worker.currentStatus = Working
 	} else {
-		fmt.Printf("[Worker] (X) Wakeup channel for worker '%v' has been closed - worker is exiting\n", worker.label)
+		workerLogger.Emit(pkg.STOP, "Wakeup channel for worker '%v' has been closed - worker is exiting\n", worker.label)
 		worker.currentStatus = Finished
 	}
 

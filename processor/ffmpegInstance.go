@@ -10,8 +10,11 @@ import (
 	"strings"
 
 	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/hbomb79/TPA/pkg"
 	"github.com/hbomb79/TPA/profile"
 )
+
+var ffmpegLogger = pkg.Log.GetLogger("FFMPEG", pkg.CORE)
 
 const DEFAULT_THREADS_REQUIRED int = 1
 
@@ -29,87 +32,33 @@ type ffmpegInstance struct {
 	progress    *ffmpegProgress
 	important   bool
 	trouble     Trouble
-	cancelChan  chan int
+	cancelChan  chan bool
+	troubleChan chan bool
 	item        *QueueItem
 	profileTag  string
 	targetLabel string
 }
 
-func (ffmpegI *ffmpegInstance) Start(proc *Processor) error {
-	queueItem := ffmpegI.item
-
-	ffmpegCfg := &ffmpeg.Config{
-		ProgressEnabled: true,
-		FfmpegBinPath:   proc.Config.Format.FfmpegBinaryPath,
-		FfprobeBinPath:  proc.Config.Format.FfprobeBinaryPath,
-	}
-
-	pIdx, p := proc.Profiles.FindProfileByTag(ffmpegI.profileTag)
-	if pIdx == -1 {
-		p = proc.Profiles.Profiles()[0]
-	}
-
-	t := p.Targets()[0]
-
-	cmdContext, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	progress, err := ffmpeg.
-		New(ffmpegCfg).
-		Input(queueItem.Path).
-		Output(ffmpegI.GetOutputPath()).
-		WithContext(&cmdContext).
-		Start(t.FFmpegOptions)
-
-	if err != nil {
-		// Try and pick out some relevant information from the HUGE
-		// output log from ffmpeg. The error we get contains lots of information
-		// about how the binary was compiled... this is useless info, we just
-		// want the 'message' JSON that is encoded inside.
-		messageMatcher := regexp.MustCompile(`(?s)message: ({.*})`)
-		groups := messageMatcher.FindStringSubmatch(err.Error())
-		if messageMatcher == nil {
-			return err
-		}
-
-		// ffmpeg error is returned as a JSON encoded string. Unmarshal so we can extract the
-		// error string..
-		var out map[string]interface{}
-		jsonErr := json.Unmarshal([]byte(groups[1]), &out)
-		if jsonErr != nil {
-			// We failed to extract the info.. just use the entire string as our error
-			return errors.New(groups[1])
-		}
-
-		// Extract the exception from this result
-		ffmpegException := out["error"].(map[string]interface{})
-		return errors.New(ffmpegException["string"].(string))
-	}
-
-	// Progress listener. Automatically cancels the above context
-	// when ffmpeg execution is complete
-	go func() {
-		for v := range progress {
-			ffmpegI.progress = &ffmpegProgress{
-				v.GetCurrentBitrate(),
-				v.GetCurrentTime(),
-				v.GetCurrentBitrate(),
-				v.GetProgress(),
-				v.GetSpeed(),
+// Start manages this ffmpeg instance by capturing any errors, handling troubled states, and
+// directly executing the ffmpeg transcode.
+func (ffmpegI *ffmpegInstance) Start(proc *Processor) {
+	for {
+		if ffmpegI.trouble != nil {
+			err := ffmpegI.beginTranscode()
+			if t, ok := err.(Trouble); ok {
+				ffmpegI.raiseTrouble(t)
+			} else {
+				// Success
+				ffmpegI.SetStatus(FINISHED)
+			}
+		} else {
+			// Wait for trouble to be resolved
+			_, ok := <-ffmpegI.troubleChan
+			if !ok {
+				return
 			}
 		}
-
-		// FFmpeg completed execution
-		ffmpegI.Stop()
-	}()
-
-	// Wait for cancel signal either due to completion
-	// of ffmpeg, or manual cancellation from the user
-	// Cancellation of the context is deferred to function
-	// return
-	<-ffmpegI.cancelChan
-
-	return nil
+	}
 }
 
 func (ffmpegI *ffmpegInstance) ThreadsRequired() int {
@@ -125,7 +74,7 @@ func (ffmpegI *ffmpegInstance) Stop() {
 	if ffmpegI.status != WORKING {
 		// Can't cancel something that isn't happening. We should
 		// ignore this request.
-		fmt.Printf("[Commander] (!) Ignoring request to cancel ffmpeg instance %v\ninstance has incorrect state {%v}\n", ffmpegI, ffmpegI.status)
+		ffmpegLogger.Emit(pkg.INFO, "Ignoring request to cancel ffmpeg instance %v\ninstance has incorrect state {%v}\n", ffmpegI, ffmpegI.status)
 		return
 	}
 
@@ -133,10 +82,10 @@ func (ffmpegI *ffmpegInstance) Stop() {
 	// because the instance may be cancelled already when we call this
 	// if we're unlucky enough to experience a race condition to cancel
 	select {
-	case ffmpegI.cancelChan <- 1:
-		fmt.Printf("[Commander] (X) Cancelled ffmpeg instance %v\n", ffmpegI)
+	case ffmpegI.cancelChan <- true:
+		ffmpegLogger.Emit(pkg.STOP, "Cancelled ffmpeg instance %v\n", ffmpegI)
 	default:
-		fmt.Printf("[Commander] (!) Failed to cancel ffmpeg instance %v\nInstance may already be closed\n", ffmpegI)
+		ffmpegLogger.Emit(pkg.WARNING, "Failed to cancel ffmpeg instance %v\nInstance may already be closed\n", ffmpegI)
 	}
 }
 
@@ -178,7 +127,7 @@ func (ffmpegI *ffmpegInstance) composeCommandArguments(sourceCommand string) str
 		case "%OUTPUT_PATH%":
 			return item.TitleInfo.OutputPath()
 		default:
-			fmt.Printf("[Commander] (!) Encountered unknown command substitution '%s' in source command '%s'\n", command, sourceCommand)
+			ffmpegLogger.Emit(pkg.WARNING, "Encountered unknown command substitution '%s' in source command '%s'\n", command, sourceCommand)
 			return command
 		}
 	}
@@ -222,6 +171,35 @@ func (ffmpegI *ffmpegInstance) Item() *QueueItem {
 
 func (ffmpegI *ffmpegInstance) Trouble() Trouble {
 	return ffmpegI.trouble
+}
+
+func (ffmpegI *ffmpegInstance) ResolveTrouble(args map[string]interface{}) error {
+	tr := ffmpegI.trouble
+	if _, ok := tr.(*FormatTaskError); !ok {
+		return fmt.Errorf("cannot resolve trouble %v: trouble expected to be a FormatTaskError, got %T", tr, tr)
+	}
+
+	if err := tr.Resolve(args); err != nil {
+		return fmt.Errorf("cannot resolve trouble %v: %s", tr, err.Error())
+	}
+
+	// The trouble resolved! Apply the content of it's resolution context to this instance and then signal
+	// the instance that is's okay to continue working.
+	res := tr.ResolutionContext()
+	if v, ok := res["profileTag"]; v != nil && ok {
+		ffmpegI.profileTag = v.(string)
+	}
+
+	if v, ok := res["targetLabel"]; v != nil && ok {
+		ffmpegI.targetLabel = v.(string)
+	}
+
+	select {
+	case ffmpegI.troubleChan <- true:
+	default:
+	}
+
+	return nil
 }
 
 func (ffmpegI *ffmpegInstance) ProfileTag() string {
@@ -278,6 +256,89 @@ func (ffmpegI *ffmpegInstance) getTargetInstance() *profile.Target {
 	return profile.FindTarget(ffmpegI.targetLabel)
 }
 
+func (ffmpegI *ffmpegInstance) beginTranscode() error {
+	queueItem := ffmpegI.item
+	proc := queueItem.processor
+
+	ffmpegCfg := &ffmpeg.Config{
+		ProgressEnabled: true,
+		FfmpegBinPath:   proc.Config.Format.FfmpegBinaryPath,
+		FfprobeBinPath:  proc.Config.Format.FfprobeBinaryPath,
+	}
+
+	pIdx, p := proc.Profiles.FindProfileByTag(ffmpegI.profileTag)
+	if pIdx == -1 {
+		p = proc.Profiles.Profiles()[0]
+	}
+
+	t := p.Targets()[0]
+
+	var outputPath = ffmpegI.GetOutputPath()
+
+	cmdContext, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	progress, err := ffmpeg.
+		New(ffmpegCfg).
+		Input(queueItem.Path).
+		Output(outputPath).
+		WithContext(&cmdContext).
+		Start(t.FFmpegOptions)
+
+	if err != nil {
+		return ffmpegI.parseFfmpegError(err)
+	}
+
+	// Progress listener. Automatically cancels the above context
+	// when ffmpeg execution is complete
+	for v := range progress {
+		ffmpegI.progress = &ffmpegProgress{
+			v.GetCurrentBitrate(),
+			v.GetCurrentTime(),
+			v.GetCurrentBitrate(),
+			v.GetProgress(),
+			v.GetSpeed(),
+		}
+	}
+
+	return nil
+}
+
+func (ffmpegI *ffmpegInstance) parseFfmpegError(err error) error {
+	// Try and pick out some relevant information from the HUGE
+	// output log from ffmpeg. The error we get contains lots of information
+	// about how the binary was compiled... this is useless info, we just
+	// want the 'message' JSON that is encoded inside.
+	messageMatcher := regexp.MustCompile(`(?s)message: ({.*})`)
+	groups := messageMatcher.FindStringSubmatch(err.Error())
+	if messageMatcher == nil {
+		return err
+	}
+
+	// ffmpeg error is returned as a JSON encoded string. Unmarshal so we can extract the
+	// error string..
+	var out map[string]interface{}
+	jsonErr := json.Unmarshal([]byte(groups[1]), &out)
+	if jsonErr != nil {
+		// We failed to extract the info.. just use the entire string as our error
+		return errors.New(groups[1])
+	}
+
+	// Extract the exception from this result
+	ffmpegException := out["error"].(map[string]interface{})
+	return errors.New(ffmpegException["string"].(string))
+}
+
+func (ffmpegI *ffmpegInstance) raiseTrouble(t Trouble) {
+	ffmpegLogger.Emit(pkg.WARNING, "Trouble raised {%v}!\n", t)
+	if ffmpegI.trouble != nil {
+		ffmpegLogger.Emit(pkg.WARNING, "Instance is already troubled, new trouble instance will overwrite!\n")
+	}
+
+	ffmpegI.trouble = t
+	ffmpegI.SetStatus(TROUBLED)
+}
+
 func newFfmpegInstance(item *QueueItem, profileTag string, targetLabel string) CommanderTask {
 	return &ffmpegInstance{
 		item:        item,
@@ -285,5 +346,7 @@ func newFfmpegInstance(item *QueueItem, profileTag string, targetLabel string) C
 		targetLabel: targetLabel,
 		pid:         -1,
 		status:      PENDING,
+		cancelChan:  make(chan bool),
+		troubleChan: make(chan bool),
 	}
 }

@@ -5,10 +5,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hbomb79/TPA/pkg"
 	"github.com/hbomb79/TPA/profile"
 	"github.com/hbomb79/TPA/worker"
 	// "github.com/mitchellh/mapstructure"
 )
+
+var commanderLogger = pkg.Log.GetLogger("Commander", pkg.CORE)
 
 // Commander interface for use outside of this file/package
 type Commander interface {
@@ -37,6 +40,8 @@ const (
 
 	FINISHED
 
+	CANCELLED
+
 	// TROUBLED tasks require intervention. Inspect 'Trouble' of task via Trouble() method
 	TROUBLED
 )
@@ -44,7 +49,7 @@ const (
 // CommanderTask is the basic interface of any tasks that the Commander operates
 // on.
 type CommanderTask interface {
-	Start(*Processor) error
+	Start(*Processor)
 	Item() *QueueItem
 	ProfileTag() string
 	TargetLabel() string
@@ -53,8 +58,10 @@ type CommanderTask interface {
 	Status() CommanderTaskStatus
 	SetStatus(CommanderTaskStatus)
 	Trouble() Trouble
+	ResolveTrouble(map[string]interface{}) error
 	Important() bool
 	Progress() interface{}
+	GetOutputPath() string
 }
 
 // taskData is a struct that encapsulates all data
@@ -103,11 +110,10 @@ type ffmpegCommander struct {
 }
 
 // Start is the main entry point for the Commander. This method is blocking
-// and will only return once the queueChangedChannel is closed (manually, or via
-// the Stop method which is preferred). TODO: Stop method.
+// and will only return once the commander has finished (by calling Stop())
 func (commander *ffmpegCommander) Start(parentWg *sync.WaitGroup) error {
 	defer parentWg.Done()
-	fmt.Printf("[Commander] (O) Listening on all data channels.\n")
+	commanderLogger.Emit(pkg.NEW, "Listening on all data channels.\n")
 	wg := &sync.WaitGroup{}
 main:
 	for {
@@ -128,7 +134,7 @@ main:
 				commander.instanceLock.Lock()
 				defer commander.instanceLock.Unlock()
 
-				fmt.Printf("[Commander] (+) Newly discovered target %#v\n", target)
+				commanderLogger.Emit(pkg.NEW, "Newly discovered target %#v\n", target)
 				instance := newFfmpegInstance(target.item, target.profileTag, target.targetLabel)
 				commander.instances = append(commander.instances, instance)
 			}()
@@ -141,7 +147,7 @@ main:
 			}()
 
 		case <-commander.doneChannel:
-			fmt.Print("[Commander] STOP signal received!\n")
+			commanderLogger.Emit(pkg.STOP, "STOP signal received!\n")
 			break main
 		}
 
@@ -152,13 +158,12 @@ main:
 		}()
 	}
 
-	fmt.Printf("[Commander] (X) Channel loop terminated - Waiting for running actions to stop...\n")
+	commanderLogger.Emit(pkg.STOP, "Channel loop terminated - Waiting for running actions to stop...\n")
 	wg.Wait()
-	fmt.Printf("[Commander] (X) Terminating ffmpeg instances...\n")
+	commanderLogger.Emit(pkg.STOP, "Terminating ffmpeg instances...\n")
 	for _, ffmpegI := range commander.instances {
 		ffmpegI.Stop()
 	}
-	fmt.Printf("[Commander] (X) Closed.\n")
 
 	return nil
 }
@@ -176,9 +181,18 @@ func (commander *ffmpegCommander) startInstance(instance CommanderTask) {
 	commander.threadPoolUsed += instance.ThreadsRequired()
 	instance.SetStatus(WORKING)
 	go func() {
-		err := instance.Start(commander.processor)
-		if err != nil {
-			commander.raiseTrouble(instance, err)
+		instance.Start(commander.processor)
+
+		if instance.Status() == CANCELLED {
+			//TODO Perform cleanup of partially formatted content
+		} else if instance.Status() == FINISHED {
+			instance.Item().ExportDetails = append(instance.Item().ExportDetails, &ExportDetail{
+				TargetLabel:  instance.TargetLabel(),
+				ProfileLabel: instance.ProfileTag(),
+				Path:         instance.GetOutputPath(),
+			})
+		} else {
+			commanderLogger.Emit(pkg.WARNING, "FFMPEG instance %v exited with abormal state %v!\n", instance, instance.Status())
 		}
 
 		// Whatever resources this instance had are now freed. Critical section, protect with mutex
@@ -270,6 +284,17 @@ func (commander *ffmpegCommander) extractItemsFromWindow() []*QueueItem {
 
 		itemsScanned++
 		if item.Stage == worker.Format {
+			if t := item.Trouble; t != nil {
+				// Item is troubled, if the user has provided a resolution then we can address it - otherwise
+				// we treat this item as if it doesn't exist (does not contribute to itemsScanned)
+				if len(t.ResolutionContext()) == 0 {
+					return false
+				}
+
+				item.ClearTrouble()
+				item.SetStatus(Pending)
+			}
+
 			items = append(items, item)
 		}
 
@@ -286,12 +311,20 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 	items, targets := commander.extractItemsFromWindow(), make([]*taskData, 0)
 
 	for _, item := range items {
-		profile := commander.selectBestProfile(item)
-		if profile == nil {
-			if item.Trouble == nil || item.Trouble.Type() != COMMANDER_FAILURE {
-				fmt.Printf("[Commander] (!!) QueueItem %s has invalid profile tag '%s'. Profile tag not found, cannot complete transcode!\n", item.Name, item.ProfileTag)
-				item.SetTrouble(&ProfileSelectionError{NewBaseTaskError(fmt.Sprintf("Invalid profile tag '%s' - not found", item.ProfileTag), item, COMMANDER_FAILURE)})
+		profile, err := commander.selectBestProfile(item)
+		if err != nil {
+			if item.Trouble == nil {
+				commanderLogger.Emit(pkg.ERROR, "Profile selection failed for item %s: %s\n", item.Name, err.Error())
+				item.SetTrouble(&ProfileSelectionError{NewBaseTaskError(fmt.Sprintf("Profile selection failed - %s", err.Error()), item, COMMANDER_FAILURE)})
 			}
+
+			continue
+		}
+
+		if len(profile.Targets()) == 0 {
+			commanderLogger.Emit(pkg.ERROR, "Profile selection failed for item: %s: Profile has no targets!\n", item.Name)
+			item.SetTrouble(&ProfileSelectionError{NewBaseTaskError(fmt.Sprintf("Profile selection failed - Profile '%s' was selected for this item and this profile has NO TARGETS.\n", profile.Tag()), item, COMMANDER_FAILURE)})
+
 			continue
 		}
 
@@ -305,17 +338,27 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 
 // selectBestProfile iterates over each TPA profile, checking to see which is
 // the best fit for our QueueItem.
-func (commander *ffmpegCommander) selectBestProfile(item *QueueItem) profile.Profile {
-	if idx, p := commander.processor.Profiles.FindProfileByTag(item.ProfileTag); idx > 0 {
-		return p
+func (commander *ffmpegCommander) selectBestProfile(item *QueueItem) (profile.Profile, error) {
+	profileList := commander.processor.Profiles
+	if len(profileList.Profiles()) == 0 {
+		return nil, fmt.Errorf("cannot perform profile selection for item %s because server has NO profiles", item)
 	}
 
-	for _, profile := range commander.processor.Profiles.Profiles() {
+	if item.ProfileTag != "" {
+		if idx, p := profileList.FindProfileByTag(item.ProfileTag); idx > 0 {
+			return p, nil
+		}
+
+		return nil, fmt.Errorf("cannot find profile '%s'. Please ensure this profile name is valid", item.ProfileTag)
+	}
+
+	for _, profile := range profileList.Profiles() {
 		//TODO Filter profiles based on automatic-application filtering
-		return profile
+		return profile, nil
 	}
 
-	return nil
+	// No match found, we default to the first profile.
+	return profileList.Profiles()[0], nil
 }
 
 // runHealthChecks is an internal method that relays the current state of each item
@@ -364,36 +407,6 @@ func (commander *ffmpegCommander) runHealthChecks() {
 			}
 		}
 	}
-}
-
-// raiseTrouble is an internal method that will raise a FormatTaskContainerError on
-// the item that owns the instance provided (instance.context.item). If the item
-// already has a FormatTaskContainerError assigned, this method will simply insert a new
-// FormatTaskError into the container. Any other type of pre-existing trouble (including nil)
-// will be replaced with a new container.
-func (commander *ffmpegCommander) raiseTrouble(instance CommanderTask, err error) {
-	fmt.Printf("[Trouble] (!!) Commander raising FormatTaskError for instance %v\n\t%s\n", instance, err.Error())
-	item := instance.Item()
-
-	var container *FormatTaskContainerError
-	if item.Trouble != nil {
-		v, ok := item.Trouble.(*FormatTaskContainerError)
-		if !ok {
-			// Incorrect trouble type - let's just overwrite it because that's easier
-			fmt.Printf("[Commander] (!) Item's pre-existing Trouble is not of the correct type (%T, expected *FormatTaskContainerError). Overwriting!\n", item.Trouble)
-			container = nil
-		}
-
-		container = v
-	}
-
-	if container == nil {
-		container = &FormatTaskContainerError{NewBaseTaskError("One or more FFMpeg instances are troubled", item, FFMPEG_FAILURE), make([]Trouble, 0)}
-	}
-
-	container.Raise(&FormatTaskError{NewBaseTaskError(err.Error(), instance.Item(), FFMPEG_FAILURE), instance})
-	item.SetTrouble(container)
-	instance.SetStatus(TROUBLED)
 }
 
 // findTask accepts some taskData, and returns the CommanderTask that is working on it, and it's index. If

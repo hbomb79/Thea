@@ -19,6 +19,8 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
+var procLogger = pkg.Log.GetLogger("Processor", pkg.CORE)
+
 // TPAConfig is the struct used to contain the
 // various user config supplied by file, or
 // manually inside the code.
@@ -80,7 +82,6 @@ type Processor struct {
 	Profiles           profile.ProfileList
 	FfmpegCommander    Commander
 	KnownFfmpegOptions map[string]string
-	DatabaseServer     pkg.DatabaseServer
 	ctxCancel          context.CancelFunc
 	ctx                context.Context
 	serviceWg          *sync.WaitGroup
@@ -108,10 +109,10 @@ type ProcessorUpdate struct {
 
 // Instantiates a new processor by creating the
 // bare struct, and loading in the configuration
-func NewProcessor() *Processor {
+func NewProcessor() (*Processor, error) {
 	opts, err := profile.ToArgsMap(&ffmpeg.Options{})
 	if err != nil {
-		fmt.Printf("[Processor] (!) Failed to initialise map of known FFMPEG options!")
+		return nil, err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -121,12 +122,11 @@ func NewProcessor() *Processor {
 		UpdateChan:         make(chan int),
 		pendingUpdates:     make(map[int]bool),
 		KnownFfmpegOptions: opts,
-		DatabaseServer:     pkg.NewDatabaseServer(),
 		managerWg:          &sync.WaitGroup{},
 		serviceWg:          &sync.WaitGroup{},
 		ctx:                ctx,
 		ctxCancel:          cancel,
-	}
+	}, nil
 }
 
 // Returns the processor provided after setting the Config
@@ -149,28 +149,32 @@ func (p *Processor) WithNegotiator(n Negotiator) *Processor {
 // This method will wait on the WaitGroup attached to the WorkerPool
 func (p *Processor) Start(readyChan chan bool) error {
 	defer p.shutdown()
+	defer func() {
+		if r := recover(); r != nil {
+			procLogger.Emit(pkg.FATAL, "\n\nPANIC! %v\n\nShutting Down!\n\n", r)
+			p.shutdown()
+		}
+	}()
 
 	dbErr := make(chan error)
 	if !p.Config.ExternalDatabase {
-		fmt.Printf("[Processor] Initialising embedded database...\n")
+		procLogger.Emit(pkg.INFO, "Initialising embedded database...\n")
 		_, err := pkg.InitialiseDockerDatabase(p.Config.Database, dbErr)
 		if err != nil {
 			return err
 		}
 	}
 
-	fmt.Printf("[Processor] Initialising embedded pgAdmin server...\n")
+	procLogger.Emit(pkg.INFO, "Initialising embedded pgAdmin server...\n")
 	_, err := pkg.InitialiseDockerPgAdmin(dbErr)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("[Processor] Connecting to database with GORM...\n")
-	if err := p.DatabaseServer.Connect(p.Config.Database); err != nil {
+	procLogger.Emit(pkg.INFO, "Connecting to database with GORM...\n")
+	if err := pkg.DB.Connect(p.Config.Database); err != nil {
 		return err
 	}
-	fmt.Printf("[Processor] Auto-migrating database...\n")
-	p.DatabaseServer.GetInstance().AutoMigrate(&QueueItem{}, &TitleInfo{}, &OmdbInfo{})
 
 	var cacheDir string = p.Config.CacheDirPath
 	var configDir string = p.Config.ConfigDirPath
@@ -210,26 +214,26 @@ func (p *Processor) Start(readyChan chan bool) error {
 	readyChan <- true
 	select {
 	case <-exit:
-		fmt.Printf("[Processor] (!!) SIGTERM/Interrupt caught! Shutting down...\n")
+		procLogger.Emit(pkg.INFO, "SIGTERM/Interrupt caught! Shutting down...\n")
 	case msg := <-dbErr:
-		fmt.Printf("[Processor] (!!) Database failure: %v\nShutting down...\n", msg)
+		procLogger.Emit(pkg.FATAL, "Database failure: %v\nShutting down...\n", msg)
 	}
 
 	return nil
 }
 
 func (p *Processor) shutdown() {
-	fmt.Print("[Processor] (X) Closing all managers...\n")
+	procLogger.Emit(pkg.STOP, "Closing all managers...\n")
 	p.WorkerPool.CloseWorkers()
 	if p.FfmpegCommander != nil {
 		p.FfmpegCommander.Stop()
 	}
 	p.managerWg.Wait()
 
-	fmt.Print("[Processor] (X) Closing all containers...\n")
+	procLogger.Emit(pkg.STOP, "Closing all containers...\n")
 	pkg.Docker.Shutdown(time.Second * 15)
 
-	fmt.Print("[Processor] (X) Closing all data streams...\n")
+	procLogger.Emit(pkg.STOP, "Closing all data streams...\n")
 	p.ctxCancel()
 	p.serviceWg.Wait()
 }
@@ -328,13 +332,12 @@ func (p *Processor) handleItemModtimes(ctx context.Context, wg *sync.WaitGroup) 
 
 		info, err := os.Stat(item.Path)
 		if err != nil {
-			fmt.Printf("[Processor] (!) Failed to get file info for %v during import stage: %v\n", item.Path, err.Error())
+			procLogger.Emit(pkg.WARNING, "Failed to get file info for %v during import stage: %v\n", item.Path, err.Error())
 			return false
 		}
 
 		if time.Since(info.ModTime()) > time.Minute*2 {
 			q.AdvanceStage(item)
-			fmt.Printf("[Processor] (O) Item %v passed import checks - now in Title stage\n", item.Name)
 		}
 
 		return false
@@ -353,7 +356,7 @@ func (p *Processor) handleItemModtimes(ctx context.Context, wg *sync.WaitGroup) 
 func (p *Processor) handleUpdateStream(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 	if p.Negotiator == nil {
-		fmt.Printf("[Processor] (!) Processor began to listen for updates for transmission, however no Negotiator is attached. Aborting.\n")
+		procLogger.Emit(pkg.WARNING, "Processor began to listen for updates for transmission, however no Negotiator is attached. Aborting.\n")
 		return
 	}
 

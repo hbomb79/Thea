@@ -6,8 +6,11 @@ import (
 	"sync"
 
 	"github.com/hbomb79/TPA/cache"
+	"github.com/hbomb79/TPA/pkg"
 	"github.com/mitchellh/mapstructure"
 )
+
+var profileLogger = pkg.Log.GetLogger("ProfileList", pkg.CORE)
 
 type ProfileFindCallback func(Profile) bool
 type ProfileList interface {
@@ -40,7 +43,7 @@ func NewList(persistentPath string) ProfileList {
 		for _, v := range profileStore.([]interface{}) {
 			var p profile
 			if err := mapstructure.Decode(v, &p); err != nil {
-				fmt.Printf("[ProfileList] (!!) Failure to decode cache content for profile list:\n\t%v\n", err.Error())
+				profileLogger.Emit(pkg.ERROR, "Failure to decode cache content for profile list:\n\t%v\n", err.Error())
 			} else {
 				list.profiles = append(list.profiles, &p)
 			}

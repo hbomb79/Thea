@@ -36,12 +36,10 @@ func NewTarget(label string) *Target {
 
 func (t *Target) SetCommand(command interface{}) error {
 	var output *ffmpeg.Options
-	fmt.Printf("Set target %v command to %#v\n", t.Label, command)
 	err := mapstructure.Decode(command, &output)
 	if err != nil {
 		return fmt.Errorf("failed to Command: %v", err.Error())
 	}
-	fmt.Printf("Target command from %#v decoded to %#v\n\n", command, output)
 
 	t.FFmpegOptions = output
 
@@ -161,12 +159,10 @@ func (profile *profile) EjectTarget(label string) error {
 
 func (profile *profile) SetMatchConditions(conditions interface{}) error {
 	var output []*MatchComponent
-	fmt.Printf("Set match conditions to %#v\n", conditions)
 	err := mapstructure.Decode(conditions, &output)
 	if err != nil {
 		return fmt.Errorf("failed to SetMatchConditions: %v", err.Error())
 	}
-	fmt.Printf("Match Conditions from %#v decoded to %#v\n\n", conditions, output)
 
 	if err := profile.validateMatchConditions(output); err != nil {
 		return fmt.Errorf("failed to SetMatchConditions: %v", err.Error())

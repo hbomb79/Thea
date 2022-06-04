@@ -16,15 +16,6 @@
 
     const { open } = getContext("simple-modal");
 
-    const countUse = function (tag: string): number {
-        let count = 0;
-        details.forEach((val: QueueDetails) => {
-            if (val.profile_tag == tag) count++;
-        });
-
-        return count;
-    };
-
     const removeProfile = (profileTag: string) => {
         console.log("Removing profile:", profileTag);
 
@@ -107,7 +98,7 @@
 
 <ul class="profiles">
     <ReorderableList key={(profile) => profile.tag} list={profiles} let:item on:reordered={reorderProfile}>
-        <ServerProfileTile profile={item} usages={countUse(item.tag)} on:remove={(ev) => removeProfile(ev.detail)} />
+        <ServerProfileTile profile={item} on:remove={(ev) => removeProfile(ev.detail)} />
     </ReorderableList>
 
     <li class="profile create" on:click={openCreateProfileDialog}>

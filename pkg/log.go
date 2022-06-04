@@ -66,6 +66,10 @@ type LoggerManager interface {
 
 var Log LoggerManager = &loggerMgr{
 	offset: 0,
+	listeners: map[LogContext][]struct {
+		status   LogStatus
+		listener LogListener
+	}{},
 }
 
 type loggerMgr struct {

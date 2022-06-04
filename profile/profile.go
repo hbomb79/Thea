@@ -10,43 +10,27 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-type Profile interface {
-	Targets() []*Target
-	InsertTarget(*Target) error
-	MoveTarget(string, int) error
-	EjectTarget(string) error
-	FindTarget(string) *Target
-	Tag() string
-	SetMatchConditions(interface{}) error
-}
-
-type Target struct {
-	Label          string          `mapstructure:"label" json:"label"`
-	OutputPath     string          `mapstructure:"outputPath" json:"outputPath"`
-	FFmpegOptions  *ffmpeg.Options `mapstructure:"command" json:"command"`
-	ThreadBlocking bool            `mapstructure:"blocking" json:"blocking"`
-}
-
-func NewTarget(label string) *Target {
-	return &Target{
-		Label:         label,
-		FFmpegOptions: &ffmpeg.Options{},
-	}
-}
-
-func (t *Target) SetCommand(command interface{}) error {
-	var output *ffmpeg.Options
-	err := mapstructure.Decode(command, &output)
-	if err != nil {
-		return fmt.Errorf("failed to Command: %v", err.Error())
-	}
-
-	t.FFmpegOptions = output
-
-	return nil
-}
-
 type MatchType int
+type ModifierType int
+type MatchKey int
+
+const (
+	TITLE MatchKey = iota
+	RESOLUTION
+	SEASON_NUMBER
+	EPISODE_NUMBER
+	SOURCE_PATH
+	SOURCE_NAME
+	SOURCE_EXTENSION
+)
+
+func (e MatchKey) Values() []string {
+	return []string{"TITLE", "RESOLUTION", "SEASON_NUMBER", "EPISODE_NUMBER", "SOURCE_PATH", "SOURCE_NAME", "SOURCE_EXTENSION"}
+}
+
+func (e MatchKey) String() string {
+	return e.Values()[e]
+}
 
 const (
 	EQUALS MatchType = iota
@@ -59,34 +43,171 @@ const (
 	IS_NOT_PRESENT
 )
 
-type ModifierType int
+func (e MatchType) Values() []string {
+	return []string{"EQUALS", "NOT_EQUALS", "MATCHES", "DOES_NOT_MATCH", "LESS_THAN", "GREATER_THAN", "IS_PRESENT", "IS_NOT_PRESENT"}
+}
+
+func (e MatchType) String() string {
+	return e.Values()[e]
+}
 
 const (
 	AND ModifierType = iota
 	OR
 )
 
+func (e ModifierType) Values() []string {
+	return []string{"AND", "OR"}
+}
+
+func (e ModifierType) String() string {
+	return e.Values()[e]
+}
+
+func MatchKeyAcceptableTypes() map[MatchKey][]MatchType {
+	return map[MatchKey][]MatchType{
+		TITLE:            {MATCHES, DOES_NOT_MATCH, IS_NOT_PRESENT, IS_PRESENT},
+		RESOLUTION:       {MATCHES, DOES_NOT_MATCH, IS_NOT_PRESENT, IS_PRESENT},
+		SEASON_NUMBER:    {EQUALS, NOT_EQUALS, LESS_THAN, GREATER_THAN, IS_NOT_PRESENT, IS_PRESENT},
+		EPISODE_NUMBER:   {EQUALS, NOT_EQUALS, LESS_THAN, GREATER_THAN, IS_NOT_PRESENT, IS_PRESENT},
+		SOURCE_PATH:      {MATCHES, DOES_NOT_MATCH, IS_PRESENT, IS_NOT_PRESENT},
+		SOURCE_NAME:      {MATCHES, DOES_NOT_MATCH, IS_PRESENT, IS_NOT_PRESENT},
+		SOURCE_EXTENSION: {MATCHES, DOES_NOT_MATCH, IS_PRESENT, IS_NOT_PRESENT},
+	}
+}
+
 type MatchComponent struct {
-	Key         string       `json:"key"`
+	Key         MatchKey     `json:"key"`
 	MatchType   MatchType    `json:"matchType"`
 	Modifier    ModifierType `json:"modifier"`
 	MatchTarget interface{}  `json:"matchTarget"`
 }
 
+func (cond *MatchComponent) Validate() error {
+	const ERR_FMT = "Validation error - "
+	acceptableTypes := MatchKeyAcceptableTypes()
+
+	// 1. Ensure that the match key exists
+	types, keyExists := acceptableTypes[cond.Key]
+	if !keyExists {
+		return fmt.Errorf("%vMatchComponent has unknown key %v", ERR_FMT, cond.Key)
+	}
+
+	// 2. Ensure the match key is compatible with the match type provided
+	if i, _ := find(types, cond.MatchType); i == -1 {
+		return fmt.Errorf("%vMatchComponent has key %s however the match type provided (%s) is not compatible with this key", ERR_FMT, cond.Key, cond.MatchType)
+	}
+
+	// 3. Ensure the values for the match target makes sense in the context of the match type
+	switch cond.MatchType {
+	case MATCHES:
+		fallthrough
+	case DOES_NOT_MATCH:
+		// expects regular expression
+		if _, err := regexp.Compile(cond.MatchTarget.(string)); err != nil {
+			return fmt.Errorf("%vMatchComponent %v expects the target to be Regexp compliant, got '%v' while trying to parse '%v' as a regular expression", ERR_FMT, cond.Key, err.Error(), cond.MatchTarget)
+		}
+	case LESS_THAN:
+		fallthrough
+	case GREATER_THAN:
+		fallthrough
+	case EQUALS:
+		fallthrough
+	case NOT_EQUALS:
+		// expects a integer
+		if _, err := strconv.Atoi(cond.MatchTarget.(string)); err != nil {
+			return fmt.Errorf("%vMatchComponent %v expects the target to be a valid int, got '%v' while trying to parse '%v' as an int", ERR_FMT, cond.Key, err.Error(), cond.MatchTarget)
+		}
+	}
+
+	return nil
+}
+
+func (cond *MatchComponent) prepareIntegerComparison(val interface{}) (bool, error) {
+	const ERR_FMT = "Integer comparsion failed - "
+	value, err := strconv.Atoi(val.(string))
+	if err != nil {
+		return false, fmt.Errorf("%vExpected comparison value to be a valid integer, got (%v): %v", ERR_FMT, val, err.Error())
+	}
+
+	target, err := strconv.Atoi(cond.MatchTarget.(string))
+	if err != nil {
+		return false, fmt.Errorf("%vExpected target to be a valid integer, got (%v): %v", ERR_FMT, cond.MatchTarget, err.Error())
+	}
+
+	switch cond.MatchType {
+	case LESS_THAN:
+		return value < target, nil
+	case GREATER_THAN:
+		return value > target, nil
+	case EQUALS:
+		return value == target, nil
+	case NOT_EQUALS:
+		return value != target, nil
+	default:
+		return false, fmt.Errorf("%vMatch type %s(%v) is unknown", ERR_FMT, cond.MatchType, cond.MatchType)
+	}
+}
+
+func (cond *MatchComponent) IsMatch(val interface{}) (bool, error) {
+	const ERR_FMT = "Validation error - "
+	switch cond.MatchType {
+	case MATCHES:
+		reg, err := regexp.Compile(cond.MatchTarget.(string))
+		if err != nil {
+			return false, fmt.Errorf("%vMatchComponent %v expects the target to be Regexp compliant, got '%v' while trying to parse '%v' as a regular expression", ERR_FMT, cond.Key, err.Error(), cond.MatchTarget)
+		}
+
+		return reg.MatchString(val.(string)), nil
+	case DOES_NOT_MATCH:
+		reg, err := regexp.Compile(cond.MatchTarget.(string))
+		if err != nil {
+			return false, fmt.Errorf("%vMatchComponent %v expects the target to be Regexp compliant, got '%v' while trying to parse '%v' as a regular expression", ERR_FMT, cond.Key, err.Error(), cond.MatchTarget)
+		}
+
+		return !reg.MatchString(val.(string)), nil
+	case LESS_THAN:
+		fallthrough
+	case GREATER_THAN:
+		fallthrough
+	case EQUALS:
+		fallthrough
+	case NOT_EQUALS:
+		return cond.prepareIntegerComparison(val)
+	case IS_PRESENT:
+		return val != nil, nil
+	case IS_NOT_PRESENT:
+		return val == nil, nil
+	}
+
+	return false, nil
+}
+
+type Profile interface {
+	Tag() string
+	SetMatchConditions(interface{}) error
+	MatchConditions() []*MatchComponent
+	SetCommand(interface{}) error
+	Command() *ffmpeg.Options
+	Output() string
+}
+
 type profile struct {
 	sync.Mutex
-	FfmpegTargets []*Target         `mapstructure:"targets" json:"targets"`
-	MatchCriteria []*MatchComponent `mapstructure:"matchCriteria" json:"matchCriteria"`
-	ProfileTag    string            `mapstructure:"tag" json:"tag"`
+	MatchCriteria  []*MatchComponent `mapstructure:"matchCriteria" json:"matchCriteria"`
+	ProfileTag     string            `mapstructure:"tag" json:"tag"`
+	OutputPath     string            `mapstructure:"outputPath" json:"outputPath"`
+	FfmpegOptions  *ffmpeg.Options   `mapstructure:"command" json:"command"`
+	ThreadBlocking bool              `mapstructure:"blocking" json:"blocking"`
 }
 
 // NewProfile accepts a single string argument (tag) and returns a new profile
 // be reference to the caller with it's internal targets and tag set.
 func NewProfile(tag string) Profile {
 	return &profile{
-		FfmpegTargets: make([]*Target, 0),
 		MatchCriteria: make([]*MatchComponent, 0),
 		ProfileTag:    tag,
+		FfmpegOptions: &ffmpeg.Options{},
 	}
 }
 
@@ -95,66 +216,28 @@ func (profile *profile) Tag() string {
 	return profile.ProfileTag
 }
 
-// Targets returns the profiles available ffmpeg targets
-func (profile *profile) Targets() []*Target {
-	return profile.FfmpegTargets
-}
-
-// InsertTarget accepts a single Target as an argument, and will append this
-// target to the profile.
-func (profile *profile) InsertTarget(t *Target) error {
-	profile.Lock()
-	defer profile.Unlock()
-
-	if idx, _ := profile.find(t.Label); idx != -1 {
-		return fmt.Errorf("InsertTarget failed: cannot insert new target with label %v as this label already exists inside this profile", t.Label)
+func (profile *profile) SetCommand(command interface{}) error {
+	var output *ffmpeg.Options
+	err := mapstructure.Decode(command, &output)
+	if err != nil {
+		return fmt.Errorf("failed to set Command: %v", err.Error())
 	}
 
-	profile.FfmpegTargets = append(profile.FfmpegTargets, t)
-	return nil
-}
-
-func (profile *profile) FindTarget(label string) *Target {
-	_, v := profile.find(label)
-	return v
-}
-
-// MoveTarget accepts a target label to move, and a desiredIndex which it will
-// be moved to. Error returned if the label specifies a target that cannot be found,
-// or if desiredIndex is out of the profile list bounds.
-func (profile *profile) MoveTarget(label string, desiredIndex int) error {
-	index, target := profile.find(label)
-	if index == -1 {
-		return fmt.Errorf("MoveTarget failed: cannot move target with label %v as target cannot be found", label)
-	}
-	if desiredIndex < 0 || desiredIndex >= len(profile.FfmpegTargets) {
-		return fmt.Errorf("MoveTarget failed: cannot move target to index %d as destination index is out of bounds", desiredIndex)
-	}
-
-	profile.Lock()
-	defer profile.Unlock()
-
-	l := append(profile.FfmpegTargets[:index], profile.FfmpegTargets[index+1:len(profile.FfmpegTargets)]...)
-	profile.FfmpegTargets = append(l[:desiredIndex+1], l[desiredIndex:]...)
-	profile.FfmpegTargets[desiredIndex] = target
+	profile.FfmpegOptions = output
 
 	return nil
 }
 
-// EjectTarget accepts a single integer paramater (index) and removes the Target at this
-// position in the profile targets list if the index provided is legal.
-func (profile *profile) EjectTarget(label string) error {
-	index, _ := profile.find(label)
-	if index < 0 {
-		return fmt.Errorf("EjectTarget failed: cannot eject target with label %v as it does not exist", label)
-	}
+func (profile *profile) Command() *ffmpeg.Options {
+	return profile.FfmpegOptions
+}
 
-	profile.Lock()
-	defer profile.Unlock()
+func (profile *profile) Output() string {
+	return profile.OutputPath
+}
 
-	profile.FfmpegTargets = append(profile.FfmpegTargets[:index], profile.FfmpegTargets[index+1:len(profile.FfmpegTargets)]...)
-
-	return nil
+func (profile *profile) MatchConditions() []*MatchComponent {
+	return profile.MatchCriteria
 }
 
 func (profile *profile) SetMatchConditions(conditions interface{}) error {
@@ -172,34 +255,23 @@ func (profile *profile) SetMatchConditions(conditions interface{}) error {
 	return nil
 }
 
-func (profile *profile) validateMatchConditions(conditions []*MatchComponent) error {
-	// Validate that the match conditions provided make sense.
-	const ERR_FMT = "Failed to validate provided match components - "
-	for _, cond := range conditions {
-		switch cond.MatchType {
-		case MATCHES:
-		case DOES_NOT_MATCH:
-			// Regexp
-			if _, err := regexp.Compile(cond.MatchTarget.(string)); err != nil {
-				return fmt.Errorf("%vMatchComponent %v expects the target to be Regexp compliant, got '%v' while trying to parse '%v' as a regular expression", ERR_FMT, cond.Key, err.Error(), cond.MatchTarget)
-			}
-		case LESS_THAN:
-		case GREATER_THAN:
-			// Number
-			if _, err := strconv.Atoi(cond.MatchTarget.(string)); err != nil {
-				return fmt.Errorf("%vMatchComponent %v expects the target to be a valid int, got '%v' while trying to parse '%v' as an int", ERR_FMT, cond.Key, err.Error(), cond.MatchTarget)
-			}
-		}
-	}
-	return nil
-}
-
-func (profile *profile) find(label string) (int, *Target) {
-	for k, v := range profile.FfmpegTargets {
-		if v.Label == label {
-			return k, v
+func find[T comparable](slice []T, item T) (int, *T) {
+	for i, x := range slice {
+		if x == item {
+			return i, &x
 		}
 	}
 
 	return -1, nil
+}
+
+func (profile *profile) validateMatchConditions(conditions []*MatchComponent) error {
+	// Validate the provided match conditions
+	for _, cond := range conditions {
+		if err := cond.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { commander, ffmpegMatchKeysStream } from "../../../commander";
+    import { commander, profileMatchValidTypes } from "../../../commander";
 
-    import { MatchType, ModifierType } from "../../../queue";
+    import { MatchKey, MatchType, ModifierType } from "../../../queue";
     import type { ProfileMatchCriterion, TranscodeProfile } from "../../../queue";
     import type { SocketData } from "../../../store";
     import { SocketMessageType } from "../../../store";
@@ -9,8 +9,8 @@
     export let profile: TranscodeProfile;
     export let matchComponents: ProfileMatchCriterion[] = [];
 
-    let matchKeys = $ffmpegMatchKeysStream;
     let syncing: boolean = false;
+    let validTypes = $profileMatchValidTypes;
 
     const syncMatchComponents = () => {
         syncing = true;
@@ -43,7 +43,13 @@
     };
 
     const matchKeyInputChange = (match: ProfileMatchCriterion, e: any) => {
-        match.key = e.target.value;
+        match.key = new Number(e.target.value) as MatchKey;
+
+        // Test if the current match type is valid for the new type - if not, replace with the default (IS_PRESENT).
+        if (!validTypes[match.key].includes(match.matchType)) {
+            match.matchType = MatchType.IS_PRESENT;
+            match.matchTarget = "";
+        }
         syncMatchComponents();
     };
 
@@ -52,8 +58,8 @@
             matchComponents = [];
         }
         matchComponents.push({
-            key: matchKeys[0],
-            matchType: MatchType.MATCHES,
+            key: MatchKey.TITLE,
+            matchType: MatchType.IS_PRESENT,
             modifier: ModifierType.AND,
             matchTarget: "",
         });
@@ -70,8 +76,8 @@
                 <div class="components">
                     <!-- svelte-ignore a11y-no-onchange -->
                     <select on:change={(e) => matchKeyInputChange(match, e)} bind:value={match.key} disabled={syncing}>
-                        {#each matchKeys as matchKey}
-                            <option value={matchKey}>{matchKey}</option>
+                        {#each Object.keys(MatchKey).filter((v) => v.length > 1) as t}
+                            <option value={MatchKey[t]}>{t}</option>
                         {/each}
                     </select>
                     <!-- svelte-ignore a11y-no-onchange -->
@@ -82,7 +88,9 @@
                         disabled={syncing}
                     >
                         {#each Object.keys(MatchType).filter((v) => v.length > 1) as t}
-                            <option value={MatchType[t]}>{t}</option>
+                            {#if validTypes[match.key].includes(MatchType[t])}
+                                <option value={MatchType[t]}>{t}</option>
+                            {/if}
                         {/each}
                     </select>
                     <input

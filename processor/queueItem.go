@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hbomb79/TPA/pkg"
+	"github.com/hbomb79/TPA/profile"
 	"github.com/hbomb79/TPA/worker"
 	"gorm.io/gorm"
 )
@@ -102,7 +103,6 @@ type QueueItem struct {
 type ExportDetail struct {
 	gorm.Model   `json:"-"`
 	QueueItemID  uint   `json:"-"`
-	TargetLabel  string `json:"target_label"`
 	ProfileLabel string `json:"profile_label"`
 	Path         string `json:"path"`
 }
@@ -209,6 +209,8 @@ func (item *QueueItem) FormatTitle() error {
 	if movieGroups := movieMatcher.FindStringSubmatch(title); len(movieGroups) >= 1 {
 		item.TitleInfo = &TitleInfo{
 			Episodic:   false,
+			Season:     -1,
+			Episode:    -1,
 			Title:      movieGroups[1],
 			Year:       convertToInt(movieGroups[2]),
 			Resolution: resolution,
@@ -220,6 +222,69 @@ func (item *QueueItem) FormatTitle() error {
 	// Didn't match either case; return error so that trouble
 	// can be raised by the worker.
 	return TitleFormatError{item, "Failed to match RegExp!"}
+}
+
+// ValidateProfileSuitable accepts a profile and will check it's match conditions, and potentially
+// other criteria, to asertain if the profile should be used when transcoding this items content
+// via the FFmpeg commander.
+func (item *QueueItem) ValidateProfileSuitable(pr profile.Profile) bool {
+	matchConds := pr.MatchConditions()
+
+	// Check that this item matches the the conditions specified by the profile. If there
+	// are no conditions, we assume this profile has none and will return true
+	if len(matchConds) == 0 {
+		return true
+	}
+
+	currentEval := true
+	for _, condition := range matchConds {
+		var v interface{}
+
+		switch condition.Key {
+		case profile.TITLE:
+			v = item.TitleInfo.Title
+		case profile.RESOLUTION:
+			v = item.TitleInfo.Resolution
+		case profile.EPISODE_NUMBER:
+			if item.TitleInfo.Episodic && item.TitleInfo.Episode != -1 {
+				v = item.TitleInfo.Episode
+			} else {
+				v = nil
+			}
+		case profile.SEASON_NUMBER:
+			if item.TitleInfo.Episodic && item.TitleInfo.Season != -1 {
+				v = item.TitleInfo.Season
+			} else {
+				v = nil
+			}
+		case profile.SOURCE_EXTENSION:
+			v = item.Path
+		case profile.SOURCE_NAME:
+			v = item.Name
+		case profile.SOURCE_PATH:
+			v = item.Path
+		}
+
+		isMatch, err := condition.IsMatch(v)
+		if err != nil {
+			itemLogger.Emit(pkg.ERROR, "FAILED to validate if profile (%s) match condition (%v) is suitable for item %s because: %v\n", pr, condition, item, err.Error())
+		}
+
+		if currentEval {
+			currentEval = isMatch
+		}
+
+		if condition.Modifier == profile.OR {
+			// End of this block
+			if currentEval {
+				return true
+			} else {
+				currentEval = true
+			}
+		}
+	}
+
+	return currentEval
 }
 
 // Cancel will cancel an item that is currently pending by setting it's status to cancelled.

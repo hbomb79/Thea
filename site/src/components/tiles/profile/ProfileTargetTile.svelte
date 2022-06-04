@@ -1,9 +1,9 @@
 <script lang="ts">
     import { createEventDispatcher, getContext } from "svelte";
-    import type { TranscodeTarget } from "../../../queue";
+    import type { TranscodeProfile, TranscodeTarget } from "../../../queue";
     import TargetProps from "../../modals/TargetProps.svelte";
 
-    export let target: TranscodeTarget = null;
+    export let profile: TranscodeProfile = null;
     const dispatch = createEventDispatcher();
 
     const { open } = getContext("simple-modal");
@@ -17,17 +17,17 @@
         return count;
     };
 
-    $: modified = modifiedProps(target.command);
+    $: modified = modifiedProps(profile.command);
 
     const openPropDialog = () => {
         open(
             TargetProps,
             {
                 onOkay: (modifiedMap: Map<string, any>) => {
-                    console.log("Dialog SAVED", modifiedMap, target.command);
+                    console.log("Dialog SAVED", modifiedMap, profile.command);
                     Object.entries(modifiedMap).forEach((v) => {
                         const [key, value] = v;
-                        target.command[key] = value;
+                        profile.command[key] = value;
                     });
 
                     dispatch("propertiesChanged", modifiedMap);
@@ -35,7 +35,7 @@
                 onCancel: () => {
                     console.log("Dialog cancelled");
                 },
-                availableProperties: { ...target.command },
+                availableProperties: { ...profile.command },
             },
             {
                 closeButton: false,
@@ -44,19 +44,13 @@
     };
 </script>
 
-<div class="target">
-    <h2 class="label">{target.label}</h2>
-
+<div class="ffmpeg-opts">
     <div class="command">
         <button on:click|preventDefault={openPropDialog}>
             <i><b>{modified}</b> modified options</i>
             <br />
             <b>Modify</b>
         </button>
-    </div>
-    <div class="controls">
-        <div class="up" on:click={() => dispatch("move-up")}>UP</div>
-        <div class="down" on:click={() => dispatch("move-down")}>DN</div>
     </div>
 </div>
 

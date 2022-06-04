@@ -52,7 +52,6 @@ type CommanderTask interface {
 	Start(*Processor)
 	Item() *QueueItem
 	ProfileTag() string
-	TargetLabel() string
 	Stop()
 	ThreadsRequired() int
 	Status() CommanderTaskStatus
@@ -67,9 +66,8 @@ type CommanderTask interface {
 // taskData is a struct that encapsulates all data
 // required to transcode an item with ffmpeg.
 type taskData struct {
-	targetLabel string
-	profileTag  string
-	item        *QueueItem
+	profileTag string
+	item       *QueueItem
 }
 
 // ffmpegCommander is an implementation of the Commander interface
@@ -135,7 +133,7 @@ main:
 				defer commander.instanceLock.Unlock()
 
 				commanderLogger.Emit(pkg.NEW, "Newly discovered target %#v\n", target)
-				instance := newFfmpegInstance(target.item, target.profileTag, target.targetLabel)
+				instance := newFfmpegInstance(target.item, target.profileTag)
 				commander.instances = append(commander.instances, instance)
 			}()
 		case <-commander.healthTicker.C:
@@ -187,7 +185,7 @@ func (commander *ffmpegCommander) startInstance(instance CommanderTask) {
 			//TODO Perform cleanup of partially formatted content
 		} else if instance.Status() == FINISHED {
 			instance.Item().ExportDetails = append(instance.Item().ExportDetails, &ExportDetail{
-				TargetLabel:  instance.TargetLabel(),
+				QueueItemID:  instance.Item().ID,
 				ProfileLabel: instance.ProfileTag(),
 				Path:         instance.GetOutputPath(),
 			})
@@ -311,7 +309,7 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 	items, targets := commander.extractItemsFromWindow(), make([]*taskData, 0)
 
 	for _, item := range items {
-		profile, err := commander.selectBestProfile(item)
+		profiles, err := commander.selectMatchingProfiles(item)
 		if err != nil {
 			if item.Trouble == nil {
 				commanderLogger.Emit(pkg.ERROR, "Profile selection failed for item %s: %s\n", item.Name, err.Error())
@@ -321,44 +319,30 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 			continue
 		}
 
-		if len(profile.Targets()) == 0 {
-			commanderLogger.Emit(pkg.ERROR, "Profile selection failed for item: %s: Profile has no targets!\n", item.Name)
-			item.SetTrouble(&ProfileSelectionError{NewBaseTaskError(fmt.Sprintf("Profile selection failed - Profile '%s' was selected for this item and this profile has NO TARGETS.\n", profile.Tag()), item, COMMANDER_FAILURE)})
-
-			continue
-		}
-
-		for _, target := range profile.Targets() {
-			targets = append(targets, &taskData{target.Label, profile.Tag(), item})
+		for _, p := range profiles {
+			targets = append(targets, &taskData{p.Tag(), item})
 		}
 	}
 
 	return targets
 }
 
-// selectBestProfile iterates over each TPA profile, checking to see which is
+// selectMatchingProfiles iterates over each TPA profile, checking to see which is
 // the best fit for our QueueItem.
-func (commander *ffmpegCommander) selectBestProfile(item *QueueItem) (profile.Profile, error) {
+func (commander *ffmpegCommander) selectMatchingProfiles(item *QueueItem) ([]profile.Profile, error) {
+	output := make([]profile.Profile, 0)
 	profileList := commander.processor.Profiles
 	if len(profileList.Profiles()) == 0 {
 		return nil, fmt.Errorf("cannot perform profile selection for item %s because server has NO profiles", item)
 	}
 
-	if item.ProfileTag != "" {
-		if idx, p := profileList.FindProfileByTag(item.ProfileTag); idx > 0 {
-			return p, nil
-		}
-
-		return nil, fmt.Errorf("cannot find profile '%s'. Please ensure this profile name is valid", item.ProfileTag)
-	}
-
 	for _, profile := range profileList.Profiles() {
-		//TODO Filter profiles based on automatic-application filtering
-		return profile, nil
+		if item.ValidateProfileSuitable(profile) {
+			output = append(output, profile)
+		}
 	}
 
-	// No match found, we default to the first profile.
-	return profileList.Profiles()[0], nil
+	return output, nil
 }
 
 // runHealthChecks is an internal method that relays the current state of each item
@@ -415,7 +399,7 @@ func (commander *ffmpegCommander) runHealthChecks() {
 // data (QueueItem, profile and target) - they need not be identical objects (i.e. same address)
 func (commander *ffmpegCommander) findTask(target *taskData) (int, CommanderTask) {
 	for idx, instance := range commander.instances {
-		if instance.Item().ItemID == target.item.ItemID && instance.ProfileTag() == target.profileTag && instance.TargetLabel() == target.targetLabel {
+		if instance.Item().ItemID == target.item.ItemID && instance.ProfileTag() == target.profileTag {
 			return idx, instance
 		}
 	}

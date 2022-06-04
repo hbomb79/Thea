@@ -12,55 +12,32 @@
     const { open } = getContext("simple-modal");
 
     export let profile: TranscodeProfile = null;
-    export let usages: Number = 0;
-
-    const moveTarget = (target: TranscodeTarget, destination: number) => {
-        commander.sendMessage(
-            {
-                title: "PROFILE_TARGET_MOVE",
-                type: SocketMessageType.COMMAND,
-                arguments: {
-                    profileTag: profile.tag,
-                    targetLabel: target.label,
-                    desiredIndex: destination,
-                },
-            },
-            (response: SocketData): boolean => {
-                if (response.type == SocketMessageType.ERR_RESPONSE) {
-                    alert(`Failed to move target ${target.label} to index ${destination}: ${response.arguments.error}`);
-                }
-
-                return false;
-            }
-        );
-    };
 
     const confirmRemoveProfile = () => {
         open(
             ConfirmationPopup,
             {
                 title: "Delete Profile",
-                body: `Are you sure you want to delete profile <b>${profile.tag}</b>?<br />This action <i>cannot be reversed</i> and all associatted targets will be removed!<br/><br/>Please note that items already using this transcoder profile/targets will be unaffected by this change.`,
+                body: `Are you sure you want to delete profile <b>${profile.tag}</b>?<br />This action <i>cannot be reversed!</i><br/><br/>Please note that items already using this transcoder profile/targets will be unaffected by this change.`,
                 onOkay: () => dispatch("remove", profile.tag),
             },
             { closeButton: false }
         );
     };
 
-    const updateTargetCommand = (target: TranscodeTarget, command: any) => {
+    const updateCommand = (profile: TranscodeProfile, command: any) => {
         commander.sendMessage(
             {
-                title: "PROFILE_TARGET_UPDATE_COMMAND",
+                title: "PROFILE_UPDATE_COMMAND",
                 type: SocketMessageType.COMMAND,
                 arguments: {
                     profileTag: profile.tag,
-                    targetLabel: target.label,
                     command: command,
                 },
             },
             (response: SocketData): boolean => {
                 if (response.type == SocketMessageType.ERR_RESPONSE) {
-                    alert(`Failed to update target ${target.label} command to ${command}: ${response.arguments.error}`);
+                    alert(`Failed to update profile ${profile.tag} command to ${command}: ${response.arguments.error}`);
                 }
 
                 return false;
@@ -75,8 +52,7 @@
 <li class="profile" class:open={isOpen}>
     <div class="header" on:click|stopPropagation={() => (isOpen = !isOpen)}>
         <div class="stat">
-            <span class="tag">{profile.tag} <span class="apply-stat"> - applied to <b>{usages}</b> items</span></span>
-            <span class="target-stat">{profile.targets.length} target{profile.targets.length == 1 ? "" : "s"}</span>
+            <span class="tag">{profile.tag} <span class="apply-stat"> - applied to <b>???</b> items</span></span>
         </div>
 
         <div class="controls">
@@ -89,19 +65,23 @@
     {#if isOpen}
         <div class="main">
             <div class="settings">
-                <b>Match Criteria</b>
-                <MatchConditionBuilder {profile} matchComponents={profile.matchCriteria} />
-            </div>
-            <div class="targets">
-                <b>FFmpeg Targets</b>
-                {#each profile.targets as target, index (target.label)}
+                <div>
+                    <b>Output Path</b>
+                    <input type="text" placeholder="<default>" />
+                </div>
+
+                <div>
+                    <b>Match Criteria</b>
+                    <MatchConditionBuilder {profile} matchComponents={profile.matchCriteria} />
+                </div>
+
+                <div>
+                    <b>FFmpeg Command</b>
                     <ProfileTargetTile
-                        {target}
-                        on:move-down={() => moveTarget(target, index + 1)}
-                        on:move-up={() => moveTarget(target, index - 1)}
-                        on:propertiesChanged={(event) => updateTargetCommand(target, event.detail)}
+                        {profile}
+                        on:propertiesChanged={(event) => updateCommand(profile, event.detail)}
                     />
-                {/each}
+                </div>
             </div>
         </div>
     {/if}

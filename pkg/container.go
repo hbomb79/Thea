@@ -3,9 +3,9 @@ package pkg
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -40,6 +40,16 @@ const (
 	// Container has been removed
 	DEAD
 )
+
+type ContainerEvent struct {
+	Status         string `json:"status"`
+	Error          string `json:"error"`
+	Progress       string `json:"progress"`
+	ProgressDetail struct {
+		Current int `json:"current"`
+		Total   int `json:"total"`
+	} `json:"progressDetail"`
+}
 
 func (e ContainerStatus) String() string {
 	return []string{"INIT", "PULLED", "CREATED", "UP", "CRASHED", "CLOSING", "DOWN", "DEAD"}[e]
@@ -112,7 +122,21 @@ func (c *dockerContainer) Start(ctx context.Context, cli client.APIClient) error
 		return fmt.Errorf("failed to pull image %v for container %s: %v", c.imageID, c, err.Error())
 	}
 	defer out.Close()
-	io.Copy(os.Stdout, out)
+
+	eventStream := json.NewDecoder(out)
+	var event *ContainerEvent
+	for {
+		if err := eventStream.Decode(&event); err != nil {
+			if err == io.EOF {
+				break
+			}
+
+			panic(err)
+		}
+
+		c.parseContainerEvent(event)
+	}
+
 	c.setStatus(PULLED)
 
 	resp, err := cli.ContainerCreate(ctx, c.containerConf, c.containerHostConf, nil, nil, c.label)
@@ -201,6 +225,18 @@ func (container *dockerContainer) setStatus(stat ContainerStatus) {
 
 	container.status = stat
 	container.statusChannel <- container.status
+}
+
+func (container *dockerContainer) parseContainerEvent(ev *ContainerEvent) {
+	if ev.Error != "" {
+		dockerLogger.Emit(ERROR, "\n%s: %s\n", container, ev.Error)
+	} else if ev.Progress != "" {
+		dockerLogger.Emit(INFO, "%s: %s\n", container, ev.Progress)
+	} else if ev.Status != "" {
+		dockerLogger.Emit(INFO, "%s: %s\n", container, ev.Status)
+	} else {
+		dockerLogger.Emit(WARNING, "Container %s emitted unknown event %v\n", container, ev)
+	}
 }
 
 func (container *dockerContainer) monitorContainer(ctx context.Context, cli client.APIClient) {

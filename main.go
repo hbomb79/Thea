@@ -9,6 +9,7 @@ import (
 	"github.com/hbomb79/TPA/api"
 	"github.com/hbomb79/TPA/pkg"
 	"github.com/hbomb79/TPA/processor"
+	"github.com/hbomb79/TPA/profile"
 	"github.com/hbomb79/TPA/ws"
 )
 
@@ -39,8 +40,9 @@ func NewTpa() *Tpa {
 
 func (tpa *Tpa) newClientConnection() map[string]interface{} {
 	return map[string]interface{}{
-		"ffmpegOptions":   tpa.proc.KnownFfmpegOptions,
-		"ffmpegMatchKeys": processor.FFMPEG_COMMAND_SUBSTITUTIONS,
+		"ffmpegOptions":          tpa.proc.KnownFfmpegOptions,
+		"ffmpegMatchKeys":        processor.FFMPEG_COMMAND_SUBSTITUTIONS,
+		"profileAcceptableTypes": profile.MatchKeyAcceptableTypes(),
 	}
 }
 
@@ -116,10 +118,7 @@ func (tpa *Tpa) setupRoutes() {
 	tpa.socketHub.BindCommand("PROFILE_REMOVE", tpa.wsGateway.WsProfileRemove)
 	tpa.socketHub.BindCommand("PROFILE_MOVE", tpa.wsGateway.WsProfileMove)
 	tpa.socketHub.BindCommand("PROFILE_SET_MATCH_CONDITIONS", tpa.wsGateway.WsProfileSetMatchConditions)
-	tpa.socketHub.BindCommand("PROFILE_TARGET_UPDATE_COMMAND", tpa.wsGateway.WsProfiletargetUpdateCommand)
-	tpa.socketHub.BindCommand("PROFILE_TARGET_CREATE", tpa.wsGateway.WsProfileTargetCreate)
-	tpa.socketHub.BindCommand("PROFILE_TARGET_REMOVE", tpa.wsGateway.WsProfileTargetRemove)
-	tpa.socketHub.BindCommand("PROFILE_TARGET_MOVE", tpa.wsGateway.WsProfileTargetMove)
+	tpa.socketHub.BindCommand("PROFILE_UPDATE_COMMAND", tpa.wsGateway.WsProfileUpdateCommand)
 }
 
 func (tpa *Tpa) OnProcessorUpdate(update *processor.ProcessorUpdate) {

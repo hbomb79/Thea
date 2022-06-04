@@ -236,66 +236,6 @@ func (wsGateway *WsGateway) WsProfileMove(hub *ws.SocketHub, message *ws.SocketM
 	return nil
 }
 
-func (wsGateway *WsGateway) WsProfileTargetCreate(hub *ws.SocketHub, message *ws.SocketMessage) error {
-	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "label": "string"}); err != nil {
-		return err
-	}
-
-	profileTag := message.Body["profileTag"].(string)
-	idx, p := wsGateway.proc.Profiles.FindProfileByTag(profileTag)
-	if idx == -1 || p == nil {
-		return fmt.Errorf("cannot create profile target: profile tag '%s' is invalid", profileTag)
-	}
-
-	target := profile.NewTarget(message.Body["label"].(string))
-	p.InsertTarget(target)
-
-	wsGateway.proc.UpdateChan <- -2
-	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
-	return nil
-}
-
-func (wsGateway *WsGateway) WsProfileTargetRemove(hub *ws.SocketHub, message *ws.SocketMessage) error {
-	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "targetLabel": "string"}); err != nil {
-		return err
-	}
-
-	profileTag := message.Body["profileTag"].(string)
-	idx, p := wsGateway.proc.Profiles.FindProfileByTag(profileTag)
-	if idx == -1 || p == nil {
-		return fmt.Errorf("cannot create profile target: profile tag '%s' is invalid", profileTag)
-	}
-
-	if err := p.EjectTarget(message.Body["targetLabel"].(string)); err != nil {
-		return err
-	}
-
-	wsGateway.proc.UpdateChan <- -2
-	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
-	return nil
-}
-
-func (wsGateway *WsGateway) WsProfileTargetMove(hub *ws.SocketHub, message *ws.SocketMessage) error {
-	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "targetLabel": "string", "desiredIndex": "number"}); err != nil {
-		return err
-	}
-
-	profileTag := message.Body["profileTag"].(string)
-	idx, p := wsGateway.proc.Profiles.FindProfileByTag(profileTag)
-	if idx == -1 || p == nil {
-		return fmt.Errorf("cannot create profile target: profile tag '%s' is invalid", profileTag)
-	}
-
-	desiredIndex := int(message.Body["desiredIndex"].(float64))
-	if err := p.MoveTarget(message.Body["targetLabel"].(string), desiredIndex); err != nil {
-		return err
-	}
-
-	wsGateway.proc.UpdateChan <- -2
-	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
-	return nil
-}
-
 func (wsGateway *WsGateway) WsProfileSetMatchConditions(hub *ws.SocketHub, message *ws.SocketMessage) error {
 	if err := message.ValidateArguments(map[string]string{"profileTag": "string"}); err != nil {
 		return err
@@ -321,8 +261,8 @@ func (wsGateway *WsGateway) WsProfileSetMatchConditions(hub *ws.SocketHub, messa
 	return nil
 }
 
-func (wsGateway *WsGateway) WsProfiletargetUpdateCommand(hub *ws.SocketHub, message *ws.SocketMessage) error {
-	if err := message.ValidateArguments(map[string]string{"profileTag": "string", "targetLabel": "string"}); err != nil {
+func (wsGateway *WsGateway) WsProfileUpdateCommand(hub *ws.SocketHub, message *ws.SocketMessage) error {
+	if err := message.ValidateArguments(map[string]string{"profileTag": "string"}); err != nil {
 		return err
 	}
 
@@ -331,19 +271,14 @@ func (wsGateway *WsGateway) WsProfiletargetUpdateCommand(hub *ws.SocketHub, mess
 		return fmt.Errorf("cannot update target command for profile because tag '%v' is invalid", message.Body["profileTag"])
 	}
 
-	target := profile.FindTarget(message.Body["targetLabel"].(string))
-	if target == nil {
-		return fmt.Errorf("cannot update target command for profile '%v' because targetLabel '%v' is invalid", message.Body["profileTag"], message.Body["targetLabel"])
-	}
-
 	command, ok := message.Body["command"]
 	if !ok {
-		return fmt.Errorf("cannot update target command on profile '%v.%v' because command key is missing from payload", message.Body["profileTag"], message.Body["targetLabel"])
+		return fmt.Errorf("cannot update target command on profile '%v' because command key is missing from payload", message.Body["profileTag"])
 	}
 
-	err := target.SetCommand(command)
+	err := profile.SetCommand(command)
 	if err != nil {
-		return fmt.Errorf("cannot update target command on target '%v': %v", message.Body["targetLabel"], err.Error())
+		return fmt.Errorf("cannot update target command on profile '%v': %v", message.Body["profileTag"], err.Error())
 	}
 
 	wsGateway.proc.UpdateChan <- -2

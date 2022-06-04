@@ -4,6 +4,7 @@
  */
 import { sendMessage as socketSend, SocketData, SocketMessageType, SocketPacketType, socketStream, SocketStreamPacket } from './store'
 import { writable } from 'svelte/store'
+import type { MatchKey, MatchType } from './queue'
 
 // commandCallback is a function type alias that defines a callback
 // for a socket command
@@ -16,6 +17,7 @@ export const dataStream = writable({} as SocketData)
 export const statusStream = writable(SocketPacketType.INIT)
 export const ffmpegOptionsStream = writable({})
 export const ffmpegMatchKeysStream = writable([])
+export const profileMatchValidTypes = writable({} as Map<MatchKey, MatchType[]>)
 
 // Commander is a class that is intended to be used as a singleton
 // instance for the entire application (see export below class def.)
@@ -41,6 +43,7 @@ class Commander {
             if (data.type == SocketMessageType.WELCOME) {
                 ffmpegOptionsStream.set(data.arguments.ffmpegOptions)
                 ffmpegMatchKeysStream.set(data.arguments.ffmpegMatchKeys)
+                profileMatchValidTypes.set(data.arguments.profileAcceptableTypes)
             }
         })
     }

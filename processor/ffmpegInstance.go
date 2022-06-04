@@ -62,7 +62,7 @@ func (ffmpegI *ffmpegInstance) Start(proc *Processor) {
 }
 
 func (ffmpegI *ffmpegInstance) ThreadsRequired() int {
-	threads := ffmpegI.getTargetInstance().FFmpegOptions.Threads
+	threads := ffmpegI.getProfileInstance().Command().Threads
 	if threads == nil {
 		return DEFAULT_THREADS_REQUIRED
 	} else {
@@ -99,6 +99,8 @@ var FFMPEG_COMMAND_SUBSTITUTIONS []string = []string{
 	"SEASON_NUMBER",
 	"EPISODE_NUMBER",
 	"SOURCE_PATH",
+	"SOURCE_TITLE",
+	"SOURCE_FILENAME",
 	"OUTPUT_PATH",
 }
 
@@ -106,25 +108,29 @@ func (ffmpegI *ffmpegInstance) composeCommandArguments(sourceCommand string) str
 	getVal := func(command string) string {
 		item := ffmpegI.item
 		switch command {
-		case "%DEFAULT_TARGET_EXTENSION%":
+		case "DEFAULT_TARGET_EXTENSION":
 			return "mp4"
-		case "%DEFAULT_THREAD_COUNT%":
+		case "DEFAULT_THREAD_COUNT":
 			return "1"
-		case "%DEFAULT_OUTPUT_DIR%":
+		case "DEFAULT_OUTPUT_DIR":
 			return "/"
-		case "%TITLE%":
+		case "TITLE":
 			return item.OmdbInfo.Title
-		case "%RESOLUTION%":
+		case "RESOLUTION":
 			return item.TitleInfo.Resolution
-		case "%HOME_DIRECTORY%":
+		case "HOME_DIRECTORY":
 			return ""
-		case "%SEASON_NUMBER%":
+		case "SEASON_NUMBER":
 			return fmt.Sprint(item.TitleInfo.Season)
-		case "%EPISODE_NUMBER%":
+		case "EPISODE_NUMBER":
 			return fmt.Sprint(item.TitleInfo.Episode)
-		case "%SOURCE_PATH%":
+		case "SOURCE_PATH":
 			return item.Path
-		case "%OUTPUT_PATH%":
+		case "SOURCE_TITLE":
+			return item.TitleInfo.Title
+		case "SOURCE_FILENAME":
+			return item.Name
+		case "OUTPUT_PATH":
 			return item.TitleInfo.OutputPath()
 		default:
 			ffmpegLogger.Emit(pkg.WARNING, "Encountered unknown command substitution '%s' in source command '%s'\n", command, sourceCommand)
@@ -228,13 +234,13 @@ func (ffmpegI *ffmpegInstance) SetProfileTag(string) {
 
 func (ffmpegI *ffmpegInstance) GetOutputPath() string {
 	outputFormat := ffmpegI.item.processor.Config.Format.TargetFormat
-	targetInstance := ffmpegI.getTargetInstance()
+	profile := ffmpegI.getProfileInstance()
 	var itemOutputPath string
-	if targetInstance == nil {
+	if profile == nil {
 		itemOutputPath = fmt.Sprintf("%s.%s", ffmpegI.item.TitleInfo.OutputPath(), outputFormat)
 		itemOutputPath = filepath.Join(ffmpegI.item.processor.Config.Format.OutputPath, itemOutputPath)
 	} else {
-		itemOutputPath = targetInstance.OutputPath
+		itemOutputPath = profile.Output()
 	}
 
 	itemOutputPath = ffmpegI.composeCommandArguments(itemOutputPath)
@@ -245,15 +251,6 @@ func (ffmpegI *ffmpegInstance) getProfileInstance() profile.Profile {
 	_, profile := ffmpegI.item.processor.Profiles.FindProfileByTag(ffmpegI.profileTag)
 
 	return profile
-}
-
-func (ffmpegI *ffmpegInstance) getTargetInstance() *profile.Target {
-	profile := ffmpegI.getProfileInstance()
-	if profile == nil {
-		return nil
-	}
-
-	return profile.FindTarget(ffmpegI.targetLabel)
 }
 
 func (ffmpegI *ffmpegInstance) beginTranscode() error {
@@ -271,8 +268,6 @@ func (ffmpegI *ffmpegInstance) beginTranscode() error {
 		p = proc.Profiles.Profiles()[0]
 	}
 
-	t := p.Targets()[0]
-
 	var outputPath = ffmpegI.GetOutputPath()
 
 	cmdContext, cancel := context.WithCancel(context.Background())
@@ -283,7 +278,7 @@ func (ffmpegI *ffmpegInstance) beginTranscode() error {
 		Input(queueItem.Path).
 		Output(outputPath).
 		WithContext(&cmdContext).
-		Start(t.FFmpegOptions)
+		Start(p.Command())
 
 	if err != nil {
 		return ffmpegI.parseFfmpegError(err)
@@ -339,11 +334,10 @@ func (ffmpegI *ffmpegInstance) raiseTrouble(t Trouble) {
 	ffmpegI.SetStatus(TROUBLED)
 }
 
-func newFfmpegInstance(item *QueueItem, profileTag string, targetLabel string) CommanderTask {
+func newFfmpegInstance(item *QueueItem, profileTag string) CommanderTask {
 	return &ffmpegInstance{
 		item:        item,
 		profileTag:  profileTag,
-		targetLabel: targetLabel,
 		pid:         -1,
 		status:      PENDING,
 		cancelChan:  make(chan bool),

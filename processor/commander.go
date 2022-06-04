@@ -95,10 +95,6 @@ type ffmpegCommander struct {
 	// A link to the main TPA processor instances
 	processor *Processor
 
-	// Internal channel that threads can submit itemTarget's on
-	// to have them spawned in to full ffmpegInstances
-	spawnChannel chan *taskData
-
 	// Mutex for use when code is reading/mutating instance information
 	instanceLock sync.Mutex
 
@@ -122,19 +118,6 @@ main:
 			go func() {
 				defer wg.Done()
 				commander.consumeNewTargets()
-			}()
-		case target := <-commander.spawnChannel:
-			// A thread is requesting an itemTarget be spawned
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
-				commander.instanceLock.Lock()
-				defer commander.instanceLock.Unlock()
-
-				commanderLogger.Emit(pkg.NEW, "Newly discovered target %#v\n", target)
-				instance := newFfmpegInstance(target.item, target.profileTag)
-				commander.instances = append(commander.instances, instance)
 			}()
 		case <-commander.healthTicker.C:
 			// Run periodic checks over the targets to give feedback to the user.
@@ -263,7 +246,9 @@ func (commander *ffmpegCommander) consumeNewTargets() {
 	// Spawn targets we don't recognize
 	for _, target := range targets {
 		if instanceIdx, _ := commander.findTask(target); instanceIdx == -1 {
-			commander.spawnChannel <- target
+			commanderLogger.Emit(pkg.NEW, "Newly discovered target {%s %s}\n", target.profileTag, target.item)
+			instance := newFfmpegInstance(target.item, target.profileTag)
+			commander.instances = append(commander.instances, instance)
 		}
 	}
 }
@@ -434,7 +419,6 @@ func (commander *ffmpegCommander) Instances() []CommanderTask {
 func NewCommander(proc *Processor) Commander {
 	return &ffmpegCommander{
 		queueChangedChannel: make(chan int),
-		spawnChannel:        make(chan *taskData),
 		processor:           proc,
 		instances:           make([]CommanderTask, 0),
 		healthTicker:        *time.NewTicker(time.Second * 2),

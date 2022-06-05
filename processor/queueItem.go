@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -327,6 +328,34 @@ func (item *QueueItem) NotifyUpdate() {
 
 func (item *QueueItem) String() string {
 	return fmt.Sprintf("{%d PK=%d name=%s}", item.ItemID, item.ID, item.Name)
+}
+
+func (item *QueueItem) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		ItemID          int                  `json:"id"`
+		Path            string               `json:"path"`
+		Name            string               `json:"name"`
+		Status          QueueItemStatus      `json:"status"`
+		Stage           worker.PipelineStage `json:"stage"`
+		TitleInfo       *TitleInfo           `json:"title_info"`
+		OmdbInfo        *OmdbInfo            `json:"omdb_info"`
+		Trouble         Trouble              `json:"trouble"`
+		ProfileTag      string               `json:"profile_tag"`
+		ExportDetails   []*ExportDetail      `json:"export_details"`
+		FfmpegInstances []CommanderTask      `json:"ffmpeg_instances"`
+	}{
+		item.ItemID,
+		item.Path,
+		item.Name,
+		item.Status,
+		item.Stage,
+		item.TitleInfo,
+		item.OmdbInfo,
+		item.Trouble,
+		item.ProfileTag,
+		item.ExportDetails,
+		item.processor.FfmpegCommander.GetInstancesForItem(item.ItemID),
+	})
 }
 
 // TitleInfo contains the information about the import QueueItem

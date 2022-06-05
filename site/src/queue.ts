@@ -9,6 +9,7 @@ export enum QueueStatus {
     NEEDS_RESOLVING,
     CANCELLING,
     CANCELLED,
+    NEEDS_ATTENTION
 }
 
 export enum QueueStage {
@@ -18,6 +19,15 @@ export enum QueueStage {
     FFMPEG,
     DB,
     FINISH
+}
+
+export enum CommanderTaskStatus {
+    PENDING,
+    WORKING,
+    WAITING,
+    FINISHED,
+    CANCELLED,
+    TROUBLED
 }
 
 export enum QueueTroubleType {
@@ -73,6 +83,22 @@ export interface TranscodeTarget {
     label: string
 }
 
+export interface CommanderTask {
+    Progress: FfmpegProgress
+    Status: CommanderTaskStatus
+    Trouble: QueueTroubleDetails
+    ItemId: number
+    ProfileTag: string
+}
+
+export interface FfmpegProgress {
+    Frames: string
+    Elapsed: string
+    Bitrate: string
+    Progress: number
+    Speed: string
+}
+
 export interface QueueItem {
     id: number
     name: string
@@ -126,6 +152,7 @@ export interface QueueDetails extends QueueItem {
     omdb_info: QueueOmdbInfo
     trouble: QueueTroubleDetails
     profile_tag: string
+    ffmpeg_instances: CommanderTask[]
 }
 // The ContentManager class is available for use by components
 // who wish to keep track of the servers queue state. Generally

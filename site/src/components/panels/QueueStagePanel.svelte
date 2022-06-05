@@ -13,8 +13,8 @@
 
 {#if queueDetails.stage == stageIndex && queueDetails.status != QueueStatus.COMPLETED && queueDetails.status != QueueStatus.PROCESSING}
     <!-- We're viewing the page representing the current stage -->
-    {#if queueDetails.status == QueueStatus.NEEDS_RESOLVING}
-        <!-- Stage is troubled. Show the trouble panel -->
+    {#if queueDetails.status == QueueStatus.NEEDS_RESOLVING && queueDetails.stage != QueueStage.FFMPEG}
+        <!-- Stage is troubled. -->
         <TroublePanel {queueDetails} />
     {:else if queueDetails.status == QueueStatus.PENDING}
         <div class="pending tile">
@@ -37,10 +37,14 @@
                 {@html rippleHtml}
             </div>
         </div>
+    {:else}
+        <svelte:component this={stagePanel} details={queueDetails} />
     {/if}
 {:else if queueDetails.stage >= stageIndex || queueDetails.status == QueueStatus.PROCESSING}
     {#if stagePanel}
         <svelte:component this={stagePanel} details={queueDetails} />
+    {:else}
+        <h2>Error: No stage panel defined for stageIndex {stageIndex}</h2>
     {/if}
 {:else}
     <div class="pending tile">

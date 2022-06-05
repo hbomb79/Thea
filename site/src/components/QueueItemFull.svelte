@@ -168,7 +168,9 @@
                     {#if openStages[k]}
                         <div
                             class="content"
-                            class:troubled={details.stage == k && details.status == QueueStatus.NEEDS_RESOLVING}
+                            class:troubled={details.stage == k &&
+                                (details.status == QueueStatus.NEEDS_RESOLVING ||
+                                    details.status == QueueStatus.NEEDS_ATTENTION)}
                         >
                             <QueueStagePanel queueDetails={details} stageIndex={k} stagePanel={component} />
                         </div>

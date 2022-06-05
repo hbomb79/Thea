@@ -21,6 +21,7 @@ type Commander interface {
 	SetThreadPoolSize(int)
 	WakeupChan() chan int
 	Instances() []CommanderTask
+	GetInstancesForItem(int) []CommanderTask
 }
 
 // CommanderTaskStatus is used as the data type/enum for the status of
@@ -126,7 +127,6 @@ main:
 				defer wg.Done()
 				commander.runHealthChecks()
 			}()
-
 		case <-commander.doneChannel:
 			commanderLogger.Emit(pkg.STOP, "STOP signal received!\n")
 			break main
@@ -412,6 +412,18 @@ func (commander *ffmpegCommander) WakeupChan() chan int {
 // Instances returns the array of ffmpegInstances currently under this commanders control
 func (commander *ffmpegCommander) Instances() []CommanderTask {
 	return commander.instances
+}
+
+func (commander *ffmpegCommander) GetInstancesForItem(ID int) []CommanderTask {
+	out := make([]CommanderTask, 0)
+
+	for _, instance := range commander.instances {
+		if instance.Item().ItemID == ID {
+			out = append(out, instance)
+		}
+	}
+
+	return out
 }
 
 // NewCommander creates a new ffmpegCommander instance, with the channels

@@ -27,38 +27,44 @@ type ffmpegProgress struct {
 }
 
 type ffmpegInstance struct {
-	pid         int
-	status      CommanderTaskStatus
-	progress    *ffmpegProgress
-	important   bool
-	trouble     Trouble
-	cancelChan  chan bool
-	troubleChan chan bool
-	item        *QueueItem
-	profileTag  string
-	targetLabel string
+	pid                 int
+	status              CommanderTaskStatus
+	progress            *ffmpegProgress
+	important           bool
+	trouble             Trouble
+	cancelChan          chan bool
+	troubleResolvedChan chan bool
+	item                *QueueItem
+	profileTag          string
 }
 
 // Start manages this ffmpeg instance by capturing any errors, handling troubled states, and
 // directly executing the ffmpeg transcode.
 func (ffmpegI *ffmpegInstance) Start(proc *Processor) {
+	ffmpegLogger.Emit(pkg.INFO, "Starting instance %s\n", ffmpegI)
 	for {
-		if ffmpegI.trouble != nil {
+		if ffmpegI.trouble == nil {
 			err := ffmpegI.beginTranscode()
-			if t, ok := err.(Trouble); ok {
-				ffmpegI.raiseTrouble(t)
+			if err != nil {
+				ffmpegLogger.Emit(pkg.ERROR, "FFMPEG instance (%s) error detected: %s\n", ffmpegI, err.Error())
+				ffmpegI.raiseTrouble(&FormatTaskError{NewBaseTaskError(err.Error(), ffmpegI.item, FFMPEG_FAILURE), ffmpegI})
 			} else {
-				// Success
-				ffmpegI.SetStatus(FINISHED)
+				// Success or cancelled
+				return
 			}
 		} else {
 			// Wait for trouble to be resolved
-			_, ok := <-ffmpegI.troubleChan
+			ffmpegLogger.Emit(pkg.WARNING, "FFMPEG instance (%s) waiting for trouble resolution\n", ffmpegI)
+			_, ok := <-ffmpegI.troubleResolvedChan
 			if !ok {
 				return
 			}
 		}
 	}
+}
+
+func (ffmpegI *ffmpegInstance) String() string {
+	return fmt.Sprintf("{pid=%v itemID=%v status=%v profileTag=%v trouble=%v}", ffmpegI.pid, ffmpegI.item.ID, ffmpegI.status, ffmpegI.profileTag, ffmpegI.trouble)
 }
 
 func (ffmpegI *ffmpegInstance) ThreadsRequired() int {
@@ -71,22 +77,17 @@ func (ffmpegI *ffmpegInstance) ThreadsRequired() int {
 }
 
 func (ffmpegI *ffmpegInstance) Stop() {
-	if ffmpegI.status != WORKING {
-		// Can't cancel something that isn't happening. We should
-		// ignore this request.
-		ffmpegLogger.Emit(pkg.INFO, "Ignoring request to cancel ffmpeg instance %v\ninstance has incorrect state {%v}\n", ffmpegI, ffmpegI.status)
+	if ffmpegI.status == CANCELLED {
+		ffmpegLogger.Emit(pkg.WARNING, "Ignoring request to cancel FFmpeg instance %s as it's already status is already CANCELLED!", ffmpegI)
+
 		return
 	}
 
-	// Non-blocking cancel request. We use a non-blocking select here
-	// because the instance may be cancelled already when we call this
-	// if we're unlucky enough to experience a race condition to cancel
-	select {
-	case ffmpegI.cancelChan <- true:
-		ffmpegLogger.Emit(pkg.STOP, "Cancelled ffmpeg instance %v\n", ffmpegI)
-	default:
-		ffmpegLogger.Emit(pkg.WARNING, "Failed to cancel ffmpeg instance %v\nInstance may already be closed\n", ffmpegI)
-	}
+	close(ffmpegI.troubleResolvedChan)
+	close(ffmpegI.cancelChan)
+
+	ffmpegI.SetStatus(CANCELLED)
+	ffmpegLogger.Emit(pkg.STOP, "FFmpeg instance %s cancelled", ffmpegI)
 }
 
 var FFMPEG_COMMAND_SUBSTITUTIONS []string = []string{
@@ -151,19 +152,17 @@ func (ffmpegI *ffmpegInstance) composeCommandArguments(sourceCommand string) str
 
 func (ffmpegI *ffmpegInstance) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Progress    *ffmpegProgress
-		Status      CommanderTaskStatus
-		Trouble     Trouble
-		ItemId      int
-		ProfileTag  string
-		TargetLabel string
+		Progress   *ffmpegProgress
+		Status     CommanderTaskStatus
+		Trouble    Trouble
+		ItemId     int
+		ProfileTag string
 	}{
 		ffmpegI.progress,
 		ffmpegI.status,
 		ffmpegI.trouble,
 		ffmpegI.item.ItemID,
 		ffmpegI.profileTag,
-		ffmpegI.targetLabel,
 	})
 }
 
@@ -196,12 +195,8 @@ func (ffmpegI *ffmpegInstance) ResolveTrouble(args map[string]interface{}) error
 		ffmpegI.profileTag = v.(string)
 	}
 
-	if v, ok := res["targetLabel"]; v != nil && ok {
-		ffmpegI.targetLabel = v.(string)
-	}
-
 	select {
-	case ffmpegI.troubleChan <- true:
+	case ffmpegI.troubleResolvedChan <- true:
 	default:
 	}
 
@@ -210,10 +205,6 @@ func (ffmpegI *ffmpegInstance) ResolveTrouble(args map[string]interface{}) error
 
 func (ffmpegI *ffmpegInstance) ProfileTag() string {
 	return ffmpegI.profileTag
-}
-
-func (ffmpegI *ffmpegInstance) TargetLabel() string {
-	return ffmpegI.targetLabel
 }
 
 func (ffmpegI *ffmpegInstance) Progress() interface{} {
@@ -236,7 +227,7 @@ func (ffmpegI *ffmpegInstance) GetOutputPath() string {
 	outputFormat := ffmpegI.item.processor.Config.Format.TargetFormat
 	profile := ffmpegI.getProfileInstance()
 	var itemOutputPath string
-	if profile == nil {
+	if profile == nil || profile.Output() == "" {
 		itemOutputPath = fmt.Sprintf("%s.%s", ffmpegI.item.TitleInfo.OutputPath(), outputFormat)
 		itemOutputPath = filepath.Join(ffmpegI.item.processor.Config.Format.OutputPath, itemOutputPath)
 	} else {
@@ -254,9 +245,7 @@ func (ffmpegI *ffmpegInstance) getProfileInstance() profile.Profile {
 }
 
 func (ffmpegI *ffmpegInstance) beginTranscode() error {
-	queueItem := ffmpegI.item
-	proc := queueItem.processor
-
+	proc := ffmpegI.item.processor
 	ffmpegCfg := &ffmpeg.Config{
 		ProgressEnabled: true,
 		FfmpegBinPath:   proc.Config.Format.FfmpegBinaryPath,
@@ -265,18 +254,16 @@ func (ffmpegI *ffmpegInstance) beginTranscode() error {
 
 	pIdx, p := proc.Profiles.FindProfileByTag(ffmpegI.profileTag)
 	if pIdx == -1 {
-		p = proc.Profiles.Profiles()[0]
+		return fmt.Errorf("ffmpeg instance %s failed to start as the profile tag %s no longer exists", ffmpegI, ffmpegI.profileTag)
 	}
-
-	var outputPath = ffmpegI.GetOutputPath()
 
 	cmdContext, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	progress, err := ffmpeg.
+	progressChannel, err := ffmpeg.
 		New(ffmpegCfg).
-		Input(queueItem.Path).
-		Output(outputPath).
+		Input(ffmpegI.item.Path).
+		Output(ffmpegI.GetOutputPath()).
 		WithContext(&cmdContext).
 		Start(p.Command())
 
@@ -284,19 +271,36 @@ func (ffmpegI *ffmpegInstance) beginTranscode() error {
 		return ffmpegI.parseFfmpegError(err)
 	}
 
-	// Progress listener. Automatically cancels the above context
-	// when ffmpeg execution is complete
-	for v := range progress {
-		ffmpegI.progress = &ffmpegProgress{
-			v.GetCurrentBitrate(),
-			v.GetCurrentTime(),
-			v.GetCurrentBitrate(),
-			v.GetProgress(),
-			v.GetSpeed(),
+	ffmpegI.SetStatus(WORKING)
+	for {
+		select {
+		case v, ok := <-progressChannel:
+			if !ok {
+				// Progress channel has closed meaning that the
+				// ffmpeg command has completed.
+				ffmpegLogger.Emit(pkg.SUCCESS, "FFmpeg instance (%s) FINISHED\n", ffmpegI)
+				ffmpegI.SetStatus(FINISHED)
+				return nil
+			}
+
+			ffmpegI.progress = &ffmpegProgress{
+				v.GetCurrentBitrate(),
+				v.GetCurrentTime(),
+				v.GetCurrentBitrate(),
+				v.GetProgress(),
+				v.GetSpeed(),
+			}
+
+			ffmpegI.item.NotifyUpdate()
+		case <-ffmpegI.cancelChan:
+			// Cancel channel is closed/emitted on - doesn't matter, we cancel
+			// by immediately returning from this method (which will cancel the
+			// context and close the ffmpeg process)
+			ffmpegLogger.Emit(pkg.STOP, "FFmpeg instance (%s) has been CANCELLED/ABORTED\n", ffmpegI)
+			ffmpegI.SetStatus(CANCELLED)
+			return nil
 		}
 	}
-
-	return nil
 }
 
 func (ffmpegI *ffmpegInstance) parseFfmpegError(err error) error {
@@ -306,7 +310,7 @@ func (ffmpegI *ffmpegInstance) parseFfmpegError(err error) error {
 	// want the 'message' JSON that is encoded inside.
 	messageMatcher := regexp.MustCompile(`(?s)message: ({.*})`)
 	groups := messageMatcher.FindStringSubmatch(err.Error())
-	if messageMatcher == nil {
+	if messageMatcher == nil || len(groups) == 0 {
 		return err
 	}
 
@@ -336,11 +340,11 @@ func (ffmpegI *ffmpegInstance) raiseTrouble(t Trouble) {
 
 func newFfmpegInstance(item *QueueItem, profileTag string) CommanderTask {
 	return &ffmpegInstance{
-		item:        item,
-		profileTag:  profileTag,
-		pid:         -1,
-		status:      PENDING,
-		cancelChan:  make(chan bool),
-		troubleChan: make(chan bool),
+		item:                item,
+		profileTag:          profileTag,
+		pid:                 -1,
+		status:              PENDING,
+		cancelChan:          make(chan bool),
+		troubleResolvedChan: make(chan bool),
 	}
 }

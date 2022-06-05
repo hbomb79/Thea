@@ -44,7 +44,7 @@
         if (stageIndex < details.stage) {
             return "complete";
         } else if (stageIndex == details.stage) {
-            return details.trouble && details.status == QueueStatus.NEEDS_RESOLVING
+            return details.status == QueueStatus.NEEDS_RESOLVING || details.status == QueueStatus.NEEDS_ATTENTION
                 ? "trouble"
                 : details.status == 0
                 ? "pending"

@@ -138,6 +138,13 @@
                         >
                     </p>
                 {/if}
+            {:else}
+                <h2>Trouble Information Unavailable</h2>
+                <p class="sub">TROUBLE_DETAILS_MISSING</p>
+                <p>
+                    The item has a troubled status (NEEDS_RESOLVING or NEEDS_ATTENTION) however no trouble information
+                    is available. This is a bug, please report to the server administrator
+                </p>
             {/if}
         {:else if state == ComponentState.RESOLVING || state == ComponentState.CONFIRMING}
             <h2>Resolving trouble</h2>

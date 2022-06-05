@@ -7,14 +7,55 @@
     import checkSvg from "../../assets/check-mark.svg";
     import scheduledSvg from "../../assets/pending.svg";
     import TroublePanel from "./TroublePanel.svelte";
+    import { SocketMessageType } from "../../store";
+    import type { SocketData } from "../../store";
+    import { commander } from "../../commander";
     export let details: QueueDetails;
 
-    const retryHandler = () => false;
-    const specifyProfileHandler = () => false;
-    const pauseHandler = () => false;
-    const cancelHandler = () => false;
+    function resolveTrouble(instance: CommanderTask, resolution: any) {
+        commander.sendMessage(
+            {
+                type: SocketMessageType.COMMAND,
+                title: "TROUBLE_RESOLVE",
+                arguments: { id: details.id, instanceTag: instance.ProfileTag, ...resolution },
+            },
+            (reply: SocketData): boolean => {
+                if (reply.type == SocketMessageType.ERR_RESPONSE) {
+                    alert(`Failed to promote item: ${reply.title}: ${reply.arguments.error}`);
+                } else {
+                    console.log("Resolution success!");
+                }
 
-    const troubleResolvers: [string, (instance: CommanderTask) => boolean][] = [
+                return false;
+            }
+        );
+    }
+
+    const retryHandler = (instance: CommanderTask) => {
+        resolveTrouble(instance, {
+            action: "retry",
+        });
+    };
+
+    const specifyProfileHandler = (instance: CommanderTask) => {
+        resolveTrouble(instance, {
+            profileTag: "unknown",
+        });
+    };
+
+    const pauseHandler = (instance: CommanderTask) => {
+        resolveTrouble(instance, {
+            action: "pause",
+        });
+    };
+
+    const cancelHandler = (instance: CommanderTask) => {
+        resolveTrouble(instance, {
+            action: "cancel",
+        });
+    };
+
+    const troubleResolvers: [string, (instance: CommanderTask) => void][] = [
         ["Retry", retryHandler],
         ["Specify Profile", specifyProfileHandler],
         ["Pause", pauseHandler],
@@ -148,6 +189,8 @@
                     flex: 1 auto;
 
                     .controls {
+                        flex: 0 0 auto;
+
                         .button {
                             padding: 0.6rem 0.6rem;
                             margin: 0 0.5rem;

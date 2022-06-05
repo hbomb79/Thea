@@ -92,12 +92,12 @@ func (wsGateway *WsGateway) WsItemPromote(hub *ws.SocketHub, message *ws.SocketM
 	idArg := message.Body["id"]
 	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
 	if queueItem == nil || idx < 0 {
-		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
+		return fmt.Errorf(ERR_FMT, "item with matching ID not found")
 	}
 
 	err := wsGateway.proc.Queue.PromoteItem(queueItem)
 	if err != nil {
-		return errors.New(fmt.Sprintf(ERR_FMT, err.Error()))
+		return fmt.Errorf(ERR_FMT, err.Error())
 	}
 
 	wsGateway.proc.UpdateChan <- queueItem.ItemID
@@ -114,12 +114,12 @@ func (wsGateway *WsGateway) WsItemPause(hub *ws.SocketHub, message *ws.SocketMes
 	idArg := message.Body["id"]
 	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
 	if queueItem == nil || idx < 0 {
-		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
+		return fmt.Errorf(ERR_FMT, "item with matching ID not found")
 	}
 
 	err := queueItem.Pause()
 	if err != nil {
-		return errors.New(fmt.Sprintf(ERR_FMT, err.Error()))
+		return fmt.Errorf(ERR_FMT, err.Error())
 	}
 
 	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem}, ws.Response))
@@ -135,12 +135,12 @@ func (wsGateway *WsGateway) WsItemCancel(hub *ws.SocketHub, message *ws.SocketMe
 	idArg := message.Body["id"]
 	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
 	if queueItem == nil || idx < 0 {
-		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
+		return fmt.Errorf(ERR_FMT, "item with matching ID not found")
 	}
 
 	err := queueItem.Cancel()
 	if err != nil {
-		return errors.New(fmt.Sprintf(ERR_FMT, err.Error()))
+		return fmt.Errorf(ERR_FMT, err.Error())
 	}
 
 	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem}, ws.Response))
@@ -156,9 +156,9 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *ws.SocketHub, message *ws.Sock
 	idArg := message.Body["id"]
 	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
 	if queueItem == nil || idx < 0 {
-		return errors.New(fmt.Sprintf(ERR_FMT, "item with matching ID not found"))
+		return fmt.Errorf(ERR_FMT, "item with matching ID not found")
 	} else if queueItem.Trouble == nil {
-		return errors.New(fmt.Sprintf(ERR_FMT, "item has no trouble"))
+		return fmt.Errorf(ERR_FMT, "item has no trouble")
 	}
 
 	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem.Trouble}, ws.Response))
@@ -168,21 +168,41 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *ws.SocketHub, message *ws.Sock
 func (wsGateway *WsGateway) WsTroubleResolve(hub *ws.SocketHub, message *ws.SocketMessage) error {
 	const ERR_FMT = "failed to resolve trouble for queue item %v - %v"
 
+	// Validate QueueItem ID is present
 	if err := message.ValidateArguments(map[string]string{"id": "number"}); err != nil {
 		return err
 	}
 
+	// Optional paramater for instance tag allows the client to resolve troubles embedded inside of ffmpeg instances
+	instanceTag, isEmbed := message.Body["instanceTag"]
+
 	idArg := message.Body["id"]
 	if item, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64))); item != nil && idx >= 0 {
-		if err := item.Trouble.Resolve(message.Body); err != nil {
-			return errors.New(fmt.Sprintf(ERR_FMT, idArg, err.Error()))
+		if isEmbed {
+			for _, i := range wsGateway.proc.FfmpegCommander.GetInstancesForItem(item.ItemID) {
+				if i.ProfileTag() == instanceTag {
+					if err := i.ResolveTrouble(message.Body); err != nil {
+						return fmt.Errorf("failed to resolve embedded ffmpeg trouble for queue item %v - %v", idArg, err.Error())
+					}
+
+					break
+				}
+			}
+		} else {
+			if item.Trouble != nil {
+				if err := item.Trouble.Resolve(message.Body); err != nil {
+					return fmt.Errorf(ERR_FMT, idArg, err.Error())
+				}
+			} else {
+				return fmt.Errorf(ERR_FMT, idArg, "item has no trouble")
+			}
 		}
 
 		hub.Send(message.FormReply("COMMAND_SUCCESS", nil, ws.Response))
 		return nil
 	}
 
-	return errors.New(fmt.Sprintf(ERR_FMT, idArg, "item could not be found"))
+	return fmt.Errorf(ERR_FMT, idArg, "item could not be found")
 }
 
 func (wsGateway *WsGateway) WsProfileIndex(hub *ws.SocketHub, message *ws.SocketMessage) error {

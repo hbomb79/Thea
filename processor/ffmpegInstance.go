@@ -64,21 +64,21 @@ func (ffmpegI *ffmpegInstance) Start(proc *Processor) {
 }
 
 func (ffmpegI *ffmpegInstance) String() string {
-	return fmt.Sprintf("{pid=%v itemID=%v status=%v profileTag=%v trouble=%v}", ffmpegI.pid, ffmpegI.item.ID, ffmpegI.status, ffmpegI.profileTag, ffmpegI.trouble)
+	return fmt.Sprintf("{pid=%v itemID=%v status=%v profileTag=%v}", ffmpegI.pid, ffmpegI.item.ID, ffmpegI.status, ffmpegI.profileTag)
 }
 
 func (ffmpegI *ffmpegInstance) ThreadsRequired() int {
-	threads := ffmpegI.getProfileInstance().Command().Threads
-	if threads == nil {
+	profile := ffmpegI.getProfileInstance()
+	if profile == nil || profile.Command().Threads == nil {
 		return DEFAULT_THREADS_REQUIRED
 	} else {
-		return *threads
+		return *profile.Command().Threads
 	}
 }
 
 func (ffmpegI *ffmpegInstance) Stop() {
 	if ffmpegI.status == CANCELLED {
-		ffmpegLogger.Emit(pkg.WARNING, "Ignoring request to cancel FFmpeg instance %s as it's already status is already CANCELLED!", ffmpegI)
+		ffmpegLogger.Emit(pkg.WARNING, "Ignoring request to cancel FFmpeg instance %s as it's already status is already CANCELLED!\n", ffmpegI)
 
 		return
 	}
@@ -87,7 +87,7 @@ func (ffmpegI *ffmpegInstance) Stop() {
 	close(ffmpegI.cancelChan)
 
 	ffmpegI.SetStatus(CANCELLED)
-	ffmpegLogger.Emit(pkg.STOP, "FFmpeg instance %s cancelled", ffmpegI)
+	ffmpegLogger.Emit(pkg.STOP, "FFmpeg instance %s cancelled\n", ffmpegI)
 }
 
 var FFMPEG_COMMAND_SUBSTITUTIONS []string = []string{
@@ -179,25 +179,36 @@ func (ffmpegI *ffmpegInstance) Trouble() Trouble {
 }
 
 func (ffmpegI *ffmpegInstance) ResolveTrouble(args map[string]interface{}) error {
+	const ERR_FMT = "unable to resolve FFmpeg task error - %v"
 	tr := ffmpegI.trouble
 	if _, ok := tr.(*FormatTaskError); !ok {
 		return fmt.Errorf("cannot resolve trouble %v: trouble expected to be a FormatTaskError, got %T", tr, tr)
 	}
 
-	if err := tr.Resolve(args); err != nil {
-		return fmt.Errorf("cannot resolve trouble %v: %s", tr, err.Error())
+	if v, ok := args["profileTag"]; ok {
+		ffmpegI.SetProfileTag(v.(string))
+	} else if v, ok := args["action"]; ok {
+		val := v.(string)
+		if val == "retry" {
+			// Do nothing, a retry will occur if execution reaches the end of this function.
+		} else if val == "pause" {
+			return fmt.Errorf(ERR_FMT, "'pause' action not yet implemented!")
+		} else if val == "cancel" {
+			return fmt.Errorf(ERR_FMT, "'cancel' action not yet implemented!")
+		} else {
+			return fmt.Errorf(ERR_FMT, "'action' accepts one of [retry, cancel, pause] as it's value")
+		}
+	} else {
+		return fmt.Errorf(ERR_FMT, "no valid resolution was found, expected profileTag, or an action containing one of [retry, cancel, pause]")
 	}
 
-	// The trouble resolved! Apply the content of it's resolution context to this instance and then signal
-	// the instance that is's okay to continue working.
-	res := tr.ResolutionContext()
-	if v, ok := res["profileTag"]; v != nil && ok {
-		ffmpegI.profileTag = v.(string)
-	}
+	// Unset the trouble as the resolution above didn't find any problems with the payload
+	ffmpegI.trouble = nil
 
 	select {
 	case ffmpegI.troubleResolvedChan <- true:
 	default:
+		ffmpegLogger.Emit(pkg.WARNING, "Trouble resolution channel send on ffmpeg instance %s was blocked/ignored!\n", ffmpegI)
 	}
 
 	return nil
@@ -219,8 +230,8 @@ func (ffmpegI *ffmpegInstance) SetStatus(s CommanderTaskStatus) {
 	ffmpegI.status = s
 }
 
-func (ffmpegI *ffmpegInstance) SetProfileTag(string) {
-	// ffmpegI.profileTag =
+func (ffmpegI *ffmpegInstance) SetProfileTag(newProfile string) {
+	ffmpegI.profileTag = newProfile
 }
 
 func (ffmpegI *ffmpegInstance) GetOutputPath() string {
@@ -245,6 +256,8 @@ func (ffmpegI *ffmpegInstance) getProfileInstance() profile.Profile {
 }
 
 func (ffmpegI *ffmpegInstance) beginTranscode() error {
+	ffmpegI.SetStatus(WORKING)
+
 	proc := ffmpegI.item.processor
 	ffmpegCfg := &ffmpeg.Config{
 		ProgressEnabled: true,
@@ -271,7 +284,6 @@ func (ffmpegI *ffmpegInstance) beginTranscode() error {
 		return ffmpegI.parseFfmpegError(err)
 	}
 
-	ffmpegI.SetStatus(WORKING)
 	for {
 		select {
 		case v, ok := <-progressChannel:
@@ -336,6 +348,7 @@ func (ffmpegI *ffmpegInstance) raiseTrouble(t Trouble) {
 
 	ffmpegI.trouble = t
 	ffmpegI.SetStatus(TROUBLED)
+	ffmpegI.item.NotifyUpdate()
 }
 
 func newFfmpegInstance(item *QueueItem, profileTag string) CommanderTask {

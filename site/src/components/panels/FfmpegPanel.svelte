@@ -37,11 +37,11 @@
         });
     };
 
-    const specifyProfileHandler = (instance: CommanderTask) => {
-        resolveTrouble(instance, {
-            profileTag: "unknown",
-        });
-    };
+    // const specifyProfileHandler = (instance: CommanderTask) => {
+    //     resolveTrouble(instance, {
+    //         profileTag: "unknown",
+    //     });
+    // };
 
     const pauseHandler = (instance: CommanderTask) => {
         resolveTrouble(instance, {
@@ -57,13 +57,14 @@
 
     const troubleResolvers: [string, (instance: CommanderTask) => void][] = [
         ["Retry", retryHandler],
-        ["Specify Profile", specifyProfileHandler],
+        // ["Specify Profile", specifyProfileHandler],
         ["Pause", pauseHandler],
         ["Cancel", cancelHandler],
     ];
 
     $: ffmpegInstances = details.ffmpeg_instances;
 
+    const wrapSpinner = (spinner: string) => `<div class="spinner-wrap">${spinner}</div>`;
     $: getStageIcon = function (instance: CommanderTask): string {
         switch (instance.Status) {
             case CommanderTaskStatus.PENDING:
@@ -71,7 +72,7 @@
             case CommanderTaskStatus.WAITING:
                 return scheduledSvg;
             case CommanderTaskStatus.WORKING:
-                return workingHtml;
+                return wrapSpinner(workingHtml);
             case CommanderTaskStatus.TROUBLED:
                 return troubleSvg;
             case CommanderTaskStatus.FINISHED:

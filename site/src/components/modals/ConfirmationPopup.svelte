@@ -20,6 +20,7 @@
     }
 
     function _onOkay() {
+        console.log("onOkay callback executed for ConfirmationPopup");
         onOkay(value);
         close();
     }

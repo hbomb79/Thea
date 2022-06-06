@@ -50,7 +50,7 @@
         text-align: left;
         border-radius: 7px;
         background: #e9eaef54;
-        margin: 11px 1rem;
+        margin: 6px 1rem;
         border: solid 1px #8c91b938;
         transition: all 200ms;
         transition-property: background, border, box-shadow, color;

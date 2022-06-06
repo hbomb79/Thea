@@ -2,6 +2,7 @@
     align-self: center;
     padding: 0.5rem;
     height: 1.5rem;
+    width: 1.5rem;
     position: relative;
 
     :global(svg) {
@@ -64,8 +65,12 @@
         }
     }
 
-    &.queued, &.pending, &.working {
-        &:before, &:after {
+    &.queued,
+    &.pending,
+    &.working {
+
+        &:before,
+        &:after {
             display: none;
         }
     }
@@ -107,7 +112,9 @@
     }
 
     &.draw-lines {
-        &:before, &:after {
+
+        &:before,
+        &:after {
             content: '';
             height: 2px;
             position: absolute;

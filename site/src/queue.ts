@@ -154,6 +154,11 @@ export interface QueueDetails extends QueueItem {
     profile_tag: string
     ffmpeg_instances: CommanderTask[]
 }
+
+export interface Movie {
+    //TODO
+}
+
 // The ContentManager class is available for use by components
 // who wish to keep track of the servers queue state. Generally
 // speaking, the class should only be instantiated once - however
@@ -162,10 +167,13 @@ export class ContentManager {
     private _items: QueueItem[] = []
     private _details: Map<number, QueueDetails> = new Map()
     private _profiles: TranscodeProfile[] = []
+    private _movies: Movie[] = []
 
     itemIndex: Writable<QueueItem[]>
     itemDetails: Writable<Map<number, QueueDetails>>
     serverProfiles: Writable<TranscodeProfile[]>
+    knownMovies: Writable<Movie[]>
+    // movieDetails: Writable<<>>
 
     constructor() {
         dataStream.subscribe((data: SocketData) => {
@@ -176,6 +184,7 @@ export class ContentManager {
         this.itemIndex = writable(this._items)
         this.itemDetails = writable(this._details)
         this.serverProfiles = writable(this._profiles)
+        this.knownMovies = writable(this._movies)
 
         this.itemIndex.subscribe((items) => {
             console.log("itemIndex change:", items)
@@ -193,8 +202,30 @@ export class ContentManager {
             this._profiles = profiles
         })
 
-        this.requestIndex()
-        this.requestProfiles()
+        this.requestMovies()
+        this.requestQueueIndex()
+        this.requestTranscoderProfiles()
+    }
+
+    // requestMovies will query the database for a list of known
+    // movies that have completed their transcoding. This selection
+    // can then be filtered by the client in order to perform filtering,
+    // searching, etc...
+    requestMovies() {
+        const handleReply = (response: SocketData): boolean => {
+            if (response.type == SocketMessageType.RESPONSE) {
+                this.itemIndex.set(response.arguments.payload.items)
+            } else {
+                console.warn("[QueueManager] Invalid reply while fetching queue index.", response)
+            }
+
+            return false;
+        }
+
+        commander.sendMessage({
+            title: "MOVIE_INDEX",
+            type: SocketMessageType.COMMAND
+        }, handleReply)
     }
 
     // hydrateDetails is a method that is called automatically
@@ -223,7 +254,7 @@ export class ContentManager {
     // requestIndex will query the server for the index of items (the queue)
     // that is currently known to the server. This client is responsible for
     // identifying new items and hydrating their details (see hydrateDetails).
-    requestIndex() {
+    requestQueueIndex() {
         const handleReply = (response: SocketData): boolean => {
             if (response.type == SocketMessageType.RESPONSE) {
                 this.itemIndex.set(response.arguments.payload.items)
@@ -267,7 +298,7 @@ export class ContentManager {
     // the server is matching queue items against when handling their
     // transcode. These profiles can be modified by the client by sending
     // messages to the server via the Commander.
-    requestProfiles() {
+    requestTranscoderProfiles() {
         const handleReply = (response: SocketData): boolean => {
             if (response.type == SocketMessageType.RESPONSE) {
                 this.serverProfiles.set(response.arguments.payload)
@@ -300,7 +331,7 @@ export class ContentManager {
                 // and pull it from the list
                 if (idx < 0) {
                     console.warn("Failed to find item inside of list for removal. Forcing refresh!")
-                    this.requestIndex()
+                    this.requestQueueIndex()
 
                     return
                 }
@@ -311,7 +342,7 @@ export class ContentManager {
                 // The position for this item has changed.. likely due to a item promotion.
                 // Update the order of the queue - to do this we should
                 // simply re-query the server for an up-to-date queue index.
-                this.requestIndex()
+                this.requestQueueIndex()
             } else {
                 if (idx < 0) {
                     // New item
@@ -326,10 +357,14 @@ export class ContentManager {
             }
         } else if (update.UpdateType == 1) {
             console.log("Queue update received from server - refetching item indexes")
-            this.requestIndex()
+            this.requestQueueIndex()
         } else if (update.UpdateType == 2) {
             console.log("Profile update received from server - fetching profile information")
-            this.requestProfiles()
+            this.requestTranscoderProfiles()
+        } else if (update.UpdateType == 3) {
+            alert("Hit movies update - NYI so this is unexpected!")
+            console.log("Movies update receives from server - refetching movies index")
+            this.requestMovies()
         }
     }
 }

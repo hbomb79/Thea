@@ -18,8 +18,56 @@ import (
 
 var itemLogger = pkg.Log.GetLogger("QueueItem", pkg.CORE)
 
+type ExportedItemDto struct {
+	Name          *string         `json:"name"`
+	Runtime       *string         `json:"runtime"`
+	ReleaseYear   *int            `json:"release_year"`
+	Description   *string         `json:"description"`
+	Image         *string         `json:"image_url"`
+	GenreIDs      []*uint         `json:"genre_ids"`
+	SeriesID      *uint           `json:"series_id"`
+	EpisodeNumber *uint           `json:"episode_number"`
+	SeasonNumber  *uint           `json:"season_number"`
+	Exports       []*ExportDetail `json:"exports"`
+}
+
+func NewExportedItemDto() *ExportedItemDto {
+	return &ExportedItemDto{}
+}
+
+type ExportedItem struct {
+	*gorm.Model
+	Name          string
+	Description   string
+	Runtime       string
+	ReleaseYear   int
+	Image         string
+	Genres        []*Genre `gorm:"many2many:item_genres;"`
+	Exports       []*ExportDetail
+	EpisodeNumber *int
+	SeasonNumber  *int
+	SeriesID      *uint
+	Series        *Series
+}
+
+type ExportDetail struct {
+	*gorm.Model
+	ExportedItemID uint
+	Name           string
+	Path           string `gorm:"uniqueIndex"`
+}
+
+type Series struct {
+	*gorm.Model
+	Name string
+}
+
+type Genre struct {
+	Name string `gorm:"primaryKey"`
+}
+
 func init() {
-	pkg.DB.RegisterModel(&QueueItem{}, &TitleInfo{}, &OmdbInfo{}, &ExportDetail{})
+	pkg.DB.RegisterModel(&ExportedItem{}, &ExportDetail{}, &Series{}, &Genre{})
 }
 
 // Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
@@ -88,24 +136,16 @@ const (
 // and the current processing status/stage
 type QueueItem struct {
 	gorm.Model
-	ItemID        int                  `json:"id" groups:"api" gorm:"-"`
-	Path          string               `json:"path"`
-	Name          string               `json:"name" groups:"api"`
-	Status        QueueItemStatus      `json:"status" groups:"api" gorm:"-"`
-	Stage         worker.PipelineStage `json:"stage" groups:"api" gorm:"-"`
-	TitleInfo     *TitleInfo           `json:"title_info"`
-	OmdbInfo      *OmdbInfo            `json:"omdb_info"`
-	Trouble       Trouble              `json:"trouble" gorm:"-"`
-	ProfileTag    string               `json:"profile_tag"`
-	processor     *Processor           `json:"-" gorm:"-"`
-	ExportDetails []*ExportDetail      `json:"export_details"`
-}
-
-type ExportDetail struct {
-	gorm.Model   `json:"-"`
-	QueueItemID  uint   `json:"-"`
-	ProfileLabel string `json:"profile_label"`
-	Path         string `json:"path"`
+	ItemID     int                  `json:"id" groups:"api" gorm:"-"`
+	Path       string               `json:"path"`
+	Name       string               `json:"name" groups:"api"`
+	Status     QueueItemStatus      `json:"status" groups:"api" gorm:"-"`
+	Stage      worker.PipelineStage `json:"stage" groups:"api" gorm:"-"`
+	TitleInfo  *TitleInfo           `json:"title_info"`
+	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
+	Trouble    Trouble              `json:"trouble" gorm:"-"`
+	ProfileTag string               `json:"profile_tag" gorm:"-"`
+	processor  *Processor           `json:"-" gorm:"-"`
 }
 
 func NewQueueItem(info fs.FileInfo, path string, proc *Processor) *QueueItem {
@@ -311,7 +351,49 @@ func (item *QueueItem) Cancel() error {
 
 func (item *QueueItem) CommitToDatabase() error {
 	db := pkg.DB.GetInstance()
-	if err := db.Debug().Save(item).Error; err != nil {
+
+	// Compose optional/nil-able fields of the export
+	var episodeNumber *int = nil
+	var seasonNumber *int = nil
+	var series *Series = nil
+	if item.TitleInfo.Episodic {
+		if item.TitleInfo.Episode > -1 {
+			episodeNumber = &item.TitleInfo.Episode
+		}
+
+		if item.TitleInfo.Season > -1 {
+			seasonNumber = &item.TitleInfo.Season
+		}
+
+		series = &Series{
+			Name: item.OmdbInfo.Title,
+		}
+	}
+
+	// Construct exports based on the completed ffmpeg instances
+	exports := make([]*ExportDetail, 0)
+	for _, instance := range item.processor.FfmpegCommander.GetInstancesForItem(item.ItemID) {
+		exports = append(exports, &ExportDetail{
+			Name: instance.ProfileTag(),
+			Path: instance.GetOutputPath(),
+		})
+	}
+
+	// Compose our export item
+	export := &ExportedItem{
+		Name:          item.OmdbInfo.Title, //TODO Potentially we want to find titles of episodes (if episodic) via OMDB? Would require altering the title parser too
+		Description:   item.OmdbInfo.Description,
+		Runtime:       item.OmdbInfo.Runtime, //TODO Perhaps we can derive this from the actual exported file (all exports should have similar length... right?)
+		ReleaseYear:   item.OmdbInfo.ReleaseYear,
+		Image:         item.OmdbInfo.PosterUrl,
+		Genres:        item.OmdbInfo.Genre.ToGenreList(),
+		Exports:       exports,
+		EpisodeNumber: episodeNumber,
+		SeasonNumber:  seasonNumber,
+		Series:        series,
+	}
+
+	if err := db.Debug().Save(export).Error; err != nil {
 		return fmt.Errorf("failed to commit item %s to database: %s", item, err.Error())
 	}
 
@@ -341,7 +423,6 @@ func (item *QueueItem) MarshalJSON() ([]byte, error) {
 		OmdbInfo        *OmdbInfo            `json:"omdb_info"`
 		Trouble         Trouble              `json:"trouble"`
 		ProfileTag      string               `json:"profile_tag"`
-		ExportDetails   []*ExportDetail      `json:"export_details"`
 		FfmpegInstances []CommanderTask      `json:"ffmpeg_instances"`
 	}{
 		item.ItemID,
@@ -353,7 +434,6 @@ func (item *QueueItem) MarshalJSON() ([]byte, error) {
 		item.OmdbInfo,
 		item.Trouble,
 		item.ProfileTag,
-		item.ExportDetails,
 		item.processor.FfmpegCommander.GetInstancesForItem(item.ItemID),
 	})
 }
@@ -415,6 +495,15 @@ func (sl *StringList) UnmarshalJSON(data []byte) error {
 	*sl = append(*sl, list...)
 
 	return nil
+}
+
+func (sl *StringList) ToGenreList() []*Genre {
+	out := make([]*Genre, 0)
+	for _, e := range *sl {
+		out = append(out, &Genre{Name: e})
+	}
+
+	return out
 }
 
 // UnmarshalJSON on OmdbResponseType converts the given string

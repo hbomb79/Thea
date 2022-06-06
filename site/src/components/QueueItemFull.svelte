@@ -87,6 +87,7 @@
     }
 
     function cancelItem() {
+        console.log("CANCELLING ITEM");
         sendCommand(
             "CANCEL_ITEM",
             (successData) => {
@@ -114,7 +115,7 @@
                     {
                         title: "Cancel Item",
                         body: "Are you sure you wish to cancel this item?<br/><br/><b>All progress will be lost and the item will be removed from the queue.</b><br/><br/><i>This action cannot be reversed, however if you later wish to process this item, remove it from the server cache (go to Settings > Cache > Edit Cache).</i>",
-                        onOkay: () => cancelItem,
+                        onOkay: cancelItem,
                     },
                     { closeButton: false }
                 );
@@ -144,7 +145,7 @@
         <div class="main">
             <h2 class="tile-title">Pipeline</h2>
             <div class="item pipeline">
-                {#key details}
+                {#key details.id}
                     <OverviewPanel {details} />
                 {/key}
             </div>
@@ -158,7 +159,7 @@
                 >
                     <div class="header" on:click={() => (openStages[k] = !openStages[k])}>
                         <h2>{display}</h2>
-                        {#key details}
+                        {#key details.id}
                             <div class="check" in:fade={{ duration: 300, delay: 100 + k * 50 }}>
                                 <StageIcon {details} stageIndex={k} />
                             </div>

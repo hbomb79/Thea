@@ -251,7 +251,7 @@ type FormatTaskError struct {
 }
 
 func (ex *FormatTaskError) Resolve(args map[string]interface{}) error {
-	return errors.New("Illegal resolution on FormatTaskError - Troubles of this type can only be resolved via the owner CommanderTask")
+	return errors.New("illegal resolution on FormatTaskError - Troubles of this type can only be resolved via the owner CommanderTask")
 }
 
 func (ex *FormatTaskError) MarshalJSON() ([]byte, error) {

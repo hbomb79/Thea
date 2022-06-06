@@ -23,6 +23,7 @@
     import ServerSettings from "./ServerSettings.svelte";
     import { fade } from "svelte/transition";
     import Modal from "svelte-simple-modal";
+    import Viewer from "./Viewer.svelte";
 
     const comp = {
         optionElements: new Array(3),
@@ -133,7 +134,8 @@
 
                     <div class="tiles" class:full-size={comp.selectionOption == 1}>
                         {#if comp.selectionOption == 0}
-                            <div class="column main">
+                            <Viewer />
+                            <!-- <div class="column main">
                                 <div class="tile overview" in:fade={{ duration: 250 }}>
                                     <h2 class="header">Overview</h2>
                                     <div class="content">
@@ -176,7 +178,7 @@
                                         {/each}
                                     </div>
                                 </div>
-                            </div>
+                            </div> -->
                         {:else if comp.selectionOption == 1}
                             {#if selectedItem > -1 && details.has(selectedItem)}
                                 <QueueItemFull details={details.get(selectedItem)} />

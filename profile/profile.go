@@ -218,7 +218,7 @@ func (profile *profile) Tag() string {
 
 func (profile *profile) SetCommand(command interface{}) error {
 	var output *ffmpeg.Options
-	err := mapstructure.Decode(command, &output)
+	err := mapstructure.WeakDecode(command, &output)
 	if err != nil {
 		return fmt.Errorf("failed to set Command: %v", err.Error())
 	}

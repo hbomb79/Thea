@@ -166,12 +166,6 @@ func (commander *ffmpegCommander) startInstance(instance CommanderTask) {
 
 		if instance.Status() == CANCELLED {
 			//TODO Perform cleanup of partially formatted content
-		} else if instance.Status() == FINISHED {
-			instance.Item().ExportDetails = append(instance.Item().ExportDetails, &ExportDetail{
-				QueueItemID:  instance.Item().ID,
-				ProfileLabel: instance.ProfileTag(),
-				Path:         instance.GetOutputPath(),
-			})
 		} else {
 			commanderLogger.Emit(pkg.WARNING, "FFMPEG instance %v exited with abormal state %v!\n", instance, instance.Status())
 		}

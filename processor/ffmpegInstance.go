@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -273,10 +274,13 @@ func (ffmpegI *ffmpegInstance) beginTranscode() error {
 	cmdContext, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	outputPath := ffmpegI.GetOutputPath()
+	os.MkdirAll(filepath.Dir(outputPath), os.ModePerm)
+
 	progressChannel, err := ffmpeg.
 		New(ffmpegCfg).
 		Input(ffmpegI.item.Path).
-		Output(ffmpegI.GetOutputPath()).
+		Output(outputPath).
 		WithContext(&cmdContext).
 		Start(p.Command())
 

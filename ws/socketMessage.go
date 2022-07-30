@@ -34,7 +34,7 @@ type SocketMessage struct {
 }
 
 func (message *SocketMessage) ValidateArguments(required map[string]string) error {
-	const ERR_FMT = "failed to validate key '%v' with type '%v' - %v"
+	const ERR_FMT = "failed to validate key '%v' with type '%v' - %#v"
 
 	for key, value := range required {
 		if v, ok := message.Body[key]; ok {
@@ -46,15 +46,20 @@ func (message *SocketMessage) ValidateArguments(required map[string]string) erro
 			givenValue := fmt.Sprintf("%v", v)
 			switch value {
 			case "number", "int":
-				var i int
-				_, err := fmt.Sscanf(givenValue, "%d", &i)
-				if err != nil {
-					return errors.New(fmt.Sprintf(ERR_FMT, key, value, givenValue))
+				_, ok := v.(float64)
+				if !ok {
+					return errors.New(fmt.Sprintf(ERR_FMT, key, value, v))
 				}
+
+				break
 			case "string":
+				if givenValue == "" {
+					return errors.New(fmt.Sprintf(ERR_FMT, key, value, v))
+				}
+
 				break
 			default:
-				return errors.New(fmt.Sprint(ERR_FMT, key, value, "unknown type"))
+				return errors.New(fmt.Sprintf(ERR_FMT, key, value, "unknown type"))
 			}
 		} else {
 			// Error, missing key

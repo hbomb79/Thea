@@ -1,7 +1,7 @@
 package processor
 
 import (
-	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -10,8 +10,65 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hbomb79/TPA/pkg"
+	"github.com/hbomb79/TPA/profile"
 	"github.com/hbomb79/TPA/worker"
+	"gorm.io/gorm"
 )
+
+var itemLogger = pkg.Log.GetLogger("QueueItem", pkg.CORE)
+
+type ExportedItemDto struct {
+	Name          *string         `json:"name"`
+	Runtime       *string         `json:"runtime"`
+	ReleaseYear   *int            `json:"release_year"`
+	Description   *string         `json:"description"`
+	Image         *string         `json:"image_url"`
+	GenreIDs      []*uint         `json:"genre_ids"`
+	SeriesID      *uint           `json:"series_id"`
+	EpisodeNumber *uint           `json:"episode_number"`
+	SeasonNumber  *uint           `json:"season_number"`
+	Exports       []*ExportDetail `json:"exports"`
+}
+
+func NewExportedItemDto() *ExportedItemDto {
+	return &ExportedItemDto{}
+}
+
+type ExportedItem struct {
+	*gorm.Model
+	Name          string
+	Description   string
+	Runtime       string
+	ReleaseYear   int
+	Image         string
+	Genres        []*Genre `gorm:"many2many:item_genres;"`
+	Exports       []*ExportDetail
+	EpisodeNumber *int
+	SeasonNumber  *int
+	SeriesID      *uint
+	Series        *Series
+}
+
+type ExportDetail struct {
+	*gorm.Model
+	ExportedItemID uint
+	Name           string
+	Path           string `gorm:"uniqueIndex"`
+}
+
+type Series struct {
+	*gorm.Model
+	Name string
+}
+
+type Genre struct {
+	Name string `gorm:"primaryKey"`
+}
+
+func init() {
+	pkg.DB.RegisterModel(&ExportedItem{}, &ExportDetail{}, &Series{}, &Genre{})
+}
 
 // Responses from OMDB come packaged in quotes; trimQuotesFromByteSlice is
 // used to remove the surrounding quotes from the provided byte slice
@@ -38,25 +95,39 @@ func convertToInt(input string) int {
 	return v
 }
 
-// QueueItemStatus represents whether or not the
-// QueueItem is currently being worked on, or if
-// it's waiting for a worker to pick it up
-// and begin working on the task
+// The current status of this QueueItem
 type QueueItemStatus int
 
-// If a task is Pending, it's waiting for a worker
-// ... if processing, it's currently being worked on.
-// When a stage in the pipeline is finished with the task,
-// it should set the Stage to the next stage, and set the
-// Status to pending - except for Format stage, which should
-// mark it as completed
 const (
+	// Inidicates that this item is waiting to be worked on. It's currently idle
 	Pending QueueItemStatus = iota
+
+	// TPA is making progress on this item
 	Processing
+
+	// This item has been completed
 	Completed
+
+	// Inidcates that work on this item has HALTED due to an error. The user
+	// should inspect the 'Trouble' parameter to resolve this issue
 	NeedsResolving
+
+	// The user has marked this item for cancellation, but TPA is performing
+	// a non-interuptable task. Once TPA is complete, it will notice this
+	// Status and move the item to 'Cancelled'
 	Cancelling
+
+	// This item has been cancelled and should be removed from the processor queue
 	Cancelled
+
+	// When Paused, TPA (both workers and the commander) will ignore this item entirely
+	Paused
+
+	// Indicates to the user that this item is experiencing a problem *but* it's not
+	// interfering with all progress. The user should still work to solve this problem
+	// as a 'NeedsAttention' status may be increased to 'NeedsResolving' if TPA detects
+	// that work can no longer be made while the problem remains
+	NeedsAttention
 )
 
 // QueueItem contains all the information needed to fully
@@ -64,49 +135,41 @@ const (
 // This includes information found from the file-system, OMDB,
 // and the current processing status/stage
 type QueueItem struct {
-	Id               int                  `json:"id" groups:"api"`
-	Path             string               `json:"path"`
-	Name             string               `json:"name" groups:"api"`
-	Status           QueueItemStatus      `json:"status" groups:"api"`
-	Stage            worker.PipelineStage `json:"stage" groups:"api"`
-	TaskFeedback     string               `json:"taskFeedback" groups:"api"`
-	TitleInfo        *TitleInfo           `json:"title_info"`
-	OmdbInfo         *OmdbInfo            `json:"omdb_info"`
-	Trouble          Trouble              `json:"trouble"`
-	processor        *Processor           `json:"-"`
-	CmdContext       context.Context      `json:"-"`
-	cmdContextCancel context.CancelFunc   `json:"-"`
+	gorm.Model
+	ItemID     int                  `json:"id" groups:"api" gorm:"-"`
+	Path       string               `json:"path"`
+	Name       string               `json:"name" groups:"api"`
+	Status     QueueItemStatus      `json:"status" groups:"api" gorm:"-"`
+	Stage      worker.PipelineStage `json:"stage" groups:"api" gorm:"-"`
+	TitleInfo  *TitleInfo           `json:"title_info"`
+	OmdbInfo   *OmdbInfo            `json:"omdb_info"`
+	Trouble    Trouble              `json:"trouble" gorm:"-"`
+	ProfileTag string               `json:"profile_tag" gorm:"-"`
+	processor  *Processor           `json:"-" gorm:"-"`
 }
 
 func NewQueueItem(info fs.FileInfo, path string, proc *Processor) *QueueItem {
-	cmdCtx, cmdCancel := context.WithCancel(context.Background())
 	return &QueueItem{
-		Name:             info.Name(),
-		Path:             path,
-		Status:           Pending,
-		Stage:            worker.Import,
-		processor:        proc,
-		CmdContext:       cmdCtx,
-		cmdContextCancel: cmdCancel,
+		Name:      info.Name(),
+		Path:      path,
+		Status:    Pending,
+		Stage:     worker.Import,
+		processor: proc,
 	}
-}
-
-func (item *QueueItem) SetTaskFeedback(status string) {
-	item.TaskFeedback = status
-	item.NotifyUpdate()
 }
 
 func (item *QueueItem) SetStage(stage worker.PipelineStage) {
 	item.Stage = stage
-	item.processor.WorkerPool.WakeupWorkers(stage)
 
-	item.SetTaskFeedback("")
 	item.NotifyUpdate()
 }
 
 func (item *QueueItem) SetStatus(status QueueItemStatus) {
-	item.Status = status
+	if item.Status == status {
+		return
+	}
 
+	item.Status = status
 	if item.Status == Cancelled {
 		// Item has been cancelled and has wrapped up what it was doing
 		// Remove this item from the queue, mark it in the queue cache
@@ -116,15 +179,27 @@ func (item *QueueItem) SetStatus(status QueueItemStatus) {
 		queue.cache.PushItem(item.Path, "cancelled")
 	}
 
-	item.SetTaskFeedback("")
 	item.NotifyUpdate()
+}
+
+func (item *QueueItem) SetProfileTag(tag string) error {
+	if idx, _ := item.processor.Profiles.FindProfileByTag(tag); idx == -1 {
+		return errors.New("profile tag invalid - profile does not exist in Processor.ProfileList")
+	}
+
+	item.ProfileTag = tag
+	item.NotifyUpdate()
+
+	return nil
 }
 
 // SetTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
 func (item *QueueItem) SetTrouble(trouble Trouble) {
-	fmt.Printf("[Trouble] Raising trouble (%T) for QueueItem (%v)!\n", trouble, item.Path)
+	defer item.NotifyUpdate()
+
+	itemLogger.Emit(pkg.WARNING, "Raising trouble %T for QueueItem %s\n", trouble, item)
 	item.Trouble = trouble
 
 	// If the item is cancelled/cancelling, we don't want to override that status
@@ -175,6 +250,8 @@ func (item *QueueItem) FormatTitle() error {
 	if movieGroups := movieMatcher.FindStringSubmatch(title); len(movieGroups) >= 1 {
 		item.TitleInfo = &TitleInfo{
 			Episodic:   false,
+			Season:     -1,
+			Episode:    -1,
 			Title:      movieGroups[1],
 			Year:       convertToInt(movieGroups[2]),
 			Resolution: resolution,
@@ -186,6 +263,69 @@ func (item *QueueItem) FormatTitle() error {
 	// Didn't match either case; return error so that trouble
 	// can be raised by the worker.
 	return TitleFormatError{item, "Failed to match RegExp!"}
+}
+
+// ValidateProfileSuitable accepts a profile and will check it's match conditions, and potentially
+// other criteria, to asertain if the profile should be used when transcoding this items content
+// via the FFmpeg commander.
+func (item *QueueItem) ValidateProfileSuitable(pr profile.Profile) bool {
+	matchConds := pr.MatchConditions()
+
+	// Check that this item matches the the conditions specified by the profile. If there
+	// are no conditions, we assume this profile has none and will return true
+	if len(matchConds) == 0 {
+		return true
+	}
+
+	currentEval := true
+	for _, condition := range matchConds {
+		var v interface{}
+
+		switch condition.Key {
+		case profile.TITLE:
+			v = item.TitleInfo.Title
+		case profile.RESOLUTION:
+			v = item.TitleInfo.Resolution
+		case profile.EPISODE_NUMBER:
+			if item.TitleInfo.Episodic && item.TitleInfo.Episode != -1 {
+				v = item.TitleInfo.Episode
+			} else {
+				v = nil
+			}
+		case profile.SEASON_NUMBER:
+			if item.TitleInfo.Episodic && item.TitleInfo.Season != -1 {
+				v = item.TitleInfo.Season
+			} else {
+				v = nil
+			}
+		case profile.SOURCE_EXTENSION:
+			v = item.Path
+		case profile.SOURCE_NAME:
+			v = item.Name
+		case profile.SOURCE_PATH:
+			v = item.Path
+		}
+
+		isMatch, err := condition.IsMatch(v)
+		if err != nil {
+			itemLogger.Emit(pkg.ERROR, "FAILED to validate if profile (%s) match condition (%v) is suitable for item %s because: %v\n", pr, condition, item, err.Error())
+		}
+
+		if currentEval {
+			currentEval = isMatch
+		}
+
+		if condition.Modifier == profile.OR {
+			// End of this block
+			if currentEval {
+				return true
+			} else {
+				currentEval = true
+			}
+		}
+	}
+
+	return currentEval
 }
 
 // Cancel will cancel an item that is currently pending by setting it's status to cancelled.
@@ -206,7 +346,57 @@ func (item *QueueItem) Cancel() error {
 		item.SetStatus(Cancelling)
 	}
 
-	item.cmdContextCancel()
+	return nil
+}
+
+func (item *QueueItem) CommitToDatabase() error {
+	db := pkg.DB.GetInstance()
+
+	// Compose optional/nil-able fields of the export
+	var episodeNumber *int = nil
+	var seasonNumber *int = nil
+	var series *Series = nil
+	if item.TitleInfo.Episodic {
+		if item.TitleInfo.Episode > -1 {
+			episodeNumber = &item.TitleInfo.Episode
+		}
+
+		if item.TitleInfo.Season > -1 {
+			seasonNumber = &item.TitleInfo.Season
+		}
+
+		series = &Series{
+			Name: item.OmdbInfo.Title,
+		}
+	}
+
+	// Construct exports based on the completed ffmpeg instances
+	exports := make([]*ExportDetail, 0)
+	for _, instance := range item.processor.FfmpegCommander.GetInstancesForItem(item.ItemID) {
+		exports = append(exports, &ExportDetail{
+			Name: instance.ProfileTag(),
+			Path: instance.GetOutputPath(),
+		})
+	}
+
+	// Compose our export item
+	export := &ExportedItem{
+		Name:          item.OmdbInfo.Title, //TODO Potentially we want to find titles of episodes (if episodic) via OMDB? Would require altering the title parser too
+		Description:   item.OmdbInfo.Description,
+		Runtime:       item.OmdbInfo.Runtime, //TODO Perhaps we can derive this from the actual exported file (all exports should have similar length... right?)
+		ReleaseYear:   item.OmdbInfo.ReleaseYear,
+		Image:         item.OmdbInfo.PosterUrl,
+		Genres:        item.OmdbInfo.Genre.ToGenreList(),
+		Exports:       exports,
+		EpisodeNumber: episodeNumber,
+		SeasonNumber:  seasonNumber,
+		Series:        series,
+	}
+
+	if err := db.Debug().Save(export).Error; err != nil {
+		return fmt.Errorf("failed to commit item %s to database: %s", item, err.Error())
+	}
+
 	return nil
 }
 
@@ -215,23 +405,55 @@ func (item *QueueItem) Pause() error {
 }
 
 func (item *QueueItem) NotifyUpdate() {
-	item.processor.UpdateChan <- item.Id
+	item.processor.UpdateChan <- item.ItemID
+}
+
+func (item *QueueItem) String() string {
+	return fmt.Sprintf("{%d PK=%d name=%s}", item.ItemID, item.ID, item.Name)
+}
+
+func (item *QueueItem) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		ItemID          int                  `json:"id"`
+		Path            string               `json:"path"`
+		Name            string               `json:"name"`
+		Status          QueueItemStatus      `json:"status"`
+		Stage           worker.PipelineStage `json:"stage"`
+		TitleInfo       *TitleInfo           `json:"title_info"`
+		OmdbInfo        *OmdbInfo            `json:"omdb_info"`
+		Trouble         Trouble              `json:"trouble"`
+		ProfileTag      string               `json:"profile_tag"`
+		FfmpegInstances []CommanderTask      `json:"ffmpeg_instances"`
+	}{
+		item.ItemID,
+		item.Path,
+		item.Name,
+		item.Status,
+		item.Stage,
+		item.TitleInfo,
+		item.OmdbInfo,
+		item.Trouble,
+		item.ProfileTag,
+		item.processor.FfmpegCommander.GetInstancesForItem(item.ItemID),
+	})
 }
 
 // TitleInfo contains the information about the import QueueItem
 // that is gleamed from the pathname given; such as the title and
 // if the show is an episode or a movie.
 type TitleInfo struct {
-	Title      string
-	Episodic   bool
-	Season     int
-	Episode    int
-	Year       int
-	Resolution string
+	gorm.Model
+	QueueItemID uint
+	Title       string
+	Episodic    bool
+	Season      int
+	Episode     int
+	Year        int
+	Resolution  string
 }
 
 // OutputPath is a method to calculate the path to which this
-// item should be output to - based on the TitleInformatio
+// item should be output to - based on the TitleInformation
 func (tInfo *TitleInfo) OutputPath() string {
 	if tInfo.Episodic {
 		fName := fmt.Sprintf("%v_%v_%v_%v_%v", tInfo.Episode, tInfo.Season, tInfo.Title, tInfo.Resolution, tInfo.Year)
@@ -246,7 +468,9 @@ func (tInfo *TitleInfo) OutputPath() string {
 // a file structure, and also to store the information inside
 // of a cache file or a database.
 type OmdbInfo struct {
-	Genre       StringList `decode:"string"`
+	gorm.Model
+	QueueItemID uint
+	Genre       StringList `decode:"string" mapstructure:"-" gorm:"-"`
 	Title       string
 	Description string `json:"plot"`
 	ReleaseYear int
@@ -254,8 +478,8 @@ type OmdbInfo struct {
 	ImdbId      string
 	Type        string
 	PosterUrl   string           `json:"poster"`
-	Response    OmdbResponseType `decode:"bool"`
-	Error       string
+	Response    OmdbResponseType `decode:"bool" gorm:"-"`
+	Error       string           `gorm:"-"`
 }
 
 type StringList []string
@@ -271,6 +495,15 @@ func (sl *StringList) UnmarshalJSON(data []byte) error {
 	*sl = append(*sl, list...)
 
 	return nil
+}
+
+func (sl *StringList) ToGenreList() []*Genre {
+	out := make([]*Genre, 0)
+	for _, e := range *sl {
+		out = append(out, &Genre{Name: e})
+	}
+
+	return out
 }
 
 // UnmarshalJSON on OmdbResponseType converts the given string

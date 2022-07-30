@@ -9,7 +9,7 @@ const defaultValue = (type:string, val:any): any => {
         case 'bool':
             return val || false
         case 'int':
-            return val || -1
+            return parseInt(val) || -1
         case 'string':
             return val || ""
         default:

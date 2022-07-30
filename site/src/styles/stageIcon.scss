@@ -2,6 +2,7 @@
     align-self: center;
     padding: 0.5rem;
     height: 1.5rem;
+    width: 1.5rem;
     position: relative;
 
     :global(svg) {
@@ -14,11 +15,13 @@
     }
 
     :global(.spinner-wrap) {
-        transform: scale(0.4) translate(-50%, -50%);
-        position: absolute;
-        left: -25%;
-        top: -4px;
         color: #96b4fd;
+        transform: scale(0.3);
+        transform-origin: 0 0;
+    }
+
+    :global(.spinner-wrap > div) {
+        transform: scale(1.3);
     }
 
     &:hover :global(svg) {
@@ -62,8 +65,12 @@
         }
     }
 
-    &.queued, &.pending, &.working {
-        &:before, &:after {
+    &.queued,
+    &.pending,
+    &.working {
+
+        &:before,
+        &:after {
             display: none;
         }
     }
@@ -78,22 +85,53 @@
         opacity: 0;
     }
 
+    @keyframes stageCheckLineLeft {
+        0% {
+            opacity: 0;
+            width: 0px;
+            right: 112px;
+        }
+
+        100% {
+            opacity: 1;
+            width: 80px;
+            right: 32px;
+        }
+    }
+
+    @keyframes stageCheckLineRight {
+        0% {
+            opacity: 0;
+            width: 0px;
+        }
+
+        100% {
+            opacity: 1;
+            width: 80px;
+        }
+    }
+
     &.draw-lines {
-        &:before, &:after {
+
+        &:before,
+        &:after {
             content: '';
             height: 2px;
             position: absolute;
             top: 18px;
-            width: 80px;
+            width: 0px;
+            opacity: 0;
             background-color: #abc3fb;
         }
 
-        &:before {
-            right: 32px;
+        &::before {
+            animation: stageCheckLineLeft 100ms normal forwards ease-out;
         }
 
-        &:after {
+        &::after {
             left: 32px;
+            animation: stageCheckLineRight 100ms normal forwards ease-out;
+            animation-delay: 100ms;
         }
     }
 }

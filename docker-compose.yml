@@ -1,0 +1,18 @@
+services:
+  web:
+    build: ./site/
+    ports:
+      - '${SITE_PORT:?err}:5000'
+  db:
+    image: postgres:14.1-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRESS_USER:?err}
+      - POSTGRES_PASSWORD=${POSTGRESS_PASSWORD:?err}
+    ports:
+      - '${DB_PORT:?err}:5432'
+    volumes: 
+      - db:/var/lib/postgresql/data
+volumes:
+  db:
+    driver: local

@@ -18,6 +18,9 @@ type processorQueue struct {
 	sync.Mutex
 }
 
+// NewProcessorQueue returns a pointer to a newly-created processorQueue
+// with a slice of QueueItems and the persistent file-system cache
+// already populated.
 func NewProcessorQueue(cachePath string) *processorQueue {
 	return &processorQueue{
 		Items:  make([]*QueueItem, 0),
@@ -57,10 +60,10 @@ func (queue *processorQueue) Push(item *QueueItem) error {
 	defer queue.Unlock()
 
 	if queue.Contains(item.Path) || queue.cache.HasItem(item.Path) {
-		return errors.New(fmt.Sprintf("item (%s) is either already in queue, or marked as complete in cache", item.Path))
+		return fmt.Errorf("item (%s) is either already in queue, or marked as complete in cache", item.Path)
 	}
 
-	item.Id = queue.lastId
+	item.ItemID = queue.lastId
 	queue.Items = append(queue.Items, item)
 	queue.lastId++
 
@@ -71,7 +74,7 @@ func (queue *processorQueue) Remove(item *QueueItem) error {
 	queue.Lock()
 	defer queue.Unlock()
 
-	item, idx := queue.FindById(item.Id)
+	item, idx := queue.FindById(item.ItemID)
 	if item == nil || idx < 0 {
 		return errors.New("cannot remove: does not exist in queue")
 	}
@@ -110,7 +113,7 @@ func (queue *processorQueue) AdvanceStage(item *QueueItem) {
 
 	if item.Stage == worker.Finish {
 		item.SetStatus(Completed)
-	} else if item.Stage == worker.Format {
+	} else if item.Stage == worker.Database {
 		item.SetStage(worker.Finish)
 		item.SetStatus(Completed)
 
@@ -179,6 +182,11 @@ func (queue *processorQueue) Filter(cb ItemFn) {
 	queue.Items = newItems
 }
 
+// ForEach iterates over each item in the processorQueue and executes
+// the provided callback (cb) once per item, passinng a pointer to the
+// queue, the index of the item, and a pointer to the QueueItem to the callback
+// each time (see type itemFn). If the callback at any point returns 'True', the
+// loop is broken. A 'false' return from the callback has no impact.
 func (queue *processorQueue) ForEach(cb ItemFn) {
 	for key, item := range queue.Items {
 		if cb(queue, key, item) {
@@ -187,9 +195,12 @@ func (queue *processorQueue) ForEach(cb ItemFn) {
 	}
 }
 
+// FindById iterates over the queue searching for a QueueItem with an ID that matches
+// the int 'id' provided to this method. If found, a pointer to this QueueItem, and the index
+// of the QueueItem in the queue is returned. If not found, nil and -1 is returned
 func (queue *processorQueue) FindById(id int) (*QueueItem, int) {
 	for idx, item := range queue.Items {
-		if item.Id == id {
+		if item.ItemID == id {
 			return item, idx
 		}
 	}
@@ -197,6 +208,10 @@ func (queue *processorQueue) FindById(id int) (*QueueItem, int) {
 	return nil, -1
 }
 
+// Reorder accepts an array/slice of integers where each value corresponds to the
+// ID of a QueueItem. The queue is reordered so that the queue matches the order provided
+// by this array. An error is returned if the indexOrder is not the same length, or if the
+// indexOrder references an item ID that does no exist.
 func (queue *processorQueue) Reorder(indexOrder []int) error {
 	queue.Lock()
 	defer queue.Unlock()
@@ -213,7 +228,7 @@ func (queue *processorQueue) Reorder(indexOrder []int) error {
 			continue
 		}
 
-		return fmt.Errorf("indexOrder key %v specifies item ID %v, which does not exist!", k, v)
+		return fmt.Errorf("indexOrder key %v specifies item ID %v, which does not exist", k, v)
 	}
 
 	queue.Items = newQueue

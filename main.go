@@ -6,25 +6,24 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/hbomb79/TPA/api"
-	"github.com/hbomb79/TPA/pkg"
-	"github.com/hbomb79/TPA/processor"
-	"github.com/hbomb79/TPA/profile"
-	"github.com/hbomb79/TPA/ws"
+	"github.com/hbomb79/TPA/internal"
+	"github.com/hbomb79/TPA/internal/api"
+	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/TPA/pkg/socket"
 )
 
-var logger = pkg.Log.GetLogger("Main", pkg.ALL)
+var mainLogger = logger.Get("Main")
 
 type Tpa struct {
-	proc        *processor.Processor
-	socketHub   *ws.SocketHub
+	proc        *internal.Processor
+	socketHub   *socket.SocketHub
 	wsGateway   *api.WsGateway
 	httpGateway *api.HttpGateway
 	httpRouter  *api.Router
 }
 
 func NewTpa() *Tpa {
-	proc, err := processor.NewProcessor()
+	proc, err := internal.NewProcessor()
 	if err != nil {
 		panic(err)
 	}
@@ -32,8 +31,8 @@ func NewTpa() *Tpa {
 	return &Tpa{
 		proc:        proc,
 		httpRouter:  api.NewRouter(),
-		httpGateway: api.NewHttpGateway(proc),
-		socketHub:   ws.NewSocketHub(),
+		httpGateway: api.NewHttpGateway(proc.Queue),
+		socketHub:   socket.NewSocketHub(),
 		wsGateway:   api.NewWsGateway(proc),
 	}
 }
@@ -41,8 +40,8 @@ func NewTpa() *Tpa {
 func (tpa *Tpa) newClientConnection() map[string]interface{} {
 	return map[string]interface{}{
 		"ffmpegOptions":          tpa.proc.KnownFfmpegOptions,
-		"ffmpegMatchKeys":        processor.FFMPEG_COMMAND_SUBSTITUTIONS,
-		"profileAcceptableTypes": profile.MatchKeyAcceptableTypes(),
+		"ffmpegMatchKeys":        internal.FFMPEG_COMMAND_SUBSTITUTIONS,
+		"profileAcceptableTypes": internal.MatchKeyAcceptableTypes(),
 	}
 }
 
@@ -50,19 +49,19 @@ func (tpa *Tpa) Start() {
 	// Start websocket, router and processor
 	wg := &sync.WaitGroup{}
 
-	logger.Emit(pkg.INFO, "Starting Processor\n")
+	mainLogger.Emit(logger.INFO, "Starting Processor\n")
 	procReady := make(chan bool)
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		if err := tpa.proc.Start(procReady); err != nil {
-			logger.Emit(pkg.FATAL, "Failed to start Processor: %v", err.Error())
+			mainLogger.Emit(logger.FATAL, "Failed to start Processor: %v", err.Error())
 		}
 
 		close(procReady)
 
-		logger.Emit(pkg.STOP, "Processor shutdown, cleaning up supporting services...\n")
+		mainLogger.Emit(logger.STOP, "Processor shutdown, cleaning up supporting services...\n")
 		tpa.socketHub.Close()
 		tpa.httpRouter.Stop()
 	}()
@@ -71,7 +70,7 @@ func (tpa *Tpa) Start() {
 	// on certain fields being set/populated.
 	v, ok := <-procReady
 	if v && ok {
-		logger.Emit(pkg.INFO, "Confguring HTTP and Websocket routes...\n")
+		mainLogger.Emit(logger.INFO, "Confguring HTTP and Websocket routes...\n")
 		tpa.setupRoutes()
 		tpa.socketHub.WithConnectionCallback(tpa.newClientConnection)
 
@@ -121,17 +120,17 @@ func (tpa *Tpa) setupRoutes() {
 	tpa.socketHub.BindCommand("PROFILE_UPDATE_COMMAND", tpa.wsGateway.WsProfileUpdateCommand)
 }
 
-func (tpa *Tpa) OnProcessorUpdate(update *processor.ProcessorUpdate) {
+func (tpa *Tpa) OnProcessorUpdate(update *internal.ProcessorUpdate) {
 	body := map[string]interface{}{"context": update}
-	if update.UpdateType == processor.PROFILE_UPDATE {
+	if update.UpdateType == internal.PROFILE_UPDATE {
 		body["profiles"] = tpa.proc.Profiles.Profiles()
 		body["targetOpts"] = tpa.proc.KnownFfmpegOptions
 	}
 
-	tpa.socketHub.Send(&ws.SocketMessage{
+	tpa.socketHub.Send(&socket.SocketMessage{
 		Title: "UPDATE",
 		Body:  body,
-		Type:  ws.Update,
+		Type:  socket.Update,
 	})
 }
 
@@ -144,7 +143,7 @@ func main() {
 		log.Panicf(err.Error())
 	}
 
-	procCfg := new(processor.TPAConfig)
+	procCfg := new(internal.TPAConfig)
 	if err := procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml")); err != nil {
 		panic(err)
 	}

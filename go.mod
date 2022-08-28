@@ -60,3 +60,5 @@ require (
 	gorm.io/gorm v1.23.4 // indirect
 	olympos.io/encoding/edn v0.0.0-20200308123125-93e3b8dd0e24 // indirect
 )
+
+replace github.com/floostack/transcoder => /home/haz/go/src/transcoder

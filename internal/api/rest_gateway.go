@@ -10,10 +10,10 @@ import (
 )
 
 type HttpGateway struct {
-	queue internal.ProcessorQueue
+	queue internal.QueueManager
 }
 
-func NewHttpGateway(queue internal.ProcessorQueue) *HttpGateway {
+func NewHttpGateway(queue internal.QueueManager) *HttpGateway {
 	return &HttpGateway{queue: queue}
 }
 

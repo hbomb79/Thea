@@ -8,7 +8,7 @@ import (
 	"github.com/hbomb79/TPA/pkg/cache"
 )
 
-type ProcessorQueue interface {
+type QueueManager interface {
 	Retrieve(string) *QueueItem
 	Contains(string) bool
 	Push(*QueueItem) error
@@ -35,7 +35,7 @@ type processorQueue struct {
 // NewProcessorQueue returns a pointer to a newly-created ProcessorQueue
 // with a slice of QueueItems and the persistent file-system cache
 // already populated.
-func NewProcessorQueue(cachePath string) ProcessorQueue {
+func NewProcessorQueue(cachePath string) QueueManager {
 	return &processorQueue{
 		Items:  make([]*QueueItem, 0),
 		lastId: 0,
@@ -185,7 +185,7 @@ func (queue *processorQueue) PromoteItem(item *QueueItem) error {
 	return errors.New("cannot promote: item does not exist inside this queue")
 }
 
-type ItemFn func(ProcessorQueue, int, *QueueItem) bool
+type ItemFn func(QueueManager, int, *QueueItem) bool
 
 // Filter runs the provided callback for every item inside the queue. If the callback
 // returns true, the item is retained. Otherwise, if the callback returns false, the item

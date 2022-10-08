@@ -67,7 +67,11 @@ func (ffmpegI *ffmpegInstance) Start() {
 }
 
 func (ffmpegI *ffmpegInstance) String() string {
-	return fmt.Sprintf("{pid=%v itemID=%v status=%v profileTag=%v}", ffmpegI.getProcessID(), ffmpegI.item.ID, ffmpegI.status, ffmpegI.profileTag)
+	return fmt.Sprintf("{pid=%v itemID=%v status=%v profileTag=%v}",
+		ffmpegI.getProcessID(),
+		ffmpegI.item.ID,
+		ffmpegI.status,
+		ffmpegI.profileTag)
 }
 
 func (ffmpegI *ffmpegInstance) ThreadsRequired() int {
@@ -195,7 +199,7 @@ func (ffmpegI *ffmpegInstance) ResolveTrouble(args map[string]interface{}) error
 		if val == "retry" {
 			// Do nothing, a retry will occur if execution reaches the end of this function.
 		} else if val == "pause" {
-			return fmt.Errorf(ERR_FMT, "'pause' action not yet implemented!")
+			ffmpegI.SetPaused(!ffmpegI.paused)
 		} else if val == "cancel" {
 			return fmt.Errorf(ERR_FMT, "'cancel' action not yet implemented!")
 		} else {
@@ -264,12 +268,12 @@ func (ffmpegI *ffmpegInstance) SetProfileTag(newProfile string) {
 }
 
 func (ffmpegI *ffmpegInstance) GetOutputPath() string {
-	outputFormat := ffmpegI.item.processor.Config.Format.TargetFormat
+	outputFormat := ffmpegI.item.tpa.Config().Format.TargetFormat
 	profile := ffmpegI.getProfileInstance()
 	var itemOutputPath string
 	if profile == nil || profile.Output() == "" {
 		itemOutputPath = fmt.Sprintf("%s.%s", ffmpegI.item.TitleInfo.OutputPath(), outputFormat)
-		itemOutputPath = filepath.Join(ffmpegI.item.processor.Config.Format.OutputPath, itemOutputPath)
+		itemOutputPath = filepath.Join(ffmpegI.item.tpa.Config().Format.OutputPath, itemOutputPath)
 	} else {
 		itemOutputPath = profile.Output()
 	}
@@ -279,7 +283,7 @@ func (ffmpegI *ffmpegInstance) GetOutputPath() string {
 }
 
 func (ffmpegI *ffmpegInstance) getProfileInstance() Profile {
-	_, profile := ffmpegI.item.processor.Profiles.FindProfileByTag(ffmpegI.profileTag)
+	_, profile := ffmpegI.item.tpa.Profiles().FindProfileByTag(ffmpegI.profileTag)
 
 	return profile
 }
@@ -295,14 +299,15 @@ func (ffmpegI *ffmpegInstance) resumeTranscode() {
 func (ffmpegI *ffmpegInstance) beginTranscode() error {
 	ffmpegI.SetStatus(WORKING)
 
-	proc := ffmpegI.item.processor
+	tpa := ffmpegI.item.tpa
+	config := tpa.Config().Format
 	ffmpegCfg := &ffmpeg.Config{
 		ProgressEnabled: true,
-		FfmpegBinPath:   proc.Config.Format.FfmpegBinaryPath,
-		FfprobeBinPath:  proc.Config.Format.FfprobeBinaryPath,
+		FfmpegBinPath:   config.FfmpegBinaryPath,
+		FfprobeBinPath:  config.FfprobeBinaryPath,
 	}
 
-	pIdx, p := proc.Profiles.FindProfileByTag(ffmpegI.profileTag)
+	pIdx, p := tpa.Profiles().FindProfileByTag(ffmpegI.profileTag)
 	if pIdx == -1 {
 		return fmt.Errorf("ffmpeg instance %s failed to start as the profile tag %s no longer exists", ffmpegI, ffmpegI.profileTag)
 	}

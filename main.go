@@ -14,38 +14,37 @@ import (
 
 var mainLogger = logger.Get("Main")
 
-type Tpa struct {
-	proc        *internal.Processor
+type services struct {
+	proc        internal.TPA
 	socketHub   *socket.SocketHub
 	wsGateway   *api.WsGateway
 	httpGateway *api.HttpGateway
 	httpRouter  *api.Router
 }
 
-func NewTpa() *Tpa {
-	proc, err := internal.NewProcessor()
-	if err != nil {
-		panic(err)
+func NewTpa(config internal.TPAConfig) *services {
+	services := &services{
+		httpRouter: api.NewRouter(),
+		socketHub:  socket.NewSocketHub(),
 	}
 
-	return &Tpa{
-		proc:        proc,
-		httpRouter:  api.NewRouter(),
-		httpGateway: api.NewHttpGateway(proc.Queue),
-		socketHub:   socket.NewSocketHub(),
-		wsGateway:   api.NewWsGateway(proc),
-	}
+	tpa := internal.NewTPA(config, services.OnProcessorUpdate)
+	services.proc = tpa
+	services.wsGateway = api.NewWsGateway(tpa)
+	services.httpGateway = api.NewHttpGateway(tpa.Queue())
+	return services
+
 }
 
-func (tpa *Tpa) newClientConnection() map[string]interface{} {
+func (tpa *services) newClientConnection() map[string]interface{} {
 	return map[string]interface{}{
-		"ffmpegOptions":          tpa.proc.KnownFfmpegOptions,
+		// "ffmpegOptions":          tpa.proc.KnownFfmpegOptions,
 		"ffmpegMatchKeys":        internal.FFMPEG_COMMAND_SUBSTITUTIONS,
 		"profileAcceptableTypes": internal.MatchKeyAcceptableTypes(),
 	}
 }
 
-func (tpa *Tpa) Start() {
+func (tpa *services) Start() {
 	// Start websocket, router and processor
 	wg := &sync.WaitGroup{}
 
@@ -55,7 +54,7 @@ func (tpa *Tpa) Start() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := tpa.proc.Start(procReady); err != nil {
+		if err := tpa.proc.Start(); err != nil {
 			mainLogger.Emit(logger.FATAL, "Failed to start Processor: %v", err.Error())
 		}
 
@@ -97,7 +96,7 @@ func (tpa *Tpa) Start() {
 
 // setupRoutes initialises the routes and commands for the HTTP
 // REST router, and the websocket hub
-func (tpa *Tpa) setupRoutes() {
+func (tpa *services) setupRoutes() {
 	tpa.httpRouter.CreateRoute("v0/queue", "GET", tpa.httpGateway.HttpQueueIndex)
 	tpa.httpRouter.CreateRoute("v0/queue/{id}", "GET", tpa.httpGateway.HttpQueueGet)
 	tpa.httpRouter.CreateRoute("v0/queue/promote/{id}", "POST", tpa.httpGateway.HttpQueueUpdate)
@@ -120,11 +119,11 @@ func (tpa *Tpa) setupRoutes() {
 	tpa.socketHub.BindCommand("PROFILE_UPDATE_COMMAND", tpa.wsGateway.WsProfileUpdateCommand)
 }
 
-func (tpa *Tpa) OnProcessorUpdate(update *internal.ProcessorUpdate) {
+func (tpa *services) OnProcessorUpdate(update *internal.Update) {
 	body := map[string]interface{}{"context": update}
 	if update.UpdateType == internal.PROFILE_UPDATE {
-		body["profiles"] = tpa.proc.Profiles.Profiles()
-		body["targetOpts"] = tpa.proc.KnownFfmpegOptions
+		body["profiles"] = tpa.proc.Profiles().Profiles()
+		// body["targetOpts"] = tpa.proc.KnownFfmpegOptions
 	}
 
 	tpa.socketHub.Send(&socket.SocketMessage{
@@ -148,8 +147,6 @@ func main() {
 		panic(err)
 	}
 
-	tpa := NewTpa()
-	tpa.proc.WithConfig(procCfg).WithNegotiator(tpa)
-
+	tpa := NewTpa(*procCfg)
 	tpa.Start()
 }

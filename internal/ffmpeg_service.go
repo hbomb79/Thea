@@ -94,8 +94,8 @@ type ffmpegCommander struct {
 	// re-evaluate state
 	queueChangedChannel chan int
 
-	// A link to the main TPA processor instances
-	processor *Processor
+	// A link to the main TPA instances
+	tpa TPA
 
 	// Mutex for use when code is reading/mutating instance information
 	instanceLock sync.Mutex
@@ -255,7 +255,7 @@ func (commander *ffmpegCommander) consumeNewTargets() {
 func (commander *ffmpegCommander) extractItemsFromWindow() []*QueueItem {
 	items, itemsScanned := make([]*QueueItem, 0), 0
 
-	commander.processor.Queue.ForEach(func(_ ProcessorQueue, index int, item *QueueItem) bool {
+	commander.tpa.Queue().ForEach(func(_ QueueManager, index int, item *QueueItem) bool {
 		if item.Status == Paused || item.Status == Completed {
 			return false
 		}
@@ -311,7 +311,7 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 // the best fit for our QueueItem.
 func (commander *ffmpegCommander) selectMatchingProfiles(item *QueueItem) ([]Profile, error) {
 	output := make([]Profile, 0)
-	profileList := commander.processor.Profiles
+	profileList := commander.tpa.Profiles()
 	if len(profileList.Profiles()) == 0 {
 		return nil, fmt.Errorf("cannot perform profile selection for item %s because server has NO profiles", item)
 	}
@@ -359,7 +359,7 @@ func (commander *ffmpegCommander) runHealthChecks() {
 					continue
 				}
 
-				commander.processor.Queue.AdvanceStage(item)
+				commander.tpa.Queue().AdvanceStage(item)
 			} else {
 				item.SetStatus(Processing)
 			}
@@ -409,6 +409,7 @@ func (commander *ffmpegCommander) Instances() []CommanderTask {
 	return commander.instances
 }
 
+// GetInstancesForItem will return all matching CommanderTasks for a specified ID
 func (commander *ffmpegCommander) GetInstancesForItem(ID int) []CommanderTask {
 	out := make([]CommanderTask, 0)
 
@@ -423,10 +424,10 @@ func (commander *ffmpegCommander) GetInstancesForItem(ID int) []CommanderTask {
 
 // NewCommander creates a new ffmpegCommander instance, with the channels
 // already initialised for use.
-func NewCommander(proc *Processor) Commander {
+func NewCommander(tpa TPA) Commander {
 	return &ffmpegCommander{
 		queueChangedChannel: make(chan int),
-		processor:           proc,
+		tpa:                 tpa,
 		instances:           make([]CommanderTask, 0),
 		healthTicker:        *time.NewTicker(time.Second * 2),
 		doneChannel:         make(chan int),

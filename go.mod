@@ -14,12 +14,7 @@ require (
 	github.com/mitchellh/mapstructure v1.4.1
 )
 
-require (
-	github.com/jroimartin/gocui v0.5.0 // indirect
-	github.com/mattn/go-runewidth v0.0.9 // indirect
-	github.com/mitchellh/go-wordwrap v0.0.0-20150314170334-ad45545899c7 // indirect
-	github.com/nsf/termbox-go v1.1.1 // indirect
-)
+require github.com/gofrs/uuid v4.2.0+incompatible // indirect
 
 require (
 	github.com/BurntSushi/toml v0.3.1 // indirect
@@ -27,7 +22,6 @@ require (
 	github.com/containerd/containerd v1.6.2 // indirect
 	github.com/docker/distribution v2.8.1+incompatible // indirect
 	github.com/docker/go-units v0.4.0 // indirect
-	github.com/gizak/termui/v3 v3.1.0
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/hashicorp/go-version v0.0.0-20161031182605-e96d38404026 // indirect
@@ -56,8 +50,8 @@ require (
 	google.golang.org/grpc v1.45.0 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gorm.io/driver/postgres v1.3.4 // indirect
-	gorm.io/gorm v1.23.4 // indirect
+	gorm.io/driver/postgres v1.3.4
+	gorm.io/gorm v1.23.4
 	olympos.io/encoding/edn v0.0.0-20200308123125-93e3b8dd0e24 // indirect
 )
 

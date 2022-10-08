@@ -1,9 +1,9 @@
 package internal
 
+/*
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"os/signal"
@@ -17,57 +17,7 @@ import (
 	"github.com/hbomb79/TPA/pkg/docker"
 	"github.com/hbomb79/TPA/pkg/logger"
 	"github.com/hbomb79/TPA/pkg/worker"
-	"github.com/ilyakaznacheev/cleanenv"
 )
-
-var procLogger = logger.Get("Proc")
-
-// TPAConfig is the struct used to contain the
-// various user config supplied by file, or
-// manually inside the code.
-type TPAConfig struct {
-	Concurrent       ConcurrentConfig             `yaml:"concurrency" env-required:"true"`
-	Format           FormatterConfig              `yaml:"formatter"`
-	Database         dockerService.DatabaseConfig `yaml:"database" env-required:"true"`
-	OmdbKey          string                       `yaml:"omdb_api_key" env:"OMDB_API_KEY" env-required:"true"`
-	ExternalDatabase bool                         `yaml:"external_database" env:"EXTERNAL_DATABASE"`
-	CacheDirPath     string                       `yaml:"cache_dir" env:"CACHE_DIR" env-default:".cache/tpa/"`
-	ConfigDirPath    string                       `yaml:"config_dir" env:"CONFIG_DIR" env-default:".config/tpa/"`
-	ApiHostAddr      string                       `yaml:"host" env:"HOST_ADDR" env-default:"0.0.0.0"`
-	ApiHostPort      string                       `yaml:"port" env:"HOST_PORT" env-default:"8080"`
-}
-
-// ConcurrentConfig is a subset of the configuration that focuses
-// only on the concurrency related configs (number of threads to use
-// for each stage of the pipeline)
-type ConcurrentConfig struct {
-	Title  int `yaml:"title_threads" env:"CONCURRENCY_TITLE_THREADS" env-default:"1"`
-	OMBD   int `yaml:"omdb_threads" env:"CONCURRENCY_OMDB_THREADS" env-default:"1"`
-	Format int `yaml:"ffmpeg_threads" env:"CONCURRENCY_FFMPEG_THREADS" env-default:"8"`
-}
-
-// FormatterConfig is the 'misc' container of the configuration, encompassing configuration
-// not covered by either 'ConcurrentConfig' or 'DatabaseConfig'. Mainly configuration
-// paramters for the FFmpeg executable.
-type FormatterConfig struct {
-	ImportPath         string `yaml:"import_path" env:"FORMAT_IMPORT_PATH" env-required:"true"`
-	OutputPath         string `yaml:"default_output_dir" env:"FORMAT_DEFAULT_OUTPUT_DIR" env-required:"true"`
-	TargetFormat       string `yaml:"target_format" env:"FORMAT_TARGET_FORMAT" env-default:"mp4"`
-	ImportDirTickDelay int    `yaml:"import_polling_delay" env:"FORMAT_IMPORT_POLLING_DELAY" env-default:"3600"`
-	FfmpegBinaryPath   string `yaml:"ffmpeg_binary" env:"FORMAT_FFMPEG_BINARY_PATH" env-default:"/usr/bin/ffmpeg"`
-	FfprobeBinaryPath  string `yaml:"ffprobe_binary" env:"FORMAT_FFPROBE_BINARY_PATH" env-default:"/usr/bin/ffprobe"`
-}
-
-// Loads a configuration file formatted in YAML in to a
-// TPAConfig struct ready to be passed to Processor
-func (config *TPAConfig) LoadFromFile(configPath string) error {
-	err := cleanenv.ReadConfig(configPath, config)
-	if err != nil {
-		return fmt.Errorf("failed to load configuration for ProcessorConfig - %v", err.Error())
-	}
-
-	return nil
-}
 
 // The Processor struct contains all the context
 // for the running instance of this program. It stores
@@ -75,7 +25,7 @@ func (config *TPAConfig) LoadFromFile(configPath string) error {
 // processing the queue, and the users configuration
 type Processor struct {
 	Config             *TPAConfig
-	Queue              ProcessorQueue
+	Queue              QueueManager
 	WorkerPool         *worker.WorkerPool
 	Negotiator         Negotiator
 	UpdateChan         chan int
@@ -145,29 +95,15 @@ func (p *Processor) WithNegotiator(n Negotiator) *Processor {
 	return p
 }
 
-// Start will start the workers inside the WorkerPool
-// responsible for the various tasks inside the program
-// This method will wait on the WaitGroup attached to the WorkerPool
-func (p *Processor) Start(readyChan chan bool) error {
-	defer p.shutdown()
-	defer func() {
-		if r := recover(); r != nil {
-			procLogger.Emit(logger.FATAL, "\n\nPANIC! %v\n\nShutting Down!\n\n", r)
-			p.shutdown()
-		}
-	}()
-
-	dbErr := make(chan error)
-	if !p.Config.ExternalDatabase {
-		procLogger.Emit(logger.INFO, "Initialising embedded database...\n")
-		_, err := dockerService.InitialiseDockerDatabase(p.Config.Database, dbErr)
-		if err != nil {
-			return err
-		}
+func (p *Processor) initialiseSupportingServices(asyncErrorReport chan error) error {
+	procLogger.Emit(logger.INFO, "Initialising embedded database...\n")
+	_, err := dockerService.InitialiseDockerDatabase(p.Config.Database, asyncErrorReport)
+	if err != nil {
+		return err
 	}
 
 	procLogger.Emit(logger.INFO, "Initialising embedded pgAdmin server...\n")
-	_, err := dockerService.InitialiseDockerPgAdmin(dbErr)
+	_, err = dockerService.InitialiseDockerPgAdmin(asyncErrorReport)
 	if err != nil {
 		return err
 	}
@@ -176,6 +112,23 @@ func (p *Processor) Start(readyChan chan bool) error {
 	if err := dockerService.DB.Connect(p.Config.Database); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+// Start will start the workers inside the WorkerPool
+// responsible for the various tasks inside the program
+// This method will wait on the WaitGroup attached to the WorkerPool
+func (p *Processor) Start(readyChan chan bool) error {
+	defer p.shutdown()
+	defer func() {
+		if r := recover(); r != nil {
+			procLogger.Emit(logger.FATAL, "\n\nPANIC! %v\n\nShutting Down!\n\n", r)
+		}
+	}()
+
+	dbErr := make(chan error)
+	p.initialiseSupportingServices(dbErr)
 
 	var cacheDir string = p.Config.CacheDirPath
 	var configDir string = p.Config.ConfigDirPath
@@ -193,7 +146,7 @@ func (p *Processor) Start(readyChan chan bool) error {
 	p.FfmpegCommander.SetWindowSize(2)
 	p.FfmpegCommander.SetThreadPoolSize(8)
 
-	p.WorkerPool.PushWorker(worker.NewWorker("Title_Parser", &TitleTask{proc: p}, int(Title), make(chan int)))
+	p.WorkerPool.PushWorker(worker.NewWorker("Title_Parser", &TitleTask{tpa: p}, int(Title), make(chan int)))
 	p.WorkerPool.PushWorker(worker.NewWorker("OMDB_Handler", &OmdbTask{proc: p}, int(Omdb), make(chan int)))
 	p.WorkerPool.PushWorker(worker.NewWorker("Database_Committer", &DatabaseTask{proc: p}, int(Database), make(chan int)))
 
@@ -251,7 +204,7 @@ func (p *Processor) SynchroniseQueue() error {
 
 	p.InjestQueue(presentItems)
 
-	p.Queue.Filter(func(queue ProcessorQueue, key int, item *QueueItem) bool {
+	p.Queue.Filter(func(queue QueueManager, key int, item *QueueItem) bool {
 		if _, ok := presentItems[item.Path]; !ok {
 			item.Cancel()
 
@@ -323,7 +276,7 @@ func (p *Processor) handleQueueSync(ctx context.Context, wg *sync.WaitGroup, tic
 func (p *Processor) handleItemModtimes(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 	ticker := time.NewTicker(time.Second * 5).C
-	checkModtime := func(q ProcessorQueue, idx int, item *QueueItem) bool {
+	checkModtime := func(q QueueManager, idx int, item *QueueItem) bool {
 		if item.Stage != Import {
 			return false
 		}
@@ -381,29 +334,11 @@ main:
 			}
 
 			p.wakeupWorkers()
-		case <-ticker:
-			p.submitUpdates()
+		// case <-ticker:
+		// p.submitUpdates()
 		case <-ctx.Done():
 			return
 		}
-	}
-}
-
-func (p *Processor) submitUpdates() {
-	for k := range p.pendingUpdates {
-		queueItem, idx := p.Queue.FindById(k)
-		if queueItem == nil || idx < 0 {
-			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{UpdateType: ITEM_UPDATE, QueueItem: nil, ItemPosition: -1, ItemId: k})
-		} else {
-			p.Negotiator.OnProcessorUpdate(&ProcessorUpdate{
-				UpdateType:   ITEM_UPDATE,
-				QueueItem:    queueItem,
-				ItemPosition: idx,
-				ItemId:       k,
-			})
-		}
-
-		delete(p.pendingUpdates, k)
 	}
 }
 
@@ -418,3 +353,5 @@ func (p *Processor) wakeupWorkers() {
 	default:
 	}
 }
+
+*/

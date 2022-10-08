@@ -9,10 +9,10 @@ import (
 )
 
 type WsGateway struct {
-	proc *internal.Processor
+	proc internal.TPA
 }
 
-func NewWsGateway(proc *internal.Processor) *WsGateway {
+func NewWsGateway(proc internal.TPA) *WsGateway {
 	return &WsGateway{proc: proc}
 }
 
@@ -41,7 +41,7 @@ func (wsGateway *WsGateway) WsQueueDetails(hub *socket.SocketHub, message *socke
 		return errors.New("failed to vaidate arguments - ID provided is not an integer")
 	}
 
-	queueItem, idx := wsGateway.proc.Queue.FindById(int(v))
+	queueItem, idx := wsGateway.proc.Queue().FindById(int(v))
 	if queueItem == nil || idx < 0 {
 		return errors.New("failed to get queue details - item with matching ID not found")
 	}
@@ -72,12 +72,12 @@ func (wsGateway *WsGateway) WsQueueReorder(hub *socket.SocketHub, message *socke
 		newOrder[k] = int(tmp)
 	}
 
-	if err := wsGateway.proc.Queue.Reorder(newOrder); err != nil {
+	if err := wsGateway.proc.Queue().Reorder(newOrder); err != nil {
 		return fmt.Errorf(ERR_FMT, err.Error())
 	}
 
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
-	wsGateway.proc.UpdateChan <- -1
+	wsGateway.proc.Updates().NotifyQueueUpdate()
 
 	return nil
 }
@@ -89,17 +89,17 @@ func (wsGateway *WsGateway) WsItemPromote(hub *socket.SocketHub, message *socket
 	}
 
 	idArg := message.Body["id"]
-	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	queueItem, idx := wsGateway.proc.Queue().FindById(int(idArg.(float64)))
 	if queueItem == nil || idx < 0 {
 		return fmt.Errorf(ERR_FMT, "item with matching ID not found")
 	}
 
-	err := wsGateway.proc.Queue.PromoteItem(queueItem)
+	err := wsGateway.proc.Queue().PromoteItem(queueItem)
 	if err != nil {
 		return fmt.Errorf(ERR_FMT, err.Error())
 	}
 
-	wsGateway.proc.UpdateChan <- queueItem.ItemID
+	wsGateway.proc.Updates().NotifyItemUpdate(queueItem.ItemID)
 	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem}, socket.Response))
 	return nil
 }
@@ -111,7 +111,7 @@ func (wsGateway *WsGateway) WsItemPause(hub *socket.SocketHub, message *socket.S
 	}
 
 	idArg := message.Body["id"]
-	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	queueItem, idx := wsGateway.proc.Queue().FindById(int(idArg.(float64)))
 	if queueItem == nil || idx < 0 {
 		return fmt.Errorf(ERR_FMT, "item with matching ID not found")
 	}
@@ -132,7 +132,7 @@ func (wsGateway *WsGateway) WsItemCancel(hub *socket.SocketHub, message *socket.
 	}
 
 	idArg := message.Body["id"]
-	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	queueItem, idx := wsGateway.proc.Queue().FindById(int(idArg.(float64)))
 	if queueItem == nil || idx < 0 {
 		return fmt.Errorf(ERR_FMT, "item with matching ID not found")
 	}
@@ -153,7 +153,7 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *socket.SocketHub, message *soc
 	}
 
 	idArg := message.Body["id"]
-	queueItem, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64)))
+	queueItem, idx := wsGateway.proc.Queue().FindById(int(idArg.(float64)))
 	if queueItem == nil || idx < 0 {
 		return fmt.Errorf(ERR_FMT, "item with matching ID not found")
 	} else if queueItem.Trouble == nil {
@@ -176,9 +176,9 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *socket.SocketHub, message *soc
 	instanceTag, isEmbed := message.Body["instanceTag"]
 
 	idArg := message.Body["id"]
-	if item, idx := wsGateway.proc.Queue.FindById(int(idArg.(float64))); item != nil && idx >= 0 {
+	if item, idx := wsGateway.proc.Queue().FindById(int(idArg.(float64))); item != nil && idx >= 0 {
 		if isEmbed {
-			for _, i := range wsGateway.proc.FfmpegCommander.GetInstancesForItem(item.ItemID) {
+			for _, i := range wsGateway.proc.Ffmpeg().GetInstancesForItem(item.ItemID) {
 				if i.ProfileTag() == instanceTag {
 					if err := i.ResolveTrouble(message.Body); err != nil {
 						return fmt.Errorf("failed to resolve embedded ffmpeg trouble for queue item %v - %v", idArg, err.Error())
@@ -205,7 +205,7 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *socket.SocketHub, message *soc
 }
 
 func (wsGateway *WsGateway) WsProfileIndex(hub *socket.SocketHub, message *socket.SocketMessage) error {
-	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": wsGateway.proc.Profiles.Profiles()}, socket.Response))
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": wsGateway.proc.Profiles().Profiles()}, socket.Response))
 	return nil
 }
 
@@ -215,11 +215,11 @@ func (wsGateway *WsGateway) WsProfileCreate(hub *socket.SocketHub, message *sock
 	}
 
 	p := internal.NewProfile(message.Body["tag"].(string))
-	if err := wsGateway.proc.Profiles.InsertProfile(p); err != nil {
+	if err := wsGateway.proc.Profiles().InsertProfile(p); err != nil {
 		return err
 	}
 
-	wsGateway.proc.UpdateChan <- -2
+	wsGateway.proc.Updates().NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }
@@ -229,11 +229,11 @@ func (wsGateway *WsGateway) WsProfileRemove(hub *socket.SocketHub, message *sock
 		return err
 	}
 
-	if err := wsGateway.proc.Profiles.RemoveProfile(message.Body["tag"].(string)); err != nil {
+	if err := wsGateway.proc.Profiles().RemoveProfile(message.Body["tag"].(string)); err != nil {
 		return err
 	}
 
-	wsGateway.proc.UpdateChan <- -2
+	wsGateway.proc.Updates().NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }
@@ -246,11 +246,11 @@ func (wsGateway *WsGateway) WsProfileMove(hub *socket.SocketHub, message *socket
 	tag := message.Body["tag"].(string)
 	desiredIndex := int(message.Body["desiredIndex"].(float64))
 
-	if err := wsGateway.proc.Profiles.MoveProfile(tag, desiredIndex); err != nil {
+	if err := wsGateway.proc.Profiles().MoveProfile(tag, desiredIndex); err != nil {
 		return err
 	}
 
-	wsGateway.proc.UpdateChan <- -2
+	wsGateway.proc.Updates().NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }
@@ -260,7 +260,7 @@ func (wsGateway *WsGateway) WsProfileSetMatchConditions(hub *socket.SocketHub, m
 		return err
 	}
 
-	index, profile := wsGateway.proc.Profiles.FindProfileByTag(message.Body["profileTag"].(string))
+	index, profile := wsGateway.proc.Profiles().FindProfileByTag(message.Body["profileTag"].(string))
 	if index == -1 || profile == nil {
 		return fmt.Errorf("cannot set match conditions for profile because tag '%v' is invalid", message.Body["profileTag"])
 	}
@@ -275,7 +275,7 @@ func (wsGateway *WsGateway) WsProfileSetMatchConditions(hub *socket.SocketHub, m
 		return fmt.Errorf("cannot set match conditions on profile '%v': %v", message.Body["profileTag"], err.Error())
 	}
 
-	wsGateway.proc.UpdateChan <- -2
+	wsGateway.proc.Updates().NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }
@@ -285,7 +285,7 @@ func (wsGateway *WsGateway) WsProfileUpdateCommand(hub *socket.SocketHub, messag
 		return err
 	}
 
-	index, profile := wsGateway.proc.Profiles.FindProfileByTag(message.Body["profileTag"].(string))
+	index, profile := wsGateway.proc.Profiles().FindProfileByTag(message.Body["profileTag"].(string))
 	if index == -1 || profile == nil {
 		return fmt.Errorf("cannot update target command for profile because tag '%v' is invalid", message.Body["profileTag"])
 	}
@@ -300,7 +300,7 @@ func (wsGateway *WsGateway) WsProfileUpdateCommand(hub *socket.SocketHub, messag
 		return fmt.Errorf("cannot update target command on profile '%v': %v", message.Body["profileTag"], err.Error())
 	}
 
-	wsGateway.proc.UpdateChan <- -2
+	wsGateway.proc.Updates().NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }

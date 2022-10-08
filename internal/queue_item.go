@@ -88,16 +88,16 @@ type QueueItem struct {
 	OmdbInfo   *OmdbInfo       `json:"omdb_info"`
 	Trouble    Trouble         `json:"trouble" gorm:"-"`
 	ProfileTag string          `json:"profile_tag" gorm:"-"`
-	processor  *Processor      `json:"-" gorm:"-"`
+	tpa        TPA             `json:"-" gorm:"-"`
 }
 
-func NewQueueItem(info fs.FileInfo, path string, proc *Processor) *QueueItem {
+func NewQueueItem(info fs.FileInfo, path string, tpa TPA) *QueueItem {
 	return &QueueItem{
-		Name:      info.Name(),
-		Path:      path,
-		Status:    Pending,
-		Stage:     Import,
-		processor: proc,
+		Name:   info.Name(),
+		Path:   path,
+		Status: Pending,
+		Stage:  Import,
+		tpa:    tpa,
 	}
 }
 
@@ -117,7 +117,7 @@ func (item *QueueItem) SetStatus(status QueueItemStatus) {
 		// Item has been cancelled and has wrapped up what it was doing
 		// Remove this item from the queue, mark it in the queue cache
 		// so we don't re-ingest it later
-		item.processor.Queue.Remove(item)
+		item.tpa.Queue().Remove(item)
 	}
 
 	item.NotifyUpdate()
@@ -302,7 +302,7 @@ func (item *QueueItem) CommitToDatabase() error {
 
 	// Construct exports based on the completed ffmpeg instances
 	exports := make([]*ExportDetail, 0)
-	for _, instance := range item.processor.FfmpegCommander.GetInstancesForItem(item.ItemID) {
+	for _, instance := range item.tpa.Ffmpeg().GetInstancesForItem(item.ItemID) {
 		exports = append(exports, &ExportDetail{
 			Name: instance.ProfileTag(),
 			Path: instance.GetOutputPath(),
@@ -337,7 +337,7 @@ func (item *QueueItem) SetPaused(paused bool) error {
 	}
 
 	// (Un)Pause any ffmpeg instances for this item
-	for _, ffmpegInstance := range item.processor.FfmpegCommander.GetInstancesForItem(item.ItemID) {
+	for _, ffmpegInstance := range item.tpa.Ffmpeg().GetInstancesForItem(item.ItemID) {
 		ffmpegInstance.SetPaused(paused)
 	}
 
@@ -351,7 +351,7 @@ func (item *QueueItem) SetPaused(paused bool) error {
 }
 
 func (item *QueueItem) NotifyUpdate() {
-	item.processor.UpdateChan <- item.ItemID
+	item.tpa.Updates().NotifyItemUpdate(item.ItemID)
 }
 
 func (item *QueueItem) String() string {
@@ -380,6 +380,6 @@ func (item *QueueItem) MarshalJSON() ([]byte, error) {
 		item.OmdbInfo,
 		item.Trouble,
 		item.ProfileTag,
-		item.processor.FfmpegCommander.GetInstancesForItem(item.ItemID),
+		item.tpa.Ffmpeg().GetInstancesForItem(item.ItemID),
 	})
 }

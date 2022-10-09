@@ -38,7 +38,7 @@ type coreService struct {
 	knownFfmpegOptions any
 }
 
-func NewCoreApi(tpa TPA) CoreService {
+func NewCoreService(tpa TPA) CoreService {
 	opts, err := profile.ToArgsMap(&ffmpeg.Options{})
 	if err != nil {
 		procLogger.Emit(logger.ERROR, "Failure to get known FFmpeg options as args map!")

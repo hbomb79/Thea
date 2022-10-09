@@ -22,25 +22,25 @@ const (
 	OMDB_API string = "http://www.omdbapi.com/?%s=%s&apikey=%s"
 )
 
-// baseTask is a struct that implements very little functionality, and is used
+// BaseTask is a struct that implements very little functionality, and is used
 // to facilitate the other task types implemented in this file. This struct
 // mainly just handled some repeated code definitions, such as the basic
 // work/wait worker loop, and raising and notifying troubles
-type baseTask struct {
+type BaseTask struct {
 	ItemProducer
 }
 
 type taskFn func(worker.Worker, *QueueItem) error
 type onComplete func(*QueueItem)
 type ItemProducer interface {
-	Pick(QueueItemStage) *QueueItem
+	PickItem(QueueItemStage) *QueueItem
 }
 
 // executeTask implements the core worker work/wait loop that
 // searches for work to do - and if some work is available, the
 // 'fn' taskFn is executed. If no work is available, the worker
 // sleeps until woken up again.
-func (task *baseTask) executeTask(w worker.Worker, fn taskFn) error {
+func (task *BaseTask) executeTask(w worker.Worker, fn taskFn) error {
 	for {
 	inner:
 		for {
@@ -54,7 +54,7 @@ func (task *baseTask) executeTask(w worker.Worker, fn taskFn) error {
 			default:
 			}
 
-			item := task.Pick(QueueItemStage(w.Stage()))
+			item := task.PickItem(QueueItemStage(w.Stage()))
 			if item == nil {
 				break inner
 			}
@@ -95,7 +95,7 @@ func (task *baseTask) executeTask(w worker.Worker, fn taskFn) error {
 // such as the title, season/episode information, release year, and resolution.
 type TitleTask struct {
 	OnComplete onComplete
-	baseTask
+	BaseTask
 }
 
 // Execute will utilise the baseTask.Execute method to run the task repeatedly
@@ -163,7 +163,7 @@ func (task *TitleTask) advance(item *QueueItem) {
 type OmdbTask struct {
 	OmdbKey    string
 	OnComplete onComplete
-	baseTask
+	BaseTask
 }
 
 // OmdbSearchItem is the struct that encapsulates some of the information from
@@ -435,7 +435,7 @@ func (task *OmdbTask) advance(item *QueueItem) {
 
 type DatabaseTask struct {
 	OnComplete onComplete
-	baseTask
+	BaseTask
 }
 
 // Execute will utilise the baseTask.Execute method to run the task repeatedly

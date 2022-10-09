@@ -18,6 +18,7 @@ type QueueService interface {
 	PauseItem(int) error
 	ResumeItem(int) error
 	AdvanceItem(*queue.QueueItem)
+	PickItem(stage queue.QueueItemStage) *queue.QueueItem
 }
 
 type queueService struct {
@@ -150,7 +151,11 @@ func (service *queueService) AdvanceItem(item *queue.QueueItem) {
 	service.tpa.queue().AdvanceStage(item)
 }
 
-func NewQueueApi(tpa TPA) QueueService {
+func (service *queueService) PickItem(stage queue.QueueItemStage) *queue.QueueItem {
+	return service.tpa.queue().Pick(stage)
+}
+
+func NewQueueService(tpa TPA) QueueService {
 	return &queueService{
 		tpa: tpa,
 	}

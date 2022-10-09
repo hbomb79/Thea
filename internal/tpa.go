@@ -99,9 +99,9 @@ func NewTpa(config TPAConfig, updateFn UpdateManagerSubmitFn) TPA {
 	// Inject services
 	t.UpdateManager = NewUpdateManager(updateFn, t)
 	t.ProfileService = NewProfileService(t)
-	t.CoreService = NewCoreApi(t)
-	t.QueueService = NewQueueApi(t)
-	t.MovieService = nil
+	t.CoreService = NewCoreService(t)
+	t.QueueService = NewQueueService(t)
+	t.MovieService = NewMovieService(t)
 
 	// Inject state managers
 	t.queueMgr = queue.NewProcessorQueue(cachePath)
@@ -299,9 +299,10 @@ func (tpa *tpa) initialise() error {
 	}
 
 	advanceFunc := tpa.queue().AdvanceStage
-	tpa.workers.PushWorker(worker.NewWorker("Title_Parser", &queue.TitleTask{OnComplete: advanceFunc}, int(queue.Title), make(chan int)))
-	tpa.workers.PushWorker(worker.NewWorker("OMDB_Handler", &queue.OmdbTask{OnComplete: advanceFunc}, int(queue.Omdb), make(chan int)))
-	tpa.workers.PushWorker(worker.NewWorker("Database_Committer", &queue.DatabaseTask{OnComplete: advanceFunc}, int(queue.Database), make(chan int)))
+	baseTask := queue.BaseTask{ItemProducer: tpa}
+	tpa.workers.PushWorker(worker.NewWorker("Title_Parser", &queue.TitleTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Title), make(chan int)))
+	tpa.workers.PushWorker(worker.NewWorker("OMDB_Handler", &queue.OmdbTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Omdb), make(chan int)))
+	tpa.workers.PushWorker(worker.NewWorker("Database_Committer", &queue.DatabaseTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Database), make(chan int)))
 
 	return nil
 }

@@ -92,7 +92,7 @@ type taskData struct {
 }
 
 // ffmpegCommander is an implementation of the Commander interface
-// which is used by TPA to handle the automatic allocation of resources
+// which is used by Thea to handle the automatic allocation of resources
 // for FFmpeg instances, as well as Trouble/error handling.
 type ffmpegCommander struct {
 	// Current ffmpeg instances. Check their 'state' to see if running, waiting, troubled, etc
@@ -113,7 +113,7 @@ type ffmpegCommander struct {
 	// re-evaluate state
 	queueChangedChannel chan int
 
-	// A link to the main TPA instances
+	// A link to the main Thea instances
 	supplier Supplier
 
 	// Mutex for use when code is reading/mutating instance information
@@ -173,7 +173,11 @@ main:
 
 // Stop will stop all activities from the commander by terminating each ffmpeg instance
 func (commander *ffmpegCommander) Stop() {
-	commander.doneChannel <- 1
+	select {
+	case commander.doneChannel <- 1:
+	default:
+		ffmpegLogger.Emit(logger.WARNING, "Attempt to Stop FFmpeg commander failed - channel is blocked\n")
+	}
 }
 
 // startInstance is an internal method that will attempt to start an ffmpegInstance,
@@ -331,7 +335,7 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 	return targets
 }
 
-// selectMatchingProfiles iterates over each TPA profile, checking to see which is
+// selectMatchingProfiles iterates over each Thea profile, checking to see which is
 // the best fit for our QueueItem.
 func (commander *ffmpegCommander) selectMatchingProfiles(item *queue.QueueItem) ([]profile.Profile, error) {
 	output := make([]profile.Profile, 0)
@@ -350,7 +354,7 @@ func (commander *ffmpegCommander) selectMatchingProfiles(item *queue.QueueItem) 
 }
 
 // runHealthChecks is an internal method that relays the current state of each item
-// being processed by the commander, back to TPA by setting each items status. This method
+// being processed by the commander, back to Thea by setting each items status. This method
 // is important as it allows us to communicate to the user when a problem has arisen
 func (commander *ffmpegCommander) runHealthChecks() {
 	commander.instanceLock.Lock()

@@ -12,7 +12,7 @@ import (
 var cacheLogger = logger.Get("Cache")
 
 // The Cache is a struct from the cache package that allows other parts
-// of the TPA to store persistent information about items inside the queue.
+// of the Thea to store persistent information about items inside the queue.
 // The primary use case for this cache is to allow us to store the current
 // status of queue items to enable persistent memory over server-restarts
 type Cache struct {

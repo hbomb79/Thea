@@ -233,7 +233,7 @@ func (ex *OmdbTaskError) MarshalJSON() ([]byte, error) {
 }
 
 // FormatTaskContainerError is an error/trouble type that is raised when one or more ffmpeg instances encounter
-// an error. Due to the way that TPA runs multiple format instances at once for a particular
+// an error. Due to the way that Thea runs multiple format instances at once for a particular
 // item, a FormatTaskContainerError contains multiple smaller Trouble instances that can be individually
 // resolved via their uuid.
 type FormatTaskContainerError struct {

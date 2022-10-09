@@ -11,7 +11,7 @@ import (
 )
 
 // QueueService is responsible for exposing methods for reading or mutating
-// the state of the TPA queue.
+// the state of the Thea queue.
 type QueueService interface {
 	GetAllItems() *[]*queue.QueueItem
 	GetItem(int) (*queue.QueueItem, error)

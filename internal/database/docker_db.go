@@ -15,7 +15,7 @@ import (
 type DatabaseConfig struct {
 	User     string `yaml:"username" env:"DB_USERNAME" env-required:"true"`
 	Password string `yaml:"password" env:"DB_PASSWORD" env-required:"true"`
-	Name     string `yaml:"name" env:"DB_NAME" env-default:"TPA_DB"`
+	Name     string `yaml:"name" env:"DB_NAME" env-default:"THEA_DB"`
 	Host     string `yaml:"host" env:"DB_HOST" env-default:"0.0.0.0"`
 	Port     string `yaml:"port" env:"DB_PORT" env-default:"5432"`
 }

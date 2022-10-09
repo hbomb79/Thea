@@ -12,7 +12,7 @@ import (
 var dbLogger = logger.Get("DB")
 
 /*
- * TPA requires access to a PostgreSQL database to manage relational data - to lower complexity of installation,
+ * Thea requires access to a PostgreSQL database to manage relational data - to lower complexity of installation,
  * we provide this database automatically by instantiating it via the Docker SDK. This allows us to spawn and manage the
  * database ourselves, and avoids polluting the users system with a database installation.
  */
@@ -45,7 +45,7 @@ func (db *dbServer) Connect(config DatabaseConfig) error {
 	for {
 		gorm, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
-			if attempt > 3 {
+			if attempt >= 3 {
 				dbLogger.Emit(logger.ERROR, "All attempts FAILED!\n")
 				return err
 			} else {

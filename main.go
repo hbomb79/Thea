@@ -124,7 +124,7 @@ func (serv *services) handleTpaUpdate(update *internal.Update) {
 }
 
 // main() is the entry point to the program, from here will
-// we load the users TPA configuration from their home directory,
+// we load the users Thea configuration from their home directory,
 // merging the configuration with the default config
 func main() {
 	homeDir, err := os.UserHomeDir()

@@ -6,7 +6,7 @@ Thea Processing API
 ## Installation
 
 ### Configuration
-TPA configuration is looked for in `$HOME/.config/thea/config.yaml`, this file is loaded during initial startup and is used to populate the below configuration options.
+Thea configuration is looked for in `$HOME/.config/thea/config.yaml`, this file is loaded during initial startup and is used to populate the below configuration options.
 
 Below is an reference .yaml file containing all the possible configuration options. The value of each configuration represents it's _default option_, however, if an option is marked "REQUIRED!", then it has **no default option** and the server will fail to launch unless the configuration is specified in either your config.yaml, or the environment.
 
@@ -43,12 +43,12 @@ database:
 #### Configuration Directory
 ##### YAML: config_dir (ENV: CONFIG_DIR)
 ##### Default: `".config/thea/"`
-This path is relative to the users $HOME directory and is used by TPA to store any relevant configuration (mainly created profiles and targets). Files will be created in this directory and it's intended to be persistent storage.
+This path is relative to the users $HOME directory and is used by Thea to store any relevant configuration (mainly created profiles and targets). Files will be created in this directory and it's intended to be persistent storage.
 
 #### Cache Directory
 ##### YAML: cache_dir (ENV: CACHE_DIR)
 ##### Default: `".cache/thea/"`
-This path is relative to the users $HOME directory and is used by TPA to store cache information. This is not intended to be permanent and the program will gracefully handle data loss in this directory.
+This path is relative to the users $HOME directory and is used by Thea to store cache information. This is not intended to be permanent and the program will gracefully handle data loss in this directory.
 
 #### OMDB Api Key
 ##### YAML: omdb_api_key (ENV: OMBD_API_KEY)
@@ -58,7 +58,7 @@ The OMDB API key to use when querying OMDB for information about a file being im
 #### Host Address
 ##### YAML: host_addr (ENV: HOST_ADDR)
 ##### Default: `0.0.0.0`
-The address to host the data server on; this is used by clients (web front end, CLI, scripts) to access data from TPA via the provided HTTP endpoints and websocket commands.
+The address to host the data server on; this is used by clients (web front end, CLI, scripts) to access data from Thea via the provided HTTP endpoints and websocket commands.
 
 #### Host Port
 ##### YAML: host_port (ENV: HOST_PORT)
@@ -73,7 +73,7 @@ The path to scrape for new files to import. This path is checked frequently (bas
 #### Default Output Directory
 ##### YAML: formatter.default_output_dir (ENV: FORMAT_DEFAULT_OUTPUT_DIR)
 ##### Default: **REQUIRED**
-This path is used by TPA if the target used to transcode a file has no output set, OR it's invalid. Additionally, targets can use this path to compose their own output paths - this value is considered to be the desired output directory and targets may (and should) use this path as the base of their composed output paths.
+This path is used by Thea if the target used to transcode a file has no output set, OR it's invalid. Additionally, targets can use this path to compose their own output paths - this value is considered to be the desired output directory and targets may (and should) use this path as the base of their composed output paths.
 
 #### Target Format
 ##### YAML: formatter.target_format (ENV: FORMAT_TARGET_FORMAT)

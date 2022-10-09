@@ -16,8 +16,8 @@ import (
 var dockerLogger = logger.Get("Docker")
 
 /**
- * The docker package provides utilities for TPA with regards to creating, fetching and spawning docker images/containers
- * locally. This is used to spawn services such as TPAs PostgreSQL database, or the NPM front end.
+ * The docker package provides utilities for Thea with regards to creating, fetching and spawning docker images/containers
+ * locally. This is used to spawn services such as Theas PostgreSQL database, or the NPM front end.
  */
 
 const DOCKER_NETWORK = "thea_network"

@@ -41,7 +41,7 @@ const (
 	// Inidicates that this item is waiting to be worked on. It's currently idle
 	Pending ItemStatus = iota
 
-	// TPA is making progress on this item
+	// Thea is making progress on this item
 	Processing
 
 	// This item has been completed
@@ -51,20 +51,20 @@ const (
 	// should inspect the 'Trouble' parameter to resolve this issue
 	NeedsResolving
 
-	// The user has marked this item for cancellation, but TPA is performing
-	// a non-interuptable task. Once TPA is complete, it will notice this
+	// The user has marked this item for cancellation, but Thea is performing
+	// a non-interuptable task. Once Thea is complete, it will notice this
 	// Status and move the item to 'Cancelled'
 	Cancelling
 
 	// This item has been cancelled and should be removed from the processor queue
 	Cancelled
 
-	// When Paused, TPA (both workers and the commander) will ignore this item entirely
+	// When Paused, Thea (both workers and the commander) will ignore this item entirely
 	Paused
 
 	// Indicates to the user that this item is experiencing a problem *but* it's not
 	// interfering with all progress. The user should still work to solve this problem
-	// as a 'NeedsAttention' status may be increased to 'NeedsResolving' if TPA detects
+	// as a 'NeedsAttention' status may be increased to 'NeedsResolving' if Thea detects
 	// that work can no longer be made while the problem remains
 	NeedsAttention
 )

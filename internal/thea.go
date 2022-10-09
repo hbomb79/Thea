@@ -29,7 +29,7 @@ var procLogger = logger.Get("Thea")
 // in the Thea runtime and will ensure that updates are applied correctly across all of it (e.g. cancelling an
 // item may remove it from the queue, and cancel all ffmpeg actions, and send an update to the client). Each API
 // here is a "service" as it encapsulates related behaviour - however a call to one service may incur calls to other
-// services via their respective API as well (these "side-effects" after often required in order to ensure TPAs state is
+// services via their respective API as well (these "side-effects" after often required in order to ensure Theas state is
 // kept valid!).
 //
 // -- Internal APIs --
@@ -54,7 +54,7 @@ type Thea interface {
 	config() TheaConfig
 }
 
-// TPA represents the top-level object for the server, and is responsible
+// Thea represents the top-level object for the server, and is responsible
 // for initialising embedded support services, workers, threads, event
 // handling, et cetera...
 type theaImpl struct {
@@ -75,10 +75,10 @@ type theaImpl struct {
 	shutdownWaitGroup *sync.WaitGroup
 }
 
-const TPA_CONFIG_FILE_PATH = "/thea/config.json"
-const TPA_CACHE_FILE_PATH = "/thea/cache.json"
-const TPA_UPDATE_INTERVAL = time.Second * 2
-const TPA_QUEUE_SYNC_INTERVAL = time.Second * 5
+const THEA_CONFIG_FILE_PATH = "/thea/config.json"
+const THEA_CACHE_FILE_PATH = "/thea/cache.json"
+const THEA_UPDATE_INTERVAL = time.Second * 2
+const THEA_QUEUE_SYNC_INTERVAL = time.Second * 5
 
 // ** PUBLIC API ** //
 
@@ -111,29 +111,27 @@ func NewThea(config TheaConfig, updateFn UpdateManagerSubmitFn) Thea {
 	return t
 }
 
-// Start will start TPA by initialising all supporting services/objects and starting
+// Start will start Thea by initialising all supporting services/objects and starting
 // the event loops
 func (thea *theaImpl) Start() error {
 	exitChannel := make(chan os.Signal, 1)
 	signal.Notify(exitChannel, os.Interrupt, syscall.SIGTERM)
 
 	procLogger.Emit(logger.DEBUG, "Starting Thea initialisation with config: %#v\n", thea.config())
+
+	defer thea.Stop()
 	if err := thea.initialise(); err != nil {
-		return fmt.Errorf("failed to initialise TPA: %s", err)
+		return fmt.Errorf("failed to initialise Thea: %s", err)
 	}
 
 	// Initialise our async service managers
 	thea.shutdownWaitGroup.Add(2)
 	go thea.workers.StartWorkers(thea.shutdownWaitGroup)
 	go thea.ffmpegMgr.Start(thea.shutdownWaitGroup)
-	defer func() {
-		procLogger.Emit(logger.DEBUG, "Event loop has terminated.. deferred shutdown!\n")
-		thea.Stop()
-	}()
 
 	// Initialise some tickers
-	updateTicker := time.NewTicker(TPA_UPDATE_INTERVAL)
-	queueSyncTicker := time.NewTicker(TPA_QUEUE_SYNC_INTERVAL)
+	updateTicker := time.NewTicker(THEA_UPDATE_INTERVAL)
+	queueSyncTicker := time.NewTicker(THEA_QUEUE_SYNC_INTERVAL)
 
 	procLogger.Emit(logger.SUCCESS, " --- Thea Startup Complete --- \n")
 
@@ -155,9 +153,9 @@ func (thea *theaImpl) Start() error {
 	}
 }
 
-// Stop will terminate TPA
+// Stop will terminate Thea
 func (thea *theaImpl) Stop() {
-	procLogger.Emit(logger.STOP, "--- TPA is shutting down ---\n")
+	procLogger.Emit(logger.STOP, "--- Thea is shutting down ---\n")
 
 	procLogger.Emit(logger.STOP, "Cancelling context...\n")
 	thea.theaCtxCancel()
@@ -257,7 +255,7 @@ func (thea *theaImpl) discoverItems() (map[string]fs.FileInfo, error) {
 }
 
 // initialiseSupportServices will initialise all supporting services
-// for TPA (Docker based Postgres, PgAdmin and Web front-end)
+// for Thea (Docker based Postgres, PgAdmin and Web front-end)
 func (thea *theaImpl) initialiseSupportServices() error {
 	// Instantiate watcher for async errors for the below containers
 	asyncErrorReport := make(chan error, 2)

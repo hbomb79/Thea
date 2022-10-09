@@ -35,7 +35,7 @@ type ConcurrentConfig struct {
 }
 
 // ServiceConfig is used to enable/disable the internal intialisation of
-// supporting services for TPA. By default, these will be enabled so that TPA
+// supporting services for Thea. By default, these will be enabled so that Thea
 // will initialise them automatically.
 type ServiceConfig struct {
 	EnablePostgres bool `yaml:"enable_postgres" env-default:"true"`
@@ -44,7 +44,7 @@ type ServiceConfig struct {
 }
 
 // Loads a configuration file formatted in YAML in to a
-// TPAConfig struct ready to be passed to Processor
+// TheaConfig struct ready to be passed to Processor
 func (config *TheaConfig) LoadFromFile(configPath string) error {
 	err := cleanenv.ReadConfig(configPath, config)
 	if err != nil {
@@ -59,7 +59,7 @@ func (config *TheaConfig) LoadFromFile(configPath string) error {
 // cannot be derived due to an error, a panic will occur.
 func (config *TheaConfig) getCachePath() string {
 	if config.CacheDirPath != "" {
-		return filepath.Join(config.CacheDirPath, TPA_CACHE_FILE_PATH)
+		return filepath.Join(config.CacheDirPath, THEA_CACHE_FILE_PATH)
 	}
 
 	// Derive default
@@ -68,14 +68,14 @@ func (config *TheaConfig) getCachePath() string {
 		panic(fmt.Sprintf("FAILURE to derive user cache dir %s", err))
 	}
 
-	return filepath.Join(dir, TPA_CACHE_FILE_PATH)
+	return filepath.Join(dir, THEA_CACHE_FILE_PATH)
 }
 
 // getConfigPath will return the path used for storing config information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned
 func (config *TheaConfig) getConfigPath() string {
 	if config.CacheDirPath != "" {
-		return filepath.Join(config.CacheDirPath, TPA_CONFIG_FILE_PATH)
+		return filepath.Join(config.CacheDirPath, THEA_CONFIG_FILE_PATH)
 	}
 
 	// Derive default
@@ -84,5 +84,5 @@ func (config *TheaConfig) getConfigPath() string {
 		panic(fmt.Sprintf("FAILURE to derive user config dir %s", err))
 	}
 
-	return filepath.Join(dir, TPA_CONFIG_FILE_PATH)
+	return filepath.Join(dir, THEA_CONFIG_FILE_PATH)
 }

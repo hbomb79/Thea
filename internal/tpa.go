@@ -2,7 +2,6 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -244,7 +243,7 @@ func (thea *theaImpl) discoverItems() (map[string]fs.FileInfo, error) {
 	})
 
 	if err != nil {
-		return nil, errors.New("Failed to discover items for injestion: " + err.Error())
+		return nil, fmt.Errorf("failed to discover items for injestion: %s", err.Error())
 	}
 
 	return presentItems, nil
@@ -305,9 +304,9 @@ func (thea *theaImpl) initialise() error {
 
 	advanceFunc := thea.queue().AdvanceStage
 	baseTask := queue.BaseTask{ItemProducer: thea}
-	thea.workers.PushWorker(worker.NewWorker("Title_Parser", &queue.TitleTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Title), make(chan int)))
-	thea.workers.PushWorker(worker.NewWorker("OMDB_Handler", &queue.OmdbTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Omdb), make(chan int)))
-	thea.workers.PushWorker(worker.NewWorker("Database_Committer", &queue.DatabaseTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Database), make(chan int)))
+	thea.workers.PushWorker(worker.NewWorker("Title_Parser", &queue.TitleTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Title)))
+	thea.workers.PushWorker(worker.NewWorker("OMDB_Handler", &queue.OmdbTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Omdb)))
+	thea.workers.PushWorker(worker.NewWorker("Database_Committer", &queue.DatabaseTask{OnComplete: advanceFunc, CommitHandler: thea.ExportItem, BaseTask: baseTask}, int(queue.Database)))
 
 	return nil
 }

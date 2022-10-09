@@ -3,6 +3,7 @@ package queue
 import (
 	"strings"
 
+	"github.com/hbomb79/Thea/internal/export"
 	"gorm.io/gorm"
 )
 
@@ -40,10 +41,10 @@ func (sl *StringList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (sl *StringList) ToGenreList() []*Genre {
-	out := make([]*Genre, 0)
+func (sl *StringList) ToGenreList() []*export.Genre {
+	out := make([]*export.Genre, 0)
 	for _, e := range *sl {
-		out = append(out, &Genre{Name: e})
+		out = append(out, &export.Genre{Name: e})
 	}
 
 	return out

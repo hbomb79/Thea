@@ -1,4 +1,4 @@
-package queue
+package export
 
 import (
 	"github.com/hbomb79/Thea/internal/db"
@@ -26,6 +26,8 @@ func NewExportedItemDto() *ExportedItemDto {
 	return &ExportedItemDto{}
 }
 
+// ExportedItem represents a queue.Item that has been successfully completed and "exported". The
+// data stored here is simply the fundamental information for the item.
 type ExportedItem struct {
 	*gorm.Model
 	Name          string
@@ -41,6 +43,8 @@ type ExportedItem struct {
 	Series        *Series
 }
 
+// ExportDetail exists alongside ExportedItem, in a many-to-one relationship (an ExportedItem has many ExportDetail). These
+// represent a particular FFmpeg export
 type ExportDetail struct {
 	*gorm.Model
 	ExportedItemID uint
@@ -48,11 +52,15 @@ type ExportDetail struct {
 	Path           string `gorm:"uniqueIndex"`
 }
 
+// Series represents a way for multiple ExportedItems to group themselves under one "Series". Note that
+// this is not the same as a "Season".
 type Series struct {
 	*gorm.Model
 	Name string
 }
 
+// We store genres in their own table using this struct - this allows us to view all Genres we know about by consulting this
+// table, rather than using the ExportedItem table.
 type Genre struct {
 	Name string `gorm:"primaryKey"`
 }

@@ -14,7 +14,7 @@ type QueueManager interface {
 	Contains(string) bool
 	Push(*QueueItem) error
 	Remove(*QueueItem) error
-	Pick(QueueItemStage) *QueueItem
+	Pick(ItemStage) *QueueItem
 	AdvanceStage(*QueueItem)
 	Filter(ItemFn)
 	ForEach(ItemFn)
@@ -115,7 +115,7 @@ func (queue *processorQueue) Remove(item *QueueItem) error {
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *processorQueue) Pick(stage QueueItemStage) *QueueItem {
+func (queue *processorQueue) Pick(stage ItemStage) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 

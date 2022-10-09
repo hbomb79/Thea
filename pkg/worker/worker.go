@@ -35,11 +35,11 @@ type taskWorker struct {
 	stage         int
 }
 
-func NewWorker(label string, task WorkerTaskMeta, pipelineStage int, wakeupChan chan int) *taskWorker {
+func NewWorker(label string, task WorkerTaskMeta, pipelineStage int) *taskWorker {
 	return &taskWorker{
 		label,
 		task,
-		wakeupChan,
+		make(WorkerWakeupChan),
 		Sleeping,
 		pipelineStage,
 	}
@@ -56,16 +56,12 @@ func (worker *taskWorker) Start() {
 	workerLogger.Emit(logger.STOP, "Worker for stage %v with label %v has stopped\n", worker.stage, worker.label)
 }
 
-// Stage method returns the current status of this worker,
-// can be overidden by higher-level struct to embed
-// custom functionality
+// Status returns the current status of this worker
 func (worker *taskWorker) Status() WorkerStatus {
 	return worker.currentStatus
 }
 
-// Stage method returns the stage of this worker,
-// can be overidden by higher-level struct to embed
-// custom functionality
+// Stage returns the stage of this worker
 func (worker *taskWorker) Stage() int {
 	return worker.stage
 }
@@ -74,18 +70,19 @@ func (worker *taskWorker) WakeupChan() WorkerWakeupChan {
 	return worker.wakeupChan
 }
 
-// Close() closes the Worker by closing the WakeChan.
+// Close closes the Worker by closing the WakeChan.
 // Note that this does not interupt currently running
 // goroutines.
 func (worker *taskWorker) Close() {
 	close(worker.wakeupChan)
 }
 
+// Label returns the label for this worker
 func (worker *taskWorker) Label() string {
 	return worker.label
 }
 
-// sleep puts a worker to sleep until it's wakeupChan is
+// Sleep puts a worker to sleep until it's wakeupChan is
 // signalled from another goroutine. Returns a boolean that
 // is 'false' if the wakeup channel was closed - indicating
 // the worker should quit.

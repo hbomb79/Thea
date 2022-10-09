@@ -3,6 +3,8 @@ package internal
 import (
 	"fmt"
 
+	"github.com/hbomb79/Thea/internal/db"
+	"github.com/hbomb79/Thea/internal/export"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/queue"
 )
@@ -18,7 +20,8 @@ type QueueService interface {
 	PauseItem(int) error
 	ResumeItem(int) error
 	AdvanceItem(*queue.QueueItem)
-	PickItem(stage queue.QueueItemStage) *queue.QueueItem
+	PickItem(stage queue.ItemStage) *queue.QueueItem
+	ExportItem(*queue.QueueItem) error
 }
 
 type queueService struct {
@@ -78,17 +81,35 @@ func (service *queueService) PromoteItem(itemID int) error {
 	return nil
 }
 
-// CancelItem will cancel the item with the ID provided if it can be found
+// CancelItem will cancel the item with the ID provided if it can be found. If the item is currently
+// busy, it will be scheduled for cancellation (once the task is complete, the item will become cancelled)
 func (service *queueService) CancelItem(itemID int) error {
 	item, pos := service.thea.queue().FindById(itemID)
 	if item == nil || pos == -1 {
 		return fmt.Errorf("failed to CancelItem(%d) -> No item with this ID exists", itemID)
 	}
 
-	// Notify the queue item that it's been cancelled
-	item.Cancel()
+	// Ensure that the item can be cancelled... If it can, but it's currently busy, mark
+	// it as "Cancelling" so that the currently executing task can fully cancel it after
+	// it's complete
+	switch item.Status {
+	case queue.Cancelled:
+	case queue.Cancelling:
+		return fmt.Errorf("failed to CancelItem(%d) -> Item is already cancelled", itemID)
+	case queue.Pending:
+	case queue.NeedsResolving:
+		// Item is "Idle" so can be marked as cancelled immediattely
+		item.SetStatus(queue.Cancelled)
+	case queue.Completed:
+		return fmt.Errorf("failed to CancelItem(%d) -> Item has already been completed", itemID)
+	case queue.Processing:
+		// Item is busy, mark as cancelling!
+		item.SetStatus(queue.Cancelling)
+	}
 
-	// Cancel any/all ffmpeg instances for this item
+	// Cancel any/all ffmpeg instances for this item - all other tasks are super quick
+	// to execute, so only the ffmpeg stage needs this "intervention" to cut the processing
+	// off... otherwise we could be waiting for hours.
 	for _, instance := range service.thea.ffmpeg().GetInstancesForItem(itemID) {
 		instance.Stop()
 	}
@@ -151,8 +172,66 @@ func (service *queueService) AdvanceItem(item *queue.QueueItem) {
 	service.thea.queue().AdvanceStage(item)
 }
 
-func (service *queueService) PickItem(stage queue.QueueItemStage) *queue.QueueItem {
+func (service *queueService) PickItem(stage queue.ItemStage) *queue.QueueItem {
 	return service.thea.queue().Pick(stage)
+}
+
+// ExportItem accepts a QueueItem, and will:
+// 1. Form a database model with the item and it's completed ffmpeg instances.
+// 2. Save this model to the persisted database.
+// 3. Mark this item as *completed* in the queue.
+func (service *queueService) ExportItem(item *queue.QueueItem) error {
+	if item.Stage != queue.Database || item.Status != queue.Processing {
+		// Cannot export an item that is at any other stage!
+		return fmt.Errorf("failed to ExportItem(%s) -> Item is not at correct stage/status", item)
+	}
+
+	// Form a database model of the item which can be persisted. This differs from the standard item
+	// as this will embue the data with more information (such as ffmpeg instances, export locations,
+	// et cetera...). For the most part, this is just converting the data from the current structure (useful for
+	// state-management), to another (useful for DB storage/lookup).
+	exportItem := &export.ExportedItem{
+		Name:          item.Name,
+		Description:   item.OmdbInfo.Description,
+		Runtime:       item.OmdbInfo.Runtime,
+		ReleaseYear:   item.OmdbInfo.ReleaseYear,
+		Image:         item.OmdbInfo.PosterUrl,
+		Genres:        item.OmdbInfo.Genre.ToGenreList(),
+		Exports:       make([]*export.ExportDetail, 0),
+		EpisodeNumber: nil,
+		SeasonNumber:  nil,
+		SeriesID:      nil,
+		Series:        nil,
+	}
+
+	if item.TitleInfo.Episodic {
+		if item.TitleInfo.Episode == -1 || item.TitleInfo.Season == -1 {
+			return fmt.Errorf("failed to ExportItem(%s) -> Item declared itself as Episodic, however season/episode information is invalid", item)
+		}
+
+		exportItem.EpisodeNumber = &item.TitleInfo.Episode
+		exportItem.SeasonNumber = &item.TitleInfo.Season
+		exportItem.Series = &export.Series{Name: item.TitleInfo.Title}
+	}
+
+	exports := service.thea.ffmpeg().GetInstancesForItem(item.ItemID)
+	for _, v := range exports {
+		if v.Status() != ffmpeg.FINISHED {
+			return fmt.Errorf("failed to ExportItem(%s) -> One or more FFmpeg instances are not finished (found instance %v as incomplete)", item, v)
+		}
+
+		exportItem.Exports = append(exportItem.Exports, &export.ExportDetail{
+			Name: v.ProfileTag(),
+			Path: v.GetOutputPath(),
+		})
+	}
+
+	// Attempt to persist the formed exportItem to the database
+	if err := db.DB.GetInstance().Debug().Save(exportItem).Error; err != nil {
+		return fmt.Errorf("failed to ExportItem(%s) -> Database save operation FAILED: %s", item, err.Error())
+	}
+
+	return nil
 }
 
 func NewQueueService(thea Thea) QueueService {

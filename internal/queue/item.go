@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"regexp"
 
-	"github.com/hbomb79/Thea/internal/db"
 	"github.com/hbomb79/Thea/internal/profile"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"gorm.io/gorm"
@@ -16,7 +15,7 @@ import (
 var itemLogger = logger.Get("QueueItem")
 
 // Each stage represents a certain stage in the pipeline
-type QueueItemStage int
+type ItemStage int
 
 // When a QueueItem is initially added, it should be of stage Import,
 // each time a worker works on the task it should increment it's
@@ -27,7 +26,7 @@ type QueueItemStage int
 // this codebase by waking up workers based on their label, rather
 // than the worker.PipelineStage enum
 const (
-	Import QueueItemStage = iota
+	Import ItemStage = iota
 	Title
 	Omdb
 	Format
@@ -36,11 +35,11 @@ const (
 )
 
 // The current status of this QueueItem
-type QueueItemStatus int
+type ItemStatus int
 
 const (
 	// Inidicates that this item is waiting to be worked on. It's currently idle
-	Pending QueueItemStatus = iota
+	Pending ItemStatus = iota
 
 	// TPA is making progress on this item
 	Processing
@@ -79,8 +78,8 @@ type QueueItem struct {
 	ItemID           int              `json:"id" groups:"api" gorm:"-"`
 	Path             string           `json:"path"`
 	Name             string           `json:"name" groups:"api"`
-	Status           QueueItemStatus  `json:"status" groups:"api" gorm:"-"`
-	Stage            QueueItemStage   `json:"stage" groups:"api" gorm:"-"`
+	Status           ItemStatus       `json:"status" groups:"api" gorm:"-"`
+	Stage            ItemStage        `json:"stage" groups:"api" gorm:"-"`
 	TitleInfo        *TitleInfo       `json:"title_info"`
 	OmdbInfo         *OmdbInfo        `json:"omdb_info"`
 	Trouble          Trouble          `json:"trouble" gorm:"-"`
@@ -102,13 +101,13 @@ func NewQueueItem(info fs.FileInfo, path string, changeSubscriber ChangeSubscrib
 	}
 }
 
-func (item *QueueItem) SetStage(stage QueueItemStage) {
+func (item *QueueItem) SetStage(stage ItemStage) {
 	item.Stage = stage
 
 	item.NotifyUpdate()
 }
 
-func (item *QueueItem) SetStatus(status QueueItemStatus) {
+func (item *QueueItem) SetStatus(status ItemStatus) {
 	if item.Status == status {
 		return
 	}
@@ -186,7 +185,7 @@ func (item *QueueItem) FormatTitle() error {
 
 	// Didn't match either case; return error so that trouble
 	// can be raised by the worker.
-	return TitleFormatError{item, "Failed to match RegExp!"}
+	return fmt.Errorf("failed to parse title, failed to match on either regular expressions")
 }
 
 // ValidateProfileSuitable accepts a profile and will check it's match conditions, and potentially
@@ -257,6 +256,7 @@ func (item *QueueItem) ValidateProfileSuitable(pr profile.Profile) bool {
 // status will be set to Cancelling. Once the running task finishes, the items
 // state will be updated to Cancelled.
 func (item *QueueItem) Cancel() error {
+	itemLogger.Emit(logger.WARNING, "queue.Item#Cancel is DEPRECATED - prefer QueueService#cancelItem")
 	switch item.Status {
 	case Cancelled:
 	case Cancelling:
@@ -273,7 +273,7 @@ func (item *QueueItem) Cancel() error {
 	return nil
 }
 
-func (item *QueueItem) CommitToDatabase() error {
+/*func (item *QueueItem) CommitToDatabase() error {
 	db := db.DB.GetInstance()
 
 	// Compose optional/nil-able fields of the export
@@ -324,6 +324,7 @@ func (item *QueueItem) CommitToDatabase() error {
 
 	return nil
 }
+*/
 
 func (item *QueueItem) SetPaused(paused bool) error {
 	if (paused && item.Status == Paused) ||
@@ -350,15 +351,15 @@ func (item *QueueItem) String() string {
 
 func (item *QueueItem) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		ItemID     int             `json:"id"`
-		Path       string          `json:"path"`
-		Name       string          `json:"name"`
-		Status     QueueItemStatus `json:"status"`
-		Stage      QueueItemStage  `json:"stage"`
-		TitleInfo  *TitleInfo      `json:"title_info"`
-		OmdbInfo   *OmdbInfo       `json:"omdb_info"`
-		Trouble    Trouble         `json:"trouble"`
-		ProfileTag string          `json:"profile_tag"`
+		ItemID     int        `json:"id"`
+		Path       string     `json:"path"`
+		Name       string     `json:"name"`
+		Status     ItemStatus `json:"status"`
+		Stage      ItemStage  `json:"stage"`
+		TitleInfo  *TitleInfo `json:"title_info"`
+		OmdbInfo   *OmdbInfo  `json:"omdb_info"`
+		Trouble    Trouble    `json:"trouble"`
+		ProfileTag string     `json:"profile_tag"`
 		//TODO
 		// FfmpegInstances []CommanderTask `json:"ffmpeg_instances"`
 	}{

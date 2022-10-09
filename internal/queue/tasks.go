@@ -33,7 +33,7 @@ type BaseTask struct {
 type taskFn func(worker.Worker, *QueueItem) error
 type onComplete func(*QueueItem)
 type ItemProducer interface {
-	PickItem(QueueItemStage) *QueueItem
+	PickItem(ItemStage) *QueueItem
 }
 
 // executeTask implements the core worker work/wait loop that
@@ -54,7 +54,7 @@ func (task *BaseTask) executeTask(w worker.Worker, fn taskFn) error {
 			default:
 			}
 
-			item := task.PickItem(QueueItemStage(w.Stage()))
+			item := task.PickItem(ItemStage(w.Stage()))
 			if item == nil {
 				break inner
 			}
@@ -64,6 +64,7 @@ func (task *BaseTask) executeTask(w worker.Worker, fn taskFn) error {
 				// Item wants to cancel and is waiting for us to finish... we've finished
 				// with this task so mark it as fully cancelled.
 				item.SetStatus(Cancelled)
+				continue
 			}
 
 			if err != nil {
@@ -433,8 +434,10 @@ func (task *OmdbTask) advance(item *QueueItem) {
 	task.OnComplete(item)
 }
 
+type commitHandler func(*QueueItem) error
 type DatabaseTask struct {
-	OnComplete onComplete
+	OnComplete    onComplete
+	CommitHandler commitHandler
 	BaseTask
 }
 
@@ -476,7 +479,7 @@ func (task *DatabaseTask) commitToDatabase(w worker.Worker, queueItem *QueueItem
 		return nil
 	}
 
-	if err := queueItem.CommitToDatabase(); err != nil {
+	if err := task.CommitHandler(queueItem); err != nil {
 		return &DatabaseTaskError{NewBaseTaskError(err.Error(), queueItem, DATABASE_FAILURE)}
 	}
 

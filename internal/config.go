@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/hbomb79/TPA/internal/db"
+	"github.com/hbomb79/TPA/internal/ffmpeg"
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
@@ -13,15 +14,15 @@ import (
 // various user config supplied by file, or
 // manually inside the code.
 type TPAConfig struct {
-	Concurrent    ConcurrentConfig  `yaml:"concurrency" env-required:"true"`
-	Format        FormatterConfig   `yaml:"formatter"`
-	Services      ServiceConfig     `yaml:"docker_services"`
-	Database      db.DatabaseConfig `yaml:"database" env-required:"true"`
-	OmdbKey       string            `yaml:"omdb_api_key" env:"OMDB_API_KEY" env-required:"true"`
-	CacheDirPath  string            `yaml:"cache_dir" env:"CACHE_DIR"`
-	ConfigDirPath string            `yaml:"config_dir" env:"CONFIG_DIR"`
-	ApiHostAddr   string            `yaml:"host" env:"HOST_ADDR" env-default:"0.0.0.0"`
-	ApiHostPort   string            `yaml:"port" env:"HOST_PORT" env-default:"8080"`
+	Concurrent    ConcurrentConfig       `yaml:"concurrency" env-required:"true"`
+	Format        ffmpeg.FormatterConfig `yaml:"formatter"`
+	Services      ServiceConfig          `yaml:"docker_services"`
+	Database      db.DatabaseConfig      `yaml:"database" env-required:"true"`
+	OmdbKey       string                 `yaml:"omdb_api_key" env:"OMDB_API_KEY" env-required:"true"`
+	CacheDirPath  string                 `yaml:"cache_dir" env:"CACHE_DIR"`
+	ConfigDirPath string                 `yaml:"config_dir" env:"CONFIG_DIR"`
+	ApiHostAddr   string                 `yaml:"host" env:"HOST_ADDR" env-default:"0.0.0.0"`
+	ApiHostPort   string                 `yaml:"port" env:"HOST_PORT" env-default:"8080"`
 }
 
 // ConcurrentConfig is a subset of the configuration that focuses
@@ -31,18 +32,6 @@ type ConcurrentConfig struct {
 	Title  int `yaml:"title_threads" env:"CONCURRENCY_TITLE_THREADS" env-default:"1"`
 	OMBD   int `yaml:"omdb_threads" env:"CONCURRENCY_OMDB_THREADS" env-default:"1"`
 	Format int `yaml:"ffmpeg_threads" env:"CONCURRENCY_FFMPEG_THREADS" env-default:"8"`
-}
-
-// FormatterConfig is the 'misc' container of the configuration, encompassing configuration
-// not covered by either 'ConcurrentConfig' or 'DatabaseConfig'. Mainly configuration
-// paramters for the FFmpeg executable.
-type FormatterConfig struct {
-	ImportPath         string `yaml:"import_path" env:"FORMAT_IMPORT_PATH" env-required:"true"`
-	OutputPath         string `yaml:"default_output_dir" env:"FORMAT_DEFAULT_OUTPUT_DIR" env-required:"true"`
-	TargetFormat       string `yaml:"target_format" env:"FORMAT_TARGET_FORMAT" env-default:"mp4"`
-	ImportDirTickDelay int    `yaml:"import_polling_delay" env:"FORMAT_IMPORT_POLLING_DELAY" env-default:"3600"`
-	FfmpegBinaryPath   string `yaml:"ffmpeg_binary" env:"FORMAT_FFMPEG_BINARY_PATH" env-default:"/usr/bin/ffmpeg"`
-	FfprobeBinaryPath  string `yaml:"ffprobe_binary" env:"FORMAT_FFPROBE_BINARY_PATH" env-default:"/usr/bin/ffprobe"`
 }
 
 // ServiceConfig is used to enable/disable the internal intialisation of

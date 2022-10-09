@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/hbomb79/TPA/internal/db"
+	"github.com/hbomb79/TPA/internal/ffmpeg"
 	"github.com/hbomb79/TPA/internal/profile"
+	"github.com/hbomb79/TPA/internal/queue"
 	"github.com/hbomb79/TPA/pkg/docker"
 	"github.com/hbomb79/TPA/pkg/logger"
 	"github.com/hbomb79/TPA/pkg/worker"
@@ -46,8 +48,8 @@ type TPA interface {
 	Start() error
 	Stop()
 
-	queue() QueueManager
-	ffmpeg() FfmpegManager
+	queue() queue.QueueManager
+	ffmpeg() ffmpeg.FfmpegManager
 	profiles() profile.ProfileManager
 	workerPool() *worker.WorkerPool
 	config() TPAConfig
@@ -63,8 +65,8 @@ type tpa struct {
 	QueueService
 	MovieService
 
-	queueMgr   QueueManager
-	ffmpegMgr  FfmpegManager
+	queueMgr   queue.QueueManager
+	ffmpegMgr  ffmpeg.FfmpegManager
 	profileMgr profile.ProfileManager
 	workers    *worker.WorkerPool
 
@@ -102,8 +104,8 @@ func NewTpa(config TPAConfig, updateFn UpdateManagerSubmitFn) TPA {
 	t.MovieService = nil
 
 	// Inject state managers
-	t.queueMgr = NewProcessorQueue(cachePath)
-	t.ffmpegMgr = NewCommander(t)
+	t.queueMgr = queue.NewProcessorQueue(cachePath)
+	t.ffmpegMgr = ffmpeg.NewCommander(t, config.Format)
 	t.profileMgr = profile.NewProfileList(configPath)
 	t.workers = worker.NewWorkerPool()
 
@@ -161,8 +163,8 @@ func (tpa *tpa) Stop() {
 }
 
 // ** INTERNAL API ** //
-func (tpa *tpa) queue() QueueManager              { return tpa.queueMgr }
-func (tpa *tpa) ffmpeg() FfmpegManager            { return tpa.ffmpegMgr }
+func (tpa *tpa) queue() queue.QueueManager        { return tpa.queueMgr }
+func (tpa *tpa) ffmpeg() ffmpeg.FfmpegManager     { return tpa.ffmpegMgr }
 func (tpa *tpa) profiles() profile.ProfileManager { return tpa.profileMgr }
 func (tpa *tpa) workerPool() *worker.WorkerPool   { return tpa.workers }
 func (tpa *tpa) config() TPAConfig                { return tpa.cfg }
@@ -180,10 +182,10 @@ func (tpa *tpa) synchroniseQueue() error {
 	}
 
 	for path, info := range presentItems {
-		tpa.queueMgr.Push(NewQueueItem(info, path, tpa))
+		tpa.queueMgr.Push(queue.NewQueueItem(info, path, tpa))
 	}
 
-	tpa.queueMgr.Filter(func(queue QueueManager, key int, item *QueueItem) bool {
+	tpa.queueMgr.Filter(func(queue queue.QueueManager, key int, item *queue.QueueItem) bool {
 		if _, ok := presentItems[item.Path]; !ok {
 			item.Cancel()
 			return false
@@ -192,8 +194,8 @@ func (tpa *tpa) synchroniseQueue() error {
 		return true
 	})
 
-	tpa.queueMgr.ForEach(func(q QueueManager, idx int, item *QueueItem) bool {
-		if item.Stage != Import {
+	tpa.queueMgr.ForEach(func(q queue.QueueManager, idx int, item *queue.QueueItem) bool {
+		if item.Stage != queue.Import {
 			return false
 		}
 
@@ -296,9 +298,10 @@ func (tpa *tpa) initialise() error {
 		return err
 	}
 
-	tpa.workers.PushWorker(worker.NewWorker("Title_Parser", &TitleTask{tpa: tpa}, int(Title), make(chan int)))
-	tpa.workers.PushWorker(worker.NewWorker("OMDB_Handler", &OmdbTask{tpa: tpa}, int(Omdb), make(chan int)))
-	tpa.workers.PushWorker(worker.NewWorker("Database_Committer", &DatabaseTask{tpa: tpa}, int(Database), make(chan int)))
+	advanceFunc := tpa.queue().AdvanceStage
+	tpa.workers.PushWorker(worker.NewWorker("Title_Parser", &queue.TitleTask{OnComplete: advanceFunc}, int(queue.Title), make(chan int)))
+	tpa.workers.PushWorker(worker.NewWorker("OMDB_Handler", &queue.OmdbTask{OnComplete: advanceFunc}, int(queue.Omdb), make(chan int)))
+	tpa.workers.PushWorker(worker.NewWorker("Database_Committer", &queue.DatabaseTask{OnComplete: advanceFunc}, int(queue.Database), make(chan int)))
 
 	return nil
 }

@@ -1,5 +1,7 @@
 package internal
 
+import "github.com/hbomb79/TPA/internal/queue"
+
 type UpdateManager interface {
 	NotifyItemUpdate(int)
 	NotifyQueueUpdate()
@@ -17,7 +19,7 @@ const (
 
 type Update struct {
 	UpdateType   processorUpdateType
-	QueueItem    *QueueItem
+	QueueItem    *queue.QueueItem
 	ItemPosition int
 	ItemId       int
 }

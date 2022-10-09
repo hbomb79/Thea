@@ -1,4 +1,4 @@
-package internal
+package queue
 
 import (
 	"encoding/json"
@@ -26,15 +26,21 @@ const (
 // to facilitate the other task types implemented in this file. This struct
 // mainly just handled some repeated code definitions, such as the basic
 // work/wait worker loop, and raising and notifying troubles
-type baseTask struct{}
+type baseTask struct {
+	ItemProducer
+}
 
 type taskFn func(worker.Worker, *QueueItem) error
+type onComplete func(*QueueItem)
+type ItemProducer interface {
+	Pick(QueueItemStage) *QueueItem
+}
 
 // executeTask implements the core worker work/wait loop that
 // searches for work to do - and if some work is available, the
 // 'fn' taskFn is executed. If no work is available, the worker
 // sleeps until woken up again.
-func (task *baseTask) executeTask(w worker.Worker, tpa TPA, fn taskFn) error {
+func (task *baseTask) executeTask(w worker.Worker, fn taskFn) error {
 	for {
 	inner:
 		for {
@@ -48,7 +54,7 @@ func (task *baseTask) executeTask(w worker.Worker, tpa TPA, fn taskFn) error {
 			default:
 			}
 
-			item := tpa.queue().Pick(QueueItemStage(w.Stage()))
+			item := task.Pick(QueueItemStage(w.Stage()))
 			if item == nil {
 				break inner
 			}
@@ -88,14 +94,14 @@ func (task *baseTask) executeTask(w worker.Worker, tpa TPA, fn taskFn) error {
 // queue items raw path name and filtering out relevant information
 // such as the title, season/episode information, release year, and resolution.
 type TitleTask struct {
-	tpa TPA
+	OnComplete onComplete
 	baseTask
 }
 
 // Execute will utilise the baseTask.Execute method to run the task repeatedly
 // in a worker work/wait loop
 func (task *TitleTask) Execute(w worker.Worker) error {
-	return task.executeTask(w, task.tpa, task.processTitle)
+	return task.executeTask(w, task.processTitle)
 }
 
 // processTroubleState will check if the queue item is troubled, and if so, will
@@ -149,13 +155,14 @@ func (task *TitleTask) processTitle(w worker.Worker, queueItem *QueueItem) error
 
 // advances the item by advancing the stage of the item
 func (task *TitleTask) advance(item *QueueItem) {
-	task.tpa.queue().AdvanceStage(item)
+	task.OnComplete(item)
 }
 
 // OmdbTask is the task responsible for querying to OMDB API for information
 // about the queue item we've processed so far.
 type OmdbTask struct {
-	tpa TPA
+	OmdbKey    string
+	OnComplete onComplete
 	baseTask
 }
 
@@ -271,7 +278,7 @@ func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*Om
 // Execute uses the provided baseTask.executeTask method to run this tasks
 // work function in a work/wait worker loop
 func (task *OmdbTask) Execute(w worker.Worker) error {
-	return task.executeTask(w, task.tpa, func(w worker.Worker, queueItem *QueueItem) error {
+	return task.executeTask(w, func(w worker.Worker, queueItem *QueueItem) error {
 		isComplete, err := task.processTroubleState(queueItem)
 		if err != nil {
 			taskLogger.Emit(logger.WARNING, "Unable to process items trouble state: %s\n", err.Error())
@@ -342,8 +349,7 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (bool, error) {
 // fails for another reason, an OmdbRequestError is returned.
 func (task *OmdbTask) search(w worker.Worker, queueItem *QueueItem) (*OmdbInfo, error) {
 	// Peform the search
-	cfg := task.tpa.config()
-	res, err := http.Get(fmt.Sprintf(OMDB_API, "s", queueItem.TitleInfo.Title, cfg.OmdbKey))
+	res, err := http.Get(fmt.Sprintf(OMDB_API, "s", queueItem.TitleInfo.Title, task.OmdbKey))
 	if err != nil {
 		// Request exception
 		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("search failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
@@ -379,8 +385,7 @@ func (task *OmdbTask) search(w worker.Worker, queueItem *QueueItem) (*OmdbInfo, 
 // If no match is found a OmdbNoResultError is returned - if the request fails
 // for another reason, an OmdbRequestError is returned.
 func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, error) {
-	cfg := task.tpa.config()
-	res, err := http.Get(fmt.Sprintf(OMDB_API, "i", imdbId, cfg.OmdbKey))
+	res, err := http.Get(fmt.Sprintf(OMDB_API, "i", imdbId, task.OmdbKey))
 	if err != nil {
 		// Request exception
 		return nil, &OmdbTaskError{NewBaseTaskError(fmt.Sprintf("fetch failed: %s", err.Error()), queueItem, OMDB_REQUEST_FAILURE), nil}
@@ -425,18 +430,18 @@ func (task *OmdbTask) find(w worker.Worker, queueItem *QueueItem) error {
 // for that stage
 func (task *OmdbTask) advance(item *QueueItem) {
 	// Release the QueueItem by advancing it to the next pipeline stage
-	task.tpa.queue().AdvanceStage(item)
+	task.OnComplete(item)
 }
 
 type DatabaseTask struct {
-	tpa TPA
+	OnComplete onComplete
 	baseTask
 }
 
 // Execute will utilise the baseTask.Execute method to run the task repeatedly
 // in a worker work/wait loop
 func (task *DatabaseTask) Execute(w worker.Worker) error {
-	return task.executeTask(w, task.tpa, task.commitToDatabase)
+	return task.executeTask(w, task.commitToDatabase)
 }
 
 // processTroubleState will check if the queue item is troubled, and if so, will
@@ -481,5 +486,5 @@ func (task *DatabaseTask) commitToDatabase(w worker.Worker, queueItem *QueueItem
 
 // advances the item by advancing the stage of the item
 func (task *DatabaseTask) advance(item *QueueItem) {
-	task.tpa.queue().AdvanceStage(item)
+	task.OnComplete(item)
 }

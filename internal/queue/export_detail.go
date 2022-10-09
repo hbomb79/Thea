@@ -1,6 +1,13 @@
-package internal
+package queue
 
-import "gorm.io/gorm"
+import (
+	"github.com/hbomb79/TPA/internal/db"
+	"gorm.io/gorm"
+)
+
+func init() {
+	db.DB.RegisterModel(&ExportedItem{}, &ExportDetail{}, &Series{}, &Genre{})
+}
 
 type ExportedItemDto struct {
 	Name          *string         `json:"name"`

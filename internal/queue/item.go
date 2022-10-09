@@ -1,4 +1,4 @@
-package internal
+package queue
 
 import (
 	"encoding/json"
@@ -14,10 +14,6 @@ import (
 )
 
 var itemLogger = logger.Get("QueueItem")
-
-func init() {
-	db.DB.RegisterModel(&ExportedItem{}, &ExportDetail{}, &Series{}, &Genre{})
-}
 
 // Each stage represents a certain stage in the pipeline
 type QueueItemStage int
@@ -80,19 +76,23 @@ const (
 // and the current processing status/stage
 type QueueItem struct {
 	gorm.Model
-	ItemID     int             `json:"id" groups:"api" gorm:"-"`
-	Path       string          `json:"path"`
-	Name       string          `json:"name" groups:"api"`
-	Status     QueueItemStatus `json:"status" groups:"api" gorm:"-"`
-	Stage      QueueItemStage  `json:"stage" groups:"api" gorm:"-"`
-	TitleInfo  *TitleInfo      `json:"title_info"`
-	OmdbInfo   *OmdbInfo       `json:"omdb_info"`
-	Trouble    Trouble         `json:"trouble" gorm:"-"`
-	ProfileTag string          `json:"profile_tag" gorm:"-"`
-	tpa        TPA             `json:"-" gorm:"-"`
+	ItemID     int              `json:"id" groups:"api" gorm:"-"`
+	Path       string           `json:"path"`
+	Name       string           `json:"name" groups:"api"`
+	Status     QueueItemStatus  `json:"status" groups:"api" gorm:"-"`
+	Stage      QueueItemStage   `json:"stage" groups:"api" gorm:"-"`
+	TitleInfo  *TitleInfo       `json:"title_info"`
+	OmdbInfo   *OmdbInfo        `json:"omdb_info"`
+	Trouble    Trouble          `json:"trouble" gorm:"-"`
+	ProfileTag string           `json:"profile_tag" gorm:"-"`
+	tpa        ChangeSubscriber `json:"-" gorm:"-"`
 }
 
-func NewQueueItem(info fs.FileInfo, path string, tpa TPA) *QueueItem {
+type ChangeSubscriber interface {
+	NotifyItemUpdate(int)
+}
+
+func NewQueueItem(info fs.FileInfo, path string, tpa ChangeSubscriber) *QueueItem {
 	return &QueueItem{
 		Name:   info.Name(),
 		Path:   path,
@@ -114,13 +114,6 @@ func (item *QueueItem) SetStatus(status QueueItemStatus) {
 	}
 
 	item.Status = status
-	if item.Status == Cancelled {
-		// Item has been cancelled and has wrapped up what it was doing
-		// Remove this item from the queue, mark it in the queue cache
-		// so we don't re-ingest it later
-		item.tpa.queue().Remove(item)
-	}
-
 	item.NotifyUpdate()
 }
 
@@ -303,12 +296,13 @@ func (item *QueueItem) CommitToDatabase() error {
 
 	// Construct exports based on the completed ffmpeg instances
 	exports := make([]*ExportDetail, 0)
-	for _, instance := range item.tpa.ffmpeg().GetInstancesForItem(item.ItemID) {
-		exports = append(exports, &ExportDetail{
-			Name: instance.ProfileTag(),
-			Path: instance.GetOutputPath(),
-		})
-	}
+	//TODO
+	// for _, instance := range item.tpa.ffmpeg().GetInstancesForItem(item.ItemID) {
+	// 	exports = append(exports, &ExportDetail{
+	// 		Name: instance.ProfileTag(),
+	// 		Path: instance.GetOutputPath(),
+	// 	})
+	// }
 
 	// Compose our export item
 	export := &ExportedItem{
@@ -356,16 +350,17 @@ func (item *QueueItem) String() string {
 
 func (item *QueueItem) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		ItemID          int             `json:"id"`
-		Path            string          `json:"path"`
-		Name            string          `json:"name"`
-		Status          QueueItemStatus `json:"status"`
-		Stage           QueueItemStage  `json:"stage"`
-		TitleInfo       *TitleInfo      `json:"title_info"`
-		OmdbInfo        *OmdbInfo       `json:"omdb_info"`
-		Trouble         Trouble         `json:"trouble"`
-		ProfileTag      string          `json:"profile_tag"`
-		FfmpegInstances []CommanderTask `json:"ffmpeg_instances"`
+		ItemID     int             `json:"id"`
+		Path       string          `json:"path"`
+		Name       string          `json:"name"`
+		Status     QueueItemStatus `json:"status"`
+		Stage      QueueItemStage  `json:"stage"`
+		TitleInfo  *TitleInfo      `json:"title_info"`
+		OmdbInfo   *OmdbInfo       `json:"omdb_info"`
+		Trouble    Trouble         `json:"trouble"`
+		ProfileTag string          `json:"profile_tag"`
+		//TODO
+		// FfmpegInstances []CommanderTask `json:"ffmpeg_instances"`
 	}{
 		item.ItemID,
 		item.Path,
@@ -376,6 +371,6 @@ func (item *QueueItem) MarshalJSON() ([]byte, error) {
 		item.OmdbInfo,
 		item.Trouble,
 		item.ProfileTag,
-		item.tpa.ffmpeg().GetInstancesForItem(item.ItemID),
+		// item.tpa.ffmpeg().GetInstancesForItem(item.ItemID),
 	})
 }

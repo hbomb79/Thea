@@ -1,4 +1,4 @@
-package internal
+package ffmpeg
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/hbomb79/TPA/internal/profile"
+	"github.com/hbomb79/TPA/internal/queue"
 	"github.com/hbomb79/TPA/pkg/logger"
 )
 
@@ -34,24 +35,27 @@ type ffmpegInstance struct {
 	status              CommanderTaskStatus
 	progress            *ffmpegProgress
 	important           bool
-	trouble             Trouble
+	trouble             queue.Trouble
 	cancelChan          chan bool
 	troubleResolvedChan chan bool
-	item                *QueueItem
-	profileTag          string
+	item                *queue.QueueItem
+	profile             profile.Profile
+	config              FormatterConfig
 	paused              bool
 }
 
 // Start manages this ffmpeg instance by capturing any errors, handling troubled states, and
 // directly executing the ffmpeg transcode.
-func (ffmpegI *ffmpegInstance) Start() {
+func (ffmpegI *ffmpegInstance) Start(config FormatterConfig) {
+	ffmpegI.config = config
+
 	ffmpegLogger.Emit(logger.INFO, "Starting instance %s\n", ffmpegI)
 	for {
 		if ffmpegI.trouble == nil {
 			err := ffmpegI.beginTranscode()
 			if err != nil {
 				ffmpegLogger.Emit(logger.ERROR, "FFMPEG instance (%s) error detected: %s\n", ffmpegI, err.Error())
-				ffmpegI.raiseTrouble(&FormatTaskError{NewBaseTaskError(err.Error(), ffmpegI.item, FFMPEG_FAILURE), ffmpegI})
+				ffmpegI.raiseTrouble(&queue.FormatTaskError{BaseTaskError: queue.NewBaseTaskError(err.Error(), ffmpegI.item, queue.FFMPEG_FAILURE) /*, ffmpegI*/})
 			} else {
 				// Success or cancelled
 				return
@@ -72,11 +76,11 @@ func (ffmpegI *ffmpegInstance) String() string {
 		ffmpegI.getProcessID(),
 		ffmpegI.item.ID,
 		ffmpegI.status,
-		ffmpegI.profileTag)
+		ffmpegI.profile)
 }
 
 func (ffmpegI *ffmpegInstance) ThreadsRequired() int {
-	profile := ffmpegI.getProfileInstance()
+	profile := ffmpegI.profile
 	if profile == nil || profile.Command().Threads == nil {
 		return DEFAULT_THREADS_REQUIRED
 	} else {
@@ -162,7 +166,7 @@ func (ffmpegI *ffmpegInstance) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		Progress   *ffmpegProgress
 		Status     CommanderTaskStatus
-		Trouble    Trouble
+		Trouble    queue.Trouble
 		ItemId     int
 		ProfileTag string
 	}{
@@ -170,7 +174,7 @@ func (ffmpegI *ffmpegInstance) MarshalJSON() ([]byte, error) {
 		ffmpegI.status,
 		ffmpegI.trouble,
 		ffmpegI.item.ItemID,
-		ffmpegI.profileTag,
+		ffmpegI.profile.Tag(),
 	})
 }
 
@@ -178,18 +182,18 @@ func (ffmpegI *ffmpegInstance) Important() bool {
 	return ffmpegI.important
 }
 
-func (ffmpegI *ffmpegInstance) Item() *QueueItem {
+func (ffmpegI *ffmpegInstance) Item() *queue.QueueItem {
 	return ffmpegI.item
 }
 
-func (ffmpegI *ffmpegInstance) Trouble() Trouble {
+func (ffmpegI *ffmpegInstance) Trouble() queue.Trouble {
 	return ffmpegI.trouble
 }
 
 func (ffmpegI *ffmpegInstance) ResolveTrouble(args map[string]interface{}) error {
 	const ERR_FMT = "unable to resolve FFmpeg task error - %v"
 	tr := ffmpegI.trouble
-	if _, ok := tr.(*FormatTaskError); !ok {
+	if _, ok := tr.(*queue.FormatTaskError); !ok {
 		return fmt.Errorf("cannot resolve trouble %v: trouble expected to be a FormatTaskError, got %T", tr, tr)
 	}
 
@@ -223,7 +227,7 @@ func (ffmpegI *ffmpegInstance) ResolveTrouble(args map[string]interface{}) error
 }
 
 func (ffmpegI *ffmpegInstance) ProfileTag() string {
-	return ffmpegI.profileTag
+	return ffmpegI.profile.Tag()
 }
 
 func (ffmpegI *ffmpegInstance) Progress() interface{} {
@@ -265,28 +269,24 @@ func (ffmpegI *ffmpegInstance) SetStatus(s CommanderTaskStatus) {
 }
 
 func (ffmpegI *ffmpegInstance) SetProfileTag(newProfile string) {
-	ffmpegI.profileTag = newProfile
+	panic("TODO")
+	// ffmpegI.profileTag = newProfile
 }
 
 func (ffmpegI *ffmpegInstance) GetOutputPath() string {
-	outputFormat := ffmpegI.item.tpa.config().Format.TargetFormat
-	profile := ffmpegI.getProfileInstance()
+	outputFormat := ffmpegI.config.TargetFormat
 	var itemOutputPath string
+
+	profile := ffmpegI.profile
 	if profile == nil || profile.Output() == "" {
 		itemOutputPath = fmt.Sprintf("%s.%s", ffmpegI.item.TitleInfo.OutputPath(), outputFormat)
-		itemOutputPath = filepath.Join(ffmpegI.item.tpa.config().Format.OutputPath, itemOutputPath)
+		itemOutputPath = filepath.Join(ffmpegI.config.OutputPath, itemOutputPath)
 	} else {
 		itemOutputPath = profile.Output()
 	}
 
 	itemOutputPath = ffmpegI.composeCommandArguments(itemOutputPath)
 	return itemOutputPath
-}
-
-func (ffmpegI *ffmpegInstance) getProfileInstance() profile.Profile {
-	_, profile := ffmpegI.item.tpa.profiles().FindProfileByTag(ffmpegI.profileTag)
-
-	return profile
 }
 
 func (ffmpegI *ffmpegInstance) suspendTranscode() {
@@ -300,17 +300,11 @@ func (ffmpegI *ffmpegInstance) resumeTranscode() {
 func (ffmpegI *ffmpegInstance) beginTranscode() error {
 	ffmpegI.SetStatus(WORKING)
 
-	tpa := ffmpegI.item.tpa
-	config := tpa.config().Format
+	config := ffmpegI.config
 	ffmpegCfg := &ffmpeg.Config{
 		ProgressEnabled: true,
 		FfmpegBinPath:   config.FfmpegBinaryPath,
 		FfprobeBinPath:  config.FfprobeBinaryPath,
-	}
-
-	pIdx, p := tpa.profiles().FindProfileByTag(ffmpegI.profileTag)
-	if pIdx == -1 {
-		return fmt.Errorf("ffmpeg instance %s failed to start as the profile tag %s no longer exists", ffmpegI, ffmpegI.profileTag)
 	}
 
 	cmdContext, cancel := context.WithCancel(context.Background())
@@ -325,7 +319,7 @@ func (ffmpegI *ffmpegInstance) beginTranscode() error {
 		Output(outputPath).
 		WithContext(&cmdContext)
 
-	progressChannel, err := transcoderInstance.Start(p.Command())
+	progressChannel, err := transcoderInstance.Start(ffmpegI.profile.Command())
 	if err != nil {
 		return ffmpegI.parseFfmpegError(err)
 	}
@@ -387,7 +381,7 @@ func (ffmpegI *ffmpegInstance) parseFfmpegError(err error) error {
 	return errors.New(ffmpegException["string"].(string))
 }
 
-func (ffmpegI *ffmpegInstance) raiseTrouble(t Trouble) {
+func (ffmpegI *ffmpegInstance) raiseTrouble(t queue.Trouble) {
 	ffmpegLogger.Emit(logger.WARNING, "Trouble raised {%v}!\n", t)
 	if ffmpegI.trouble != nil {
 		ffmpegLogger.Emit(logger.WARNING, "Instance is already troubled, new trouble instance will overwrite!\n")
@@ -406,19 +400,19 @@ func (ffmpegI *ffmpegInstance) getProcessID() int {
 	return ffmpegI.execCmd.Process.Pid
 }
 
-func newFfmpegInstance(item *QueueItem, profileTag string) CommanderTask {
+func newFfmpegInstance(item *queue.QueueItem, profile profile.Profile) CommanderTask {
 	isPaused := false
-	if item.Status == Paused {
+	if item.Status == queue.Paused {
 		isPaused = true
 	}
 
 	return &ffmpegInstance{
 		item:                item,
-		profileTag:          profileTag,
 		execCmd:             nil,
 		status:              PENDING,
 		cancelChan:          make(chan bool),
 		troubleResolvedChan: make(chan bool),
 		paused:              isPaused,
+		profile:             profile,
 	}
 }

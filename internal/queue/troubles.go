@@ -1,4 +1,4 @@
-package internal
+package queue
 
 import (
 	"encoding/json"
@@ -40,7 +40,7 @@ const (
 	DATABASE_FAILURE
 )
 
-type baseTaskError struct {
+type BaseTaskError struct {
 	message           string
 	queueItem         *QueueItem
 	troubleType       TroubleType
@@ -48,8 +48,8 @@ type baseTaskError struct {
 	uuid              uuid.UUID
 }
 
-func NewBaseTaskError(message string, queueItem *QueueItem, troubleType TroubleType) baseTaskError {
-	return baseTaskError{
+func NewBaseTaskError(message string, queueItem *QueueItem, troubleType TroubleType) BaseTaskError {
+	return BaseTaskError{
 		message,
 		queueItem,
 		troubleType,
@@ -58,36 +58,36 @@ func NewBaseTaskError(message string, queueItem *QueueItem, troubleType TroubleT
 	}
 }
 
-func (base *baseTaskError) Error() string {
+func (base *BaseTaskError) Error() string {
 	return base.message
 }
 
-func (base *baseTaskError) Item() *QueueItem {
+func (base *BaseTaskError) Item() *QueueItem {
 	return base.queueItem
 }
 
-func (base *baseTaskError) Args() map[string]string {
+func (base *BaseTaskError) Args() map[string]string {
 	return map[string]string{}
 }
 
-func (base *baseTaskError) Payload() map[string]interface{} {
+func (base *BaseTaskError) Payload() map[string]interface{} {
 	return nil
 }
 
-func (base *baseTaskError) Type() TroubleType {
+func (base *BaseTaskError) Type() TroubleType {
 	return base.troubleType
 }
 
-func (base *baseTaskError) ProvideResolutionContext(key string, ctx interface{}) {
+func (base *BaseTaskError) ProvideResolutionContext(key string, ctx interface{}) {
 	base.resolutionContext[key] = ctx
 	base.queueItem.SetStatus(Pending)
 }
 
-func (base *baseTaskError) ResolutionContext() map[string]interface{} {
+func (base *BaseTaskError) ResolutionContext() map[string]interface{} {
 	return base.resolutionContext
 }
 
-func (base *baseTaskError) Uuid() *uuid.UUID {
+func (base *BaseTaskError) Uuid() *uuid.UUID {
 	return &base.uuid
 }
 
@@ -112,7 +112,7 @@ func marshalToJson(trouble Trouble) ([]byte, error) {
 // TitleTaskError is an error raised during the processing of the
 // title task
 type TitleTaskError struct {
-	baseTaskError
+	BaseTaskError
 }
 
 // Args returns the arguments required to resolve this
@@ -148,7 +148,7 @@ func (ex *TitleTaskError) MarshalJSON() ([]byte, error) {
 }
 
 type OmdbTaskError struct {
-	baseTaskError
+	BaseTaskError
 	choices []*OmdbSearchItem
 }
 
@@ -220,7 +220,7 @@ func (ex *OmdbTaskError) Args() map[string]string {
 // default to returning the baseTaskError Payload
 func (ex *OmdbTaskError) Payload() map[string]interface{} {
 	if ex.Type() != OMDB_MULTIPLE_RESULT_FAILURE {
-		return ex.baseTaskError.Payload()
+		return ex.BaseTaskError.Payload()
 	}
 
 	return map[string]interface{}{
@@ -237,7 +237,7 @@ func (ex *OmdbTaskError) MarshalJSON() ([]byte, error) {
 // item, a FormatTaskContainerError contains multiple smaller Trouble instances that can be individually
 // resolved via their uuid.
 type FormatTaskContainerError struct {
-	baseTaskError
+	BaseTaskError
 	Troubles []Trouble
 }
 
@@ -263,8 +263,8 @@ func (ex *FormatTaskContainerError) Raise(t Trouble) {
 }
 
 type FormatTaskError struct {
-	baseTaskError
-	taskInstance CommanderTask
+	BaseTaskError
+	// taskInstance CommanderTask
 }
 
 func (ex *FormatTaskError) Resolve(args map[string]interface{}) error {
@@ -276,7 +276,7 @@ func (ex *FormatTaskError) MarshalJSON() ([]byte, error) {
 }
 
 type ProfileSelectionError struct {
-	baseTaskError
+	BaseTaskError
 }
 
 func (ex *ProfileSelectionError) Resolve(args map[string]interface{}) error {
@@ -296,7 +296,7 @@ func (ex *ProfileSelectionError) MarshalJSON() ([]byte, error) {
 }
 
 type DatabaseTaskError struct {
-	baseTaskError
+	BaseTaskError
 }
 
 func (ex *DatabaseTaskError) Resolve(args map[string]interface{}) error {

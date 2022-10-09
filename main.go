@@ -8,6 +8,7 @@ import (
 
 	"github.com/hbomb79/TPA/internal"
 	"github.com/hbomb79/TPA/internal/api"
+	"github.com/hbomb79/TPA/internal/ffmpeg"
 	"github.com/hbomb79/TPA/internal/profile"
 	"github.com/hbomb79/TPA/pkg/logger"
 	"github.com/hbomb79/TPA/pkg/socket"
@@ -40,7 +41,7 @@ func NewTpa(config internal.TPAConfig) *services {
 func (tpa *services) newClientConnection() map[string]interface{} {
 	return map[string]interface{}{
 		// "ffmpegOptions":          tpa.proc.KnownFfmpegOptions,
-		"ffmpegMatchKeys":        internal.FFMPEG_COMMAND_SUBSTITUTIONS,
+		"ffmpegMatchKeys":        ffmpeg.FFMPEG_COMMAND_SUBSTITUTIONS,
 		"profileAcceptableTypes": profile.MatchKeyAcceptableTypes(),
 	}
 }

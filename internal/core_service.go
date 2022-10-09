@@ -2,6 +2,7 @@ package internal
 
 import (
 	"github.com/floostack/transcoder/ffmpeg"
+	f "github.com/hbomb79/TPA/internal/ffmpeg"
 	"github.com/hbomb79/TPA/internal/profile"
 	"github.com/hbomb79/TPA/pkg/logger"
 )
@@ -13,7 +14,7 @@ type CoreService interface {
 	GetTroubleDetails()
 	ResolveTrouble()
 	GetKnownFfmpegOptions() any
-	GetFfmpegInstancesForItem(int) []CommanderTask
+	GetFfmpegInstancesForItem(int) []f.CommanderTask
 }
 
 func (coreApi *coreService) GetTroubleDetails() {
@@ -28,7 +29,7 @@ func (service *coreService) GetKnownFfmpegOptions() any {
 	return service.knownFfmpegOptions
 }
 
-func (service *coreService) GetFfmpegInstancesForItem(itemID int) []CommanderTask {
+func (service *coreService) GetFfmpegInstancesForItem(itemID int) []f.CommanderTask {
 	return service.tpa.ffmpeg().GetInstancesForItem(itemID)
 }
 

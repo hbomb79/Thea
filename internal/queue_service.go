@@ -1,17 +1,23 @@
 package internal
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/hbomb79/TPA/internal/ffmpeg"
+	"github.com/hbomb79/TPA/internal/queue"
+)
 
 // QueueService is responsible for exposing methods for reading or mutating
 // the state of the TPA queue.
 type QueueService interface {
-	GetAllItems() *[]*QueueItem
-	GetItem(int) (*QueueItem, error)
+	GetAllItems() *[]*queue.QueueItem
+	GetItem(int) (*queue.QueueItem, error)
 	ReorderQueue([]int) error
 	PromoteItem(int) error
 	CancelItem(int) error
 	PauseItem(int) error
 	ResumeItem(int) error
+	AdvanceItem(*queue.QueueItem)
 }
 
 type queueService struct {
@@ -19,12 +25,12 @@ type queueService struct {
 }
 
 // GetAllItems returns all QueueItems currently managed by the queue service
-func (service *queueService) GetAllItems() *[]*QueueItem {
+func (service *queueService) GetAllItems() *[]*queue.QueueItem {
 	return service.tpa.queue().Items()
 }
 
 // GetItem returns the QueueItem with the matching ID, if found
-func (service *queueService) GetItem(itemID int) (*QueueItem, error) {
+func (service *queueService) GetItem(itemID int) (*queue.QueueItem, error) {
 	item, position := service.tpa.queue().FindById(itemID)
 	if position == -1 || item == nil {
 		return nil, fmt.Errorf("failed to GetItem(%d) -> No item with this ID exists", itemID)
@@ -113,7 +119,7 @@ func (service *queueService) ResumeItem(itemID int) error {
 	item, pos := service.tpa.queue().FindById(itemID)
 	if item == nil || pos == -1 {
 		return fmt.Errorf("failed to ResumeItem(%d) -> No item with this ID exists", itemID)
-	} else if item.Status != Paused {
+	} else if item.Status != queue.Paused {
 		return fmt.Errorf("failed to ResumeItem(%d) -> Item is not paused", itemID)
 	}
 
@@ -123,7 +129,7 @@ func (service *queueService) ResumeItem(itemID int) error {
 	instances := service.tpa.ffmpeg().GetInstancesForItem(itemID)
 	areAllPaused := func() bool {
 		for _, v := range instances {
-			if v.Status() != PAUSED {
+			if v.Status() != ffmpeg.PAUSED {
 				return false
 			}
 		}
@@ -138,6 +144,10 @@ func (service *queueService) ResumeItem(itemID int) error {
 	}
 
 	return nil
+}
+
+func (service *queueService) AdvanceItem(item *queue.QueueItem) {
+	service.tpa.queue().AdvanceStage(item)
 }
 
 func NewQueueApi(tpa TPA) QueueService {

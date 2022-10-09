@@ -1,4 +1,4 @@
-package internal
+package ffmpeg
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hbomb79/TPA/internal/profile"
+	"github.com/hbomb79/TPA/internal/queue"
 	"github.com/hbomb79/TPA/pkg/logger"
 )
 
@@ -20,6 +21,24 @@ type FfmpegManager interface {
 	WakeupChan() chan int
 	Instances() []CommanderTask
 	GetInstancesForItem(int) []CommanderTask
+}
+
+type Supplier interface {
+	GetAllItems() *[]*queue.QueueItem
+	GetAllProfiles() []profile.Profile
+	AdvanceItem(*queue.QueueItem)
+}
+
+// FormatterConfig is the 'misc' container of the configuration, encompassing configuration
+// not covered by either 'ConcurrentConfig' or 'DatabaseConfig'. Mainly configuration
+// paramters for the FFmpeg executable.
+type FormatterConfig struct {
+	ImportPath         string `yaml:"import_path" env:"FORMAT_IMPORT_PATH" env-required:"true"`
+	OutputPath         string `yaml:"default_output_dir" env:"FORMAT_DEFAULT_OUTPUT_DIR" env-required:"true"`
+	TargetFormat       string `yaml:"target_format" env:"FORMAT_TARGET_FORMAT" env-default:"mp4"`
+	ImportDirTickDelay int    `yaml:"import_polling_delay" env:"FORMAT_IMPORT_POLLING_DELAY" env-default:"3600"`
+	FfmpegBinaryPath   string `yaml:"ffmpeg_binary" env:"FORMAT_FFMPEG_BINARY_PATH" env-default:"/usr/bin/ffmpeg"`
+	FfprobeBinaryPath  string `yaml:"ffprobe_binary" env:"FORMAT_FFPROBE_BINARY_PATH" env-default:"/usr/bin/ffprobe"`
 }
 
 // CommanderTaskStatus is used as the data type/enum for the status of
@@ -50,15 +69,15 @@ const (
 // CommanderTask is the basic interface of any tasks that the Commander operates
 // on.
 type CommanderTask interface {
-	Start()
-	Item() *QueueItem
+	Start(FormatterConfig)
+	Item() *queue.QueueItem
 	ProfileTag() string
 	Stop()
 	ThreadsRequired() int
 	Status() CommanderTaskStatus
 	SetStatus(CommanderTaskStatus)
 	SetPaused(bool)
-	Trouble() Trouble
+	Trouble() queue.Trouble
 	ResolveTrouble(map[string]interface{}) error
 	Important() bool
 	Progress() interface{}
@@ -68,8 +87,8 @@ type CommanderTask interface {
 // taskData is a struct that encapsulates all data
 // required to transcode an item with ffmpeg.
 type taskData struct {
-	profileTag string
-	item       *QueueItem
+	profile profile.Profile
+	item    *queue.QueueItem
 }
 
 // ffmpegCommander is an implementation of the Commander interface
@@ -95,7 +114,7 @@ type ffmpegCommander struct {
 	queueChangedChannel chan int
 
 	// A link to the main TPA instances
-	tpa TPA
+	supplier Supplier
 
 	// Mutex for use when code is reading/mutating instance information
 	instanceLock sync.Mutex
@@ -103,6 +122,8 @@ type ffmpegCommander struct {
 	healthTicker time.Ticker
 
 	doneChannel chan int
+
+	config FormatterConfig
 }
 
 // Start is the main entry point for the Commander. This method is blocking
@@ -163,7 +184,7 @@ func (commander *ffmpegCommander) startInstance(instance CommanderTask) {
 	commander.threadPoolUsed += instance.ThreadsRequired()
 	instance.SetStatus(WORKING)
 	go func() {
-		instance.Start()
+		instance.Start(commander.config)
 
 		if instance.Status() == CANCELLED {
 			//TODO Perform cleanup of partially formatted content
@@ -241,8 +262,8 @@ func (commander *ffmpegCommander) consumeNewTargets() {
 	// Spawn targets we don't recognize
 	for _, target := range targets {
 		if instanceIdx, _ := commander.findTask(target); instanceIdx == -1 {
-			commanderLogger.Emit(logger.NEW, "Newly discovered target {%s %s}\n", target.profileTag, target.item)
-			instance := newFfmpegInstance(target.item, target.profileTag)
+			commanderLogger.Emit(logger.NEW, "Newly discovered target {%s %s}\n", target.profile.Tag(), target.item)
+			instance := newFfmpegInstance(target.item, target.profile)
 			commander.instances = append(commander.instances, instance)
 		}
 	}
@@ -252,32 +273,35 @@ func (commander *ffmpegCommander) consumeNewTargets() {
 // up to the limit of the sliding window defined (windowSize). Paused, troubled and completed
 // items in the queue do not contribute to this window, and are skipped with no effect
 // on the algorithm.
-func (commander *ffmpegCommander) extractItemsFromWindow() []*QueueItem {
-	outputItems, itemsScanned := make([]*QueueItem, 0), 0
+func (commander *ffmpegCommander) extractItemsFromWindow() []*queue.QueueItem {
+	outputItems, itemsScanned := make([]*queue.QueueItem, 0), 0
 
-	commander.tpa.queue().ForEach(func(_ QueueManager, index int, item *QueueItem) bool {
-		if item.Status == Paused || item.Status == Completed {
-			return false
+	items := commander.supplier.GetAllItems()
+	for _, item := range *items {
+		if item.Status == queue.Paused || item.Status == queue.Completed {
+			continue
 		}
 
 		itemsScanned++
-		if item.Stage == Format {
+		if item.Stage == queue.Format {
 			if t := item.Trouble; t != nil {
 				// Item is troubled, if the user has provided a resolution then we can address it - otherwise
 				// we treat this item as if it doesn't exist (does not contribute to itemsScanned)
 				if len(t.ResolutionContext()) == 0 {
-					return false
+					continue
 				}
 
 				item.ClearTrouble()
-				item.SetStatus(Pending)
+				item.SetStatus(queue.Pending)
 			}
 
 			outputItems = append(outputItems, item)
 		}
 
-		return itemsScanned == commander.windowSize
-	})
+		if itemsScanned >= commander.windowSize {
+			break
+		}
+	}
 
 	return outputItems
 }
@@ -293,14 +317,14 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 		if err != nil {
 			if item.Trouble == nil {
 				commanderLogger.Emit(logger.ERROR, "Profile selection failed for item %s: %s\n", item.Name, err.Error())
-				item.SetTrouble(&ProfileSelectionError{NewBaseTaskError(fmt.Sprintf("Profile selection failed - %s", err.Error()), item, COMMANDER_FAILURE)})
+				item.SetTrouble(&queue.ProfileSelectionError{BaseTaskError: queue.NewBaseTaskError(fmt.Sprintf("Profile selection failed - %s", err.Error()), item, queue.COMMANDER_FAILURE)})
 			}
 
 			continue
 		}
 
 		for _, p := range profiles {
-			targets = append(targets, &taskData{p.Tag(), item})
+			targets = append(targets, &taskData{p, item})
 		}
 	}
 
@@ -309,14 +333,14 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 
 // selectMatchingProfiles iterates over each TPA profile, checking to see which is
 // the best fit for our QueueItem.
-func (commander *ffmpegCommander) selectMatchingProfiles(item *QueueItem) ([]profile.Profile, error) {
+func (commander *ffmpegCommander) selectMatchingProfiles(item *queue.QueueItem) ([]profile.Profile, error) {
 	output := make([]profile.Profile, 0)
-	profileList := commander.tpa.profiles()
-	if len(profileList.Profiles()) == 0 {
+	profiles := commander.supplier.GetAllProfiles()
+	if len(profiles) == 0 {
 		return nil, fmt.Errorf("cannot perform profile selection for item %s because server has NO profiles", item)
 	}
 
-	for _, profile := range profileList.Profiles() {
+	for _, profile := range profiles {
 		if item.ValidateProfileSuitable(profile) {
 			output = append(output, profile)
 		}
@@ -359,15 +383,15 @@ func (commander *ffmpegCommander) runHealthChecks() {
 					continue
 				}
 
-				commander.tpa.queue().AdvanceStage(item)
+				commander.supplier.AdvanceItem(item)
 			} else {
-				item.SetStatus(Processing)
+				item.SetStatus(queue.Processing)
 			}
 		} else {
 			if healthyInstances[id] > 0 {
-				item.SetStatus(NeedsAttention)
+				item.SetStatus(queue.NeedsAttention)
 			} else {
-				item.SetStatus(NeedsResolving)
+				item.SetStatus(queue.NeedsResolving)
 			}
 		}
 	}
@@ -379,7 +403,7 @@ func (commander *ffmpegCommander) runHealthChecks() {
 // data (QueueItem, profile and target) - they need not be identical objects (i.e. same address)
 func (commander *ffmpegCommander) findTask(target *taskData) (int, CommanderTask) {
 	for idx, instance := range commander.instances {
-		if instance.Item().ItemID == target.item.ItemID && instance.ProfileTag() == target.profileTag {
+		if instance.Item().ItemID == target.item.ItemID && instance.ProfileTag() == target.profile.Tag() {
 			return idx, instance
 		}
 	}
@@ -424,12 +448,13 @@ func (commander *ffmpegCommander) GetInstancesForItem(ID int) []CommanderTask {
 
 // NewCommander creates a new ffmpegCommander instance, with the channels
 // already initialised for use.
-func NewCommander(tpa TPA) FfmpegManager {
+func NewCommander(supplier Supplier, config FormatterConfig) FfmpegManager {
 	return &ffmpegCommander{
 		queueChangedChannel: make(chan int),
-		tpa:                 tpa,
+		supplier:            supplier,
 		instances:           make([]CommanderTask, 0),
 		healthTicker:        *time.NewTicker(time.Second * 2),
 		doneChannel:         make(chan int),
+		config:              config,
 	}
 }

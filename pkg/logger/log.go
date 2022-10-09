@@ -3,6 +3,8 @@ package logger
 import (
 	"fmt"
 	"strings"
+
+	"github.com/fatih/color"
 )
 
 type LogStatus int
@@ -30,6 +32,20 @@ func (e LogStatus) String() string {
 		"!",
 		"!!",
 		"PANIC",
+	}[e]
+}
+
+func (e LogStatus) Color() *color.Color {
+	return []*color.Color{
+		color.New(color.FgWhite, color.Italic),                //Debug
+		color.New(color.FgHiGreen),                            //Success
+		color.New(color.FgWhite),                              //Info
+		color.New(color.FgGreen, color.Italic),                //New
+		color.New(color.FgYellow, color.Italic),               //Remove
+		color.New(color.FgRed),                                //Stop
+		color.New(color.FgYellow, color.Underline),            //Warning
+		color.New(color.FgHiRed, color.Bold),                  //Error
+		color.New(color.FgHiRed, color.Bold, color.Underline), //PANIC
 	}[e]
 }
 
@@ -67,7 +83,7 @@ func (l *loggerMgr) Emit(status LogStatus, name string, message string, interpol
 	padding := strings.Repeat(" ", l.offset-len(name))
 	msg := fmt.Sprintf("[%s] %s(%s) %s", name, padding, status, fmt.Sprintf(message, interpolations...))
 
-	fmt.Print(msg)
+	status.Color().Print(msg)
 }
 
 func (l *loggerMgr) setNameOffset(offset int) {

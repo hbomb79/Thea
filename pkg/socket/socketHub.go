@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 var socketLogger = logger.Get("WebSocket")

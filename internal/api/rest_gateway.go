@@ -5,15 +5,15 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/hbomb79/TPA/internal"
+	"github.com/hbomb79/Thea/internal"
 )
 
 type HttpGateway struct {
-	tpa internal.TPA
+	thea internal.Thea
 }
 
-func NewHttpGateway(tpa internal.TPA) *HttpGateway {
-	return &HttpGateway{tpa: tpa}
+func NewHttpGateway(thea internal.Thea) *HttpGateway {
+	return &HttpGateway{thea: thea}
 }
 
 // ** HTTP API Methods ** //
@@ -21,7 +21,7 @@ func NewHttpGateway(tpa internal.TPA) *HttpGateway {
 // httpQueueIndex returns the current processor queue with some information
 // omitted. Full information for each item can be found via HttpQueueGet
 func (httpGateway *HttpGateway) HttpQueueIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := sheriffApiMarshal(httpGateway.tpa.GetAllItems(), "api")
+	data, err := sheriffApiMarshal(httpGateway.thea.GetAllItems(), "api")
 	if err != nil {
 		JsonMessage(w, err.Error(), http.StatusInternalServerError)
 
@@ -41,7 +41,7 @@ func (httpGateway *HttpGateway) HttpQueueGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	queueItem, err := httpGateway.tpa.GetItem(id)
+	queueItem, err := httpGateway.thea.GetItem(id)
 	if err != nil {
 		JsonMessage(w, "QueueItem ID '"+stringId+"' cannot be found", http.StatusBadRequest)
 		return
@@ -63,7 +63,7 @@ func (httpGateway *HttpGateway) HttpQueueUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if httpGateway.tpa.PromoteItem(id) != nil {
+	if httpGateway.thea.PromoteItem(id) != nil {
 		JsonMessage(w, "Failed to promote QueueItem #"+stringId+": "+err.Error(), http.StatusInternalServerError)
 	} else {
 		JsonMessage(w, "Queue item promoted successfully", http.StatusOK)

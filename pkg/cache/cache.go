@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 var cacheLogger = logger.Get("Cache")

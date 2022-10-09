@@ -7,9 +7,9 @@ import (
 	"io/fs"
 	"regexp"
 
-	"github.com/hbomb79/TPA/internal/db"
-	"github.com/hbomb79/TPA/internal/profile"
-	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/Thea/internal/db"
+	"github.com/hbomb79/Thea/internal/profile"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"gorm.io/gorm"
 )
 
@@ -76,29 +76,29 @@ const (
 // and the current processing status/stage
 type QueueItem struct {
 	gorm.Model
-	ItemID     int              `json:"id" groups:"api" gorm:"-"`
-	Path       string           `json:"path"`
-	Name       string           `json:"name" groups:"api"`
-	Status     QueueItemStatus  `json:"status" groups:"api" gorm:"-"`
-	Stage      QueueItemStage   `json:"stage" groups:"api" gorm:"-"`
-	TitleInfo  *TitleInfo       `json:"title_info"`
-	OmdbInfo   *OmdbInfo        `json:"omdb_info"`
-	Trouble    Trouble          `json:"trouble" gorm:"-"`
-	ProfileTag string           `json:"profile_tag" gorm:"-"`
-	tpa        ChangeSubscriber `json:"-" gorm:"-"`
+	ItemID           int              `json:"id" groups:"api" gorm:"-"`
+	Path             string           `json:"path"`
+	Name             string           `json:"name" groups:"api"`
+	Status           QueueItemStatus  `json:"status" groups:"api" gorm:"-"`
+	Stage            QueueItemStage   `json:"stage" groups:"api" gorm:"-"`
+	TitleInfo        *TitleInfo       `json:"title_info"`
+	OmdbInfo         *OmdbInfo        `json:"omdb_info"`
+	Trouble          Trouble          `json:"trouble" gorm:"-"`
+	ProfileTag       string           `json:"profile_tag" gorm:"-"`
+	changeSubscriber ChangeSubscriber `json:"-" gorm:"-"`
 }
 
 type ChangeSubscriber interface {
 	NotifyItemUpdate(int)
 }
 
-func NewQueueItem(info fs.FileInfo, path string, tpa ChangeSubscriber) *QueueItem {
+func NewQueueItem(info fs.FileInfo, path string, changeSubscriber ChangeSubscriber) *QueueItem {
 	return &QueueItem{
-		Name:   info.Name(),
-		Path:   path,
-		Status: Pending,
-		Stage:  Import,
-		tpa:    tpa,
+		Name:             info.Name(),
+		Path:             path,
+		Status:           Pending,
+		Stage:            Import,
+		changeSubscriber: changeSubscriber,
 	}
 }
 
@@ -296,8 +296,8 @@ func (item *QueueItem) CommitToDatabase() error {
 
 	// Construct exports based on the completed ffmpeg instances
 	exports := make([]*ExportDetail, 0)
-	//TODO
-	// for _, instance := range item.tpa.ffmpeg().GetInstancesForItem(item.ItemID) {
+	// TODO
+	// for _, instance := range item.thea.ffmpeg().GetInstancesForItem(item.ItemID) {
 	// 	exports = append(exports, &ExportDetail{
 	// 		Name: instance.ProfileTag(),
 	// 		Path: instance.GetOutputPath(),
@@ -341,7 +341,7 @@ func (item *QueueItem) SetPaused(paused bool) error {
 }
 
 func (item *QueueItem) NotifyUpdate() {
-	item.tpa.NotifyItemUpdate(item.ItemID)
+	item.changeSubscriber.NotifyItemUpdate(item.ItemID)
 }
 
 func (item *QueueItem) String() string {

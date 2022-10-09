@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 var log = logger.Get("HTTP")

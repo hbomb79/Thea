@@ -13,9 +13,9 @@ import (
 	"syscall"
 
 	"github.com/floostack/transcoder/ffmpeg"
-	"github.com/hbomb79/TPA/internal/profile"
-	"github.com/hbomb79/TPA/internal/queue"
-	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/Thea/internal/profile"
+	"github.com/hbomb79/Thea/internal/queue"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 var ffmpegLogger = logger.Get("FFMPEG")

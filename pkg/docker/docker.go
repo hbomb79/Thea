@@ -8,9 +8,9 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
-	"github.com/hbomb79/TPA/pkg/broker"
-	pkg "github.com/hbomb79/TPA/pkg/broker"
-	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/broker"
+	pkg "github.com/hbomb79/Thea/pkg/broker"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 var dockerLogger = logger.Get("Docker")
@@ -20,7 +20,7 @@ var dockerLogger = logger.Get("Docker")
  * locally. This is used to spawn services such as TPAs PostgreSQL database, or the NPM front end.
  */
 
-const DOCKER_NETWORK = "tpa_network"
+const DOCKER_NETWORK = "thea_network"
 
 type DockerManager interface {
 	SpawnContainer(DockerContainer) error

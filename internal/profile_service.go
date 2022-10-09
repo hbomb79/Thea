@@ -1,6 +1,6 @@
 package internal
 
-import "github.com/hbomb79/TPA/internal/profile"
+import "github.com/hbomb79/Thea/internal/profile"
 
 type ProfileService interface {
 	GetAllProfiles() []profile.Profile
@@ -11,32 +11,32 @@ type ProfileService interface {
 }
 
 type profileService struct {
-	tpa TPA
+	thea Thea
 }
 
 func (service *profileService) GetAllProfiles() []profile.Profile {
-	return service.tpa.profiles().Profiles()
+	return service.thea.profiles().Profiles()
 }
 
 func (service *profileService) CreateProfile(profile profile.Profile) error {
-	return service.tpa.profiles().InsertProfile(profile)
+	return service.thea.profiles().InsertProfile(profile)
 }
 
 func (service *profileService) GetProfileByTag(tag string) profile.Profile {
-	_, profile := service.tpa.profiles().FindProfileByTag(tag)
+	_, profile := service.thea.profiles().FindProfileByTag(tag)
 	return profile
 }
 
 func (service *profileService) DeleteProfileByTag(tag string) error {
-	return service.tpa.profiles().RemoveProfile(tag)
+	return service.thea.profiles().RemoveProfile(tag)
 }
 
 func (service *profileService) MoveProfile(tag string, position int) error {
-	return service.tpa.profiles().MoveProfile(tag, position)
+	return service.thea.profiles().MoveProfile(tag, position)
 }
 
-func NewProfileService(tpa TPA) ProfileService {
+func NewProfileService(thea Thea) ProfileService {
 	return &profileService{
-		tpa: tpa,
+		thea: thea,
 	}
 }

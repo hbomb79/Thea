@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/hbomb79/TPA/pkg/cache"
+	"github.com/hbomb79/Thea/pkg/cache"
 )
 
 type QueueManager interface {

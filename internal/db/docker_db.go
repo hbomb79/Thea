@@ -7,7 +7,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/go-connections/nat"
-	"github.com/hbomb79/TPA/pkg/docker"
+	"github.com/hbomb79/Thea/pkg/docker"
 )
 
 // DatabaseConfig is a subset of the configuration focusing solely
@@ -22,7 +22,7 @@ type DatabaseConfig struct {
 
 func InitialiseDockerDatabase(config DatabaseConfig, errChannel chan error) (docker.DockerContainer, error) {
 	// Setup container cofiguration
-	dbDataPath := "/home/haz/tpa_db_data"
+	dbDataPath := "/home/haz/thea_db_data"
 	if err := os.MkdirAll(dbDataPath, os.ModeDir); err != nil {
 		return nil, err
 	}

@@ -5,15 +5,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hbomb79/TPA/internal/db"
-	"github.com/hbomb79/TPA/internal/ffmpeg"
+	"github.com/hbomb79/Thea/internal/db"
+	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
-// TPAConfig is the struct used to contain the
+// TheaConfig is the struct used to contain the
 // various user config supplied by file, or
 // manually inside the code.
-type TPAConfig struct {
+type TheaConfig struct {
 	Concurrent    ConcurrentConfig       `yaml:"concurrency" env-required:"true"`
 	Format        ffmpeg.FormatterConfig `yaml:"formatter"`
 	Services      ServiceConfig          `yaml:"docker_services"`
@@ -45,7 +45,7 @@ type ServiceConfig struct {
 
 // Loads a configuration file formatted in YAML in to a
 // TPAConfig struct ready to be passed to Processor
-func (config *TPAConfig) LoadFromFile(configPath string) error {
+func (config *TheaConfig) LoadFromFile(configPath string) error {
 	err := cleanenv.ReadConfig(configPath, config)
 	if err != nil {
 		return fmt.Errorf("failed to load configuration for ProcessorConfig - %v", err.Error())
@@ -57,7 +57,7 @@ func (config *TPAConfig) LoadFromFile(configPath string) error {
 // getCachePath will return the path used for storing cache information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned. If the default
 // cannot be derived due to an error, a panic will occur.
-func (config *TPAConfig) getCachePath() string {
+func (config *TheaConfig) getCachePath() string {
 	if config.CacheDirPath != "" {
 		return filepath.Join(config.CacheDirPath, TPA_CACHE_FILE_PATH)
 	}
@@ -73,7 +73,7 @@ func (config *TPAConfig) getCachePath() string {
 
 // getConfigPath will return the path used for storing config information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned
-func (config *TPAConfig) getConfigPath() string {
+func (config *TheaConfig) getConfigPath() string {
 	if config.CacheDirPath != "" {
 		return filepath.Join(config.CacheDirPath, TPA_CONFIG_FILE_PATH)
 	}

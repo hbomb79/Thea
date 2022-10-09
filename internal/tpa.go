@@ -12,33 +12,33 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hbomb79/TPA/internal/db"
-	"github.com/hbomb79/TPA/internal/ffmpeg"
-	"github.com/hbomb79/TPA/internal/profile"
-	"github.com/hbomb79/TPA/internal/queue"
-	"github.com/hbomb79/TPA/pkg/docker"
-	"github.com/hbomb79/TPA/pkg/logger"
-	"github.com/hbomb79/TPA/pkg/worker"
+	"github.com/hbomb79/Thea/internal/db"
+	"github.com/hbomb79/Thea/internal/ffmpeg"
+	"github.com/hbomb79/Thea/internal/profile"
+	"github.com/hbomb79/Thea/internal/queue"
+	"github.com/hbomb79/Thea/pkg/docker"
+	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/worker"
 )
 
-var procLogger = logger.Get("Proc")
+var procLogger = logger.Get("Thea")
 
-// TPA exposes the core workflow for the processor. There are two main categories of methods exposed here:
+// Thea exposes the core workflow for the processor. There are two main categories of methods exposed here:
 //
 // -- Service Layer APIs --
-// These are the preferred way to interact with TPA. Methods enclosed within these APIs are aware of all state
-// in the TPA runtime and will ensure that updates are applied correctly across all of it (e.g. cancelling an
+// These are the preferred way to interact with Thea. Methods enclosed within these APIs are aware of all state
+// in the Thea runtime and will ensure that updates are applied correctly across all of it (e.g. cancelling an
 // item may remove it from the queue, and cancel all ffmpeg actions, and send an update to the client). Each API
 // here is a "service" as it encapsulates related behaviour - however a call to one service may incur calls to other
 // services via their respective API as well (these "side-effects" after often required in order to ensure TPAs state is
 // kept valid!).
 //
 // -- Internal APIs --
-// Each of these internal APIs represent a single "unit" or component of the TPA state - updating one of these states without
+// Each of these internal APIs represent a single "unit" or component of the Thea state - updating one of these states without
 // understanding the implications that may have on the other units is dangerous! (This is why the above service
 // layer APIs are preferred). These internal APIs allow code that knows what it's doing to selectively change the
-// state of TPA without unindented side-effects (however these side-effects are often a good thing!).
-type TPA interface {
+// state of Thea without unindented side-effects (however these side-effects are often a good thing!).
+type Thea interface {
 	UpdateManager
 	CoreService
 	ProfileService
@@ -52,13 +52,13 @@ type TPA interface {
 	ffmpeg() ffmpeg.FfmpegManager
 	profiles() profile.ProfileManager
 	workerPool() *worker.WorkerPool
-	config() TPAConfig
+	config() TheaConfig
 }
 
 // TPA represents the top-level object for the server, and is responsible
 // for initialising embedded support services, workers, threads, event
 // handling, et cetera...
-type tpa struct {
+type theaImpl struct {
 	UpdateManager
 	CoreService
 	ProfileService
@@ -70,29 +70,29 @@ type tpa struct {
 	profileMgr profile.ProfileManager
 	workers    *worker.WorkerPool
 
-	cfg               TPAConfig
-	tpaContext        context.Context
-	tpaContextCancel  context.CancelFunc
+	cfg               TheaConfig
+	theaCtx           context.Context
+	theaCtxCancel     context.CancelFunc
 	shutdownWaitGroup *sync.WaitGroup
 }
 
-const TPA_CONFIG_FILE_PATH = "/tpa/config.json"
-const TPA_CACHE_FILE_PATH = "/tpa/cache.json"
+const TPA_CONFIG_FILE_PATH = "/thea/config.json"
+const TPA_CACHE_FILE_PATH = "/thea/cache.json"
 const TPA_UPDATE_INTERVAL = time.Second * 2
 const TPA_QUEUE_SYNC_INTERVAL = time.Second * 5
 
 // ** PUBLIC API ** //
 
-func NewTpa(config TPAConfig, updateFn UpdateManagerSubmitFn) TPA {
+func NewThea(config TheaConfig, updateFn UpdateManagerSubmitFn) Thea {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	configPath := config.getConfigPath()
 	cachePath := config.getCachePath()
 
-	// Construct a tpa instance
-	t := &tpa{
+	// Construct a Thea instance
+	t := &theaImpl{
 		cfg:               config,
-		tpaContext:        ctx,
-		tpaContextCancel:  ctxCancel,
+		theaCtx:           ctx,
+		theaCtxCancel:     ctxCancel,
 		shutdownWaitGroup: &sync.WaitGroup{},
 	}
 
@@ -114,15 +114,19 @@ func NewTpa(config TPAConfig, updateFn UpdateManagerSubmitFn) TPA {
 
 // Start will start TPA by initialising all supporting services/objects and starting
 // the event loops
-func (tpa *tpa) Start() error {
-	if err := tpa.initialise(); err != nil {
+func (thea *theaImpl) Start() error {
+	if err := thea.initialise(); err != nil {
 		return fmt.Errorf("failed to initialise TPA: %s", err)
 	}
 
 	// Initialise our async service managers
-	go tpa.workers.StartWorkers(tpa.shutdownWaitGroup)
-	go tpa.ffmpegMgr.Start(tpa.shutdownWaitGroup)
-	defer tpa.Stop()
+	thea.shutdownWaitGroup.Add(2)
+	go thea.workers.StartWorkers(thea.shutdownWaitGroup)
+	go thea.ffmpegMgr.Start(thea.shutdownWaitGroup)
+	defer func() {
+		procLogger.Emit(logger.DEBUG, "TPA event loop has terminated.. deferred shutdown!\n")
+		thea.Stop()
+	}()
 
 	// Initialise some tickers
 	updateTicker := time.NewTicker(TPA_UPDATE_INTERVAL)
@@ -134,13 +138,13 @@ func (tpa *tpa) Start() error {
 	for {
 		select {
 		case <-updateTicker.C:
-			tpa.SubmitUpdates()
+			thea.SubmitUpdates()
 		case <-queueSyncTicker.C:
-			tpa.synchroniseQueue()
+			thea.synchroniseQueue()
 		case <-exitChannel:
 			procLogger.Emit(logger.INFO, "Interrupt detected!\n")
 			return nil
-		case <-tpa.tpaContext.Done():
+		case <-thea.theaCtx.Done():
 			procLogger.Emit(logger.WARNING, "TPA context has been cancelled!\n")
 			return nil
 		}
@@ -148,44 +152,45 @@ func (tpa *tpa) Start() error {
 }
 
 // Stop will terminate TPA
-func (tpa *tpa) Stop() {
+func (thea *theaImpl) Stop() {
 	procLogger.Emit(logger.STOP, "--- TPA is shutting down ---\n")
+
+	procLogger.Emit(logger.STOP, "Cancelling context...\n")
+	thea.theaCtxCancel()
+
 	procLogger.Emit(logger.STOP, "Closing all managers...\n")
-	tpa.workers.CloseWorkers()
-	tpa.ffmpegMgr.Stop()
-	tpa.shutdownWaitGroup.Wait()
+	thea.workers.CloseWorkers()
+	thea.ffmpegMgr.Stop()
+	thea.shutdownWaitGroup.Wait()
 
 	procLogger.Emit(logger.STOP, "Closing all containers...\n")
 	docker.DockerMgr.Shutdown(time.Second * 15)
-
-	procLogger.Emit(logger.STOP, "Closing all data streams...\n")
-	tpa.tpaContextCancel()
 }
 
 // ** INTERNAL API ** //
-func (tpa *tpa) queue() queue.QueueManager        { return tpa.queueMgr }
-func (tpa *tpa) ffmpeg() ffmpeg.FfmpegManager     { return tpa.ffmpegMgr }
-func (tpa *tpa) profiles() profile.ProfileManager { return tpa.profileMgr }
-func (tpa *tpa) workerPool() *worker.WorkerPool   { return tpa.workers }
-func (tpa *tpa) config() TPAConfig                { return tpa.cfg }
+func (thea *theaImpl) queue() queue.QueueManager        { return thea.queueMgr }
+func (thea *theaImpl) ffmpeg() ffmpeg.FfmpegManager     { return thea.ffmpegMgr }
+func (thea *theaImpl) profiles() profile.ProfileManager { return thea.profileMgr }
+func (thea *theaImpl) workerPool() *worker.WorkerPool   { return thea.workers }
+func (thea *theaImpl) config() TheaConfig               { return thea.cfg }
 
 // ** PRIVATE IMPL ** //
 // synchroniseQueue will first discover all items inside the import directory,
 // and then will injest any that do not already exist in the queue. Any items
 // in the queue that no longer exist in the discovered items will also be cancelled
-func (tpa *tpa) synchroniseQueue() error {
+func (thea *theaImpl) synchroniseQueue() error {
 	// Find new items
-	tpa.queueMgr.Reload()
-	presentItems, err := tpa.discoverItems()
+	thea.queueMgr.Reload()
+	presentItems, err := thea.discoverItems()
 	if err != nil {
 		return err
 	}
 
 	for path, info := range presentItems {
-		tpa.queueMgr.Push(queue.NewQueueItem(info, path, tpa))
+		thea.queueMgr.Push(queue.NewQueueItem(info, path, thea))
 	}
 
-	tpa.queueMgr.Filter(func(queue queue.QueueManager, key int, item *queue.QueueItem) bool {
+	thea.queueMgr.Filter(func(queue queue.QueueManager, key int, item *queue.QueueItem) bool {
 		if _, ok := presentItems[item.Path]; !ok {
 			item.Cancel()
 			return false
@@ -194,7 +199,7 @@ func (tpa *tpa) synchroniseQueue() error {
 		return true
 	})
 
-	tpa.queueMgr.ForEach(func(q queue.QueueManager, idx int, item *queue.QueueItem) bool {
+	thea.queueMgr.ForEach(func(q queue.QueueManager, idx int, item *queue.QueueItem) bool {
 		if item.Stage != queue.Import {
 			return false
 		}
@@ -218,9 +223,9 @@ func (tpa *tpa) synchroniseQueue() error {
 // discoverItems will walk through the import directory and construct a map
 // of all the items inside the import directory (or any nested directories).
 // The key of the map is the path, and the value contains the FileInfo
-func (tpa *tpa) discoverItems() (map[string]fs.FileInfo, error) {
+func (thea *theaImpl) discoverItems() (map[string]fs.FileInfo, error) {
 	presentItems := make(map[string]fs.FileInfo, 0)
-	config := tpa.cfg
+	config := thea.cfg
 	err := filepath.WalkDir(config.Format.ImportPath, func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -247,9 +252,9 @@ func (tpa *tpa) discoverItems() (map[string]fs.FileInfo, error) {
 
 // initialiseSupportServices will initialise all supporting services
 // for TPA (Docker based Postgres, PgAdmin and Web front-end)
-func (tpa *tpa) initialiseSupportServices() error {
+func (thea *theaImpl) initialiseSupportServices() error {
 	// Instantiate watcher for async errors for the below containers
-	config := tpa.cfg
+	config := thea.cfg
 	serviceConfig := config.Services
 	asyncErrorReport := make(chan error, 2)
 	go func() {
@@ -257,7 +262,7 @@ func (tpa *tpa) initialiseSupportServices() error {
 		procLogger.Emit(logger.ERROR, "One or more support services has crashed with error: %v ... Shutting down", err)
 
 		// Shutdown now because a support service has crashed...
-		tpa.Stop()
+		thea.theaCtxCancel()
 	}()
 
 	// Initialise all services which are enabled. If a service is disabled, then the
@@ -288,21 +293,21 @@ func (tpa *tpa) initialiseSupportServices() error {
 }
 
 // initialise will intialise all support services and workers, and connect to the backing DB
-func (tpa *tpa) initialise() error {
-	if err := tpa.initialiseSupportServices(); err != nil {
+func (thea *theaImpl) initialise() error {
+	if err := thea.initialiseSupportServices(); err != nil {
 		return err
 	}
 
 	procLogger.Emit(logger.INFO, "Connecting to database with GORM...\n")
-	if err := db.DB.Connect(tpa.cfg.Database); err != nil {
+	if err := db.DB.Connect(thea.cfg.Database); err != nil {
 		return err
 	}
 
-	advanceFunc := tpa.queue().AdvanceStage
-	baseTask := queue.BaseTask{ItemProducer: tpa}
-	tpa.workers.PushWorker(worker.NewWorker("Title_Parser", &queue.TitleTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Title), make(chan int)))
-	tpa.workers.PushWorker(worker.NewWorker("OMDB_Handler", &queue.OmdbTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Omdb), make(chan int)))
-	tpa.workers.PushWorker(worker.NewWorker("Database_Committer", &queue.DatabaseTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Database), make(chan int)))
+	advanceFunc := thea.queue().AdvanceStage
+	baseTask := queue.BaseTask{ItemProducer: thea}
+	thea.workers.PushWorker(worker.NewWorker("Title_Parser", &queue.TitleTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Title), make(chan int)))
+	thea.workers.PushWorker(worker.NewWorker("OMDB_Handler", &queue.OmdbTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Omdb), make(chan int)))
+	thea.workers.PushWorker(worker.NewWorker("Database_Committer", &queue.DatabaseTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Database), make(chan int)))
 
 	return nil
 }

@@ -1,7 +1,7 @@
 package queue
 
 import (
-	"github.com/hbomb79/TPA/internal/db"
+	"github.com/hbomb79/Thea/internal/db"
 	"gorm.io/gorm"
 )
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )

@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hbomb79/TPA/pkg/logger"
-	"github.com/hbomb79/TPA/pkg/worker"
+	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/worker"
 )
 
 var taskLogger = logger.Get("Task")

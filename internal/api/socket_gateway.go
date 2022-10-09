@@ -4,22 +4,22 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hbomb79/TPA/internal"
-	"github.com/hbomb79/TPA/internal/profile"
-	"github.com/hbomb79/TPA/pkg/socket"
+	"github.com/hbomb79/Thea/internal"
+	"github.com/hbomb79/Thea/internal/profile"
+	"github.com/hbomb79/Thea/pkg/socket"
 )
 
 type WsGateway struct {
-	tpa internal.TPA
+	thea internal.Thea
 }
 
-func NewWsGateway(tpa internal.TPA) *WsGateway {
-	return &WsGateway{tpa: tpa}
+func NewWsGateway(thea internal.Thea) *WsGateway {
+	return &WsGateway{thea: thea}
 }
 
 // ** Websocket API Methods ** //
 func (wsGateway *WsGateway) WsQueueIndex(hub *socket.SocketHub, message *socket.SocketMessage) error {
-	data, err := sheriffApiMarshal(wsGateway.tpa.GetAllItems(), "api")
+	data, err := sheriffApiMarshal(wsGateway.thea.GetAllItems(), "api")
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func (wsGateway *WsGateway) WsQueueDetails(hub *socket.SocketHub, message *socke
 		return errors.New("failed to vaidate arguments - ID provided is not an integer")
 	}
 
-	queueItem, err := wsGateway.tpa.GetItem(int(v))
+	queueItem, err := wsGateway.thea.GetItem(int(v))
 	if err != nil {
 		return err
 	}
@@ -73,12 +73,12 @@ func (wsGateway *WsGateway) WsQueueReorder(hub *socket.SocketHub, message *socke
 		newOrder[k] = int(tmp)
 	}
 
-	if err := wsGateway.tpa.ReorderQueue(newOrder); err != nil {
+	if err := wsGateway.thea.ReorderQueue(newOrder); err != nil {
 		return fmt.Errorf(ERR_FMT, err.Error())
 	}
 
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
-	wsGateway.tpa.NotifyQueueUpdate()
+	wsGateway.thea.NotifyQueueUpdate()
 
 	return nil
 }
@@ -90,12 +90,12 @@ func (wsGateway *WsGateway) WsItemPromote(hub *socket.SocketHub, message *socket
 	}
 
 	id := int(message.Body["id"].(float64))
-	err := wsGateway.tpa.PromoteItem(id)
+	err := wsGateway.thea.PromoteItem(id)
 	if err != nil {
 		return fmt.Errorf(ERR_FMT, err.Error())
 	}
 
-	wsGateway.tpa.NotifyItemUpdate(id)
+	wsGateway.thea.NotifyItemUpdate(id)
 	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": id}, socket.Response))
 	return nil
 }
@@ -107,7 +107,7 @@ func (wsGateway *WsGateway) WsItemPause(hub *socket.SocketHub, message *socket.S
 	}
 
 	idArg := int(message.Body["id"].(float64))
-	if err := wsGateway.tpa.PauseItem(idArg); err != nil {
+	if err := wsGateway.thea.PauseItem(idArg); err != nil {
 		return err
 	}
 
@@ -122,7 +122,7 @@ func (wsGateway *WsGateway) WsItemCancel(hub *socket.SocketHub, message *socket.
 	}
 
 	idArg := int(message.Body["id"].(float64))
-	err := wsGateway.tpa.CancelItem(idArg)
+	err := wsGateway.thea.CancelItem(idArg)
 	if err != nil {
 		return fmt.Errorf(ERR_FMT, err.Error())
 	}
@@ -138,7 +138,7 @@ func (wsGateway *WsGateway) WsTroubleDetails(hub *socket.SocketHub, message *soc
 	}
 
 	idArg := message.Body["id"]
-	queueItem, err := wsGateway.tpa.GetItem(int(idArg.(float64)))
+	queueItem, err := wsGateway.thea.GetItem(int(idArg.(float64)))
 	if err != nil {
 		return err
 	} else if queueItem.Trouble == nil {
@@ -161,9 +161,9 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *socket.SocketHub, message *soc
 	instanceTag, isEmbed := message.Body["instanceTag"]
 
 	idArg := message.Body["id"]
-	if item, err := wsGateway.tpa.GetItem(int(idArg.(float64))); err == nil {
+	if item, err := wsGateway.thea.GetItem(int(idArg.(float64))); err == nil {
 		if isEmbed {
-			for _, i := range wsGateway.tpa.GetFfmpegInstancesForItem(item.ItemID) {
+			for _, i := range wsGateway.thea.GetFfmpegInstancesForItem(item.ItemID) {
 				if i.ProfileTag() == instanceTag {
 					if err := i.ResolveTrouble(message.Body); err != nil {
 						return fmt.Errorf("failed to resolve embedded ffmpeg trouble for queue item %v - %v", idArg, err.Error())
@@ -190,7 +190,7 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *socket.SocketHub, message *soc
 }
 
 func (wsGateway *WsGateway) WsProfileIndex(hub *socket.SocketHub, message *socket.SocketMessage) error {
-	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": wsGateway.tpa.GetAllProfiles()}, socket.Response))
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": wsGateway.thea.GetAllProfiles()}, socket.Response))
 	return nil
 }
 
@@ -200,11 +200,11 @@ func (wsGateway *WsGateway) WsProfileCreate(hub *socket.SocketHub, message *sock
 	}
 
 	p := profile.NewProfile(message.Body["tag"].(string))
-	if err := wsGateway.tpa.CreateProfile(p); err != nil {
+	if err := wsGateway.thea.CreateProfile(p); err != nil {
 		return err
 	}
 
-	wsGateway.tpa.NotifyProfileUpdate()
+	wsGateway.thea.NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }
@@ -214,11 +214,11 @@ func (wsGateway *WsGateway) WsProfileRemove(hub *socket.SocketHub, message *sock
 		return err
 	}
 
-	if err := wsGateway.tpa.DeleteProfileByTag(message.Body["tag"].(string)); err != nil {
+	if err := wsGateway.thea.DeleteProfileByTag(message.Body["tag"].(string)); err != nil {
 		return err
 	}
 
-	wsGateway.tpa.NotifyProfileUpdate()
+	wsGateway.thea.NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }
@@ -231,11 +231,11 @@ func (wsGateway *WsGateway) WsProfileMove(hub *socket.SocketHub, message *socket
 	tag := message.Body["tag"].(string)
 	desiredIndex := int(message.Body["desiredIndex"].(float64))
 
-	if err := wsGateway.tpa.MoveProfile(tag, desiredIndex); err != nil {
+	if err := wsGateway.thea.MoveProfile(tag, desiredIndex); err != nil {
 		return err
 	}
 
-	wsGateway.tpa.NotifyProfileUpdate()
+	wsGateway.thea.NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }
@@ -245,7 +245,7 @@ func (wsGateway *WsGateway) WsProfileSetMatchConditions(hub *socket.SocketHub, m
 		return err
 	}
 
-	profile := wsGateway.tpa.GetProfileByTag(message.Body["profileTag"].(string))
+	profile := wsGateway.thea.GetProfileByTag(message.Body["profileTag"].(string))
 	if profile == nil {
 		return fmt.Errorf("cannot set match conditions for profile because tag '%v' is invalid", message.Body["profileTag"])
 	}
@@ -260,7 +260,7 @@ func (wsGateway *WsGateway) WsProfileSetMatchConditions(hub *socket.SocketHub, m
 		return fmt.Errorf("cannot set match conditions on profile '%v': %v", message.Body["profileTag"], err.Error())
 	}
 
-	wsGateway.tpa.NotifyProfileUpdate()
+	wsGateway.thea.NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }
@@ -270,7 +270,7 @@ func (wsGateway *WsGateway) WsProfileUpdateCommand(hub *socket.SocketHub, messag
 		return err
 	}
 
-	profile := wsGateway.tpa.GetProfileByTag(message.Body["profileTag"].(string))
+	profile := wsGateway.thea.GetProfileByTag(message.Body["profileTag"].(string))
 	if profile == nil {
 		return fmt.Errorf("cannot update target command for profile because tag '%v' is invalid", message.Body["profileTag"])
 	}
@@ -285,7 +285,7 @@ func (wsGateway *WsGateway) WsProfileUpdateCommand(hub *socket.SocketHub, messag
 		return fmt.Errorf("cannot update target command on profile '%v': %v", message.Body["profileTag"], err.Error())
 	}
 
-	wsGateway.tpa.NotifyProfileUpdate()
+	wsGateway.thea.NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }

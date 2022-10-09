@@ -6,91 +6,75 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/hbomb79/TPA/internal"
-	"github.com/hbomb79/TPA/internal/api"
-	"github.com/hbomb79/TPA/internal/ffmpeg"
-	"github.com/hbomb79/TPA/internal/profile"
-	"github.com/hbomb79/TPA/pkg/logger"
-	"github.com/hbomb79/TPA/pkg/socket"
+	"github.com/hbomb79/Thea/internal"
+	"github.com/hbomb79/Thea/internal/api"
+	"github.com/hbomb79/Thea/internal/ffmpeg"
+	"github.com/hbomb79/Thea/internal/profile"
+	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/socket"
 )
 
 var mainLogger = logger.Get("Main")
 
 type services struct {
-	proc        internal.TPA
+	thea        internal.Thea
 	socketHub   *socket.SocketHub
 	wsGateway   *api.WsGateway
 	httpGateway *api.HttpGateway
 	httpRouter  *api.Router
 }
 
-func NewTpa(config internal.TPAConfig) *services {
+func NewTpa(config internal.TheaConfig) *services {
 	services := &services{
 		httpRouter: api.NewRouter(),
 		socketHub:  socket.NewSocketHub(),
 	}
 
-	tpa := internal.NewTpa(config, services.OnProcessorUpdate)
-	services.proc = tpa
-	services.wsGateway = api.NewWsGateway(tpa)
-	services.httpGateway = api.NewHttpGateway(tpa)
+	thea := internal.NewThea(config, services.handleTpaUpdate)
+	services.thea = thea
+	services.wsGateway = api.NewWsGateway(thea)
+	services.httpGateway = api.NewHttpGateway(thea)
 	return services
 
 }
 
-func (tpa *services) newClientConnection() map[string]interface{} {
+func (serv *services) newClientConnection() map[string]interface{} {
 	return map[string]interface{}{
-		// "ffmpegOptions":          tpa.proc.KnownFfmpegOptions,
+		"ffmpegOptions":          serv.thea.GetKnownFfmpegOptions(),
 		"ffmpegMatchKeys":        ffmpeg.FFMPEG_COMMAND_SUBSTITUTIONS,
 		"profileAcceptableTypes": profile.MatchKeyAcceptableTypes(),
 	}
 }
 
-func (tpa *services) Start() {
-	// Start websocket, router and processor
+func (serv *services) Start() {
+	serv.setupRoutes()
+	serv.socketHub.WithConnectionCallback(serv.newClientConnection)
+
+	// Start websocket, router and Thea
 	wg := &sync.WaitGroup{}
-
-	mainLogger.Emit(logger.INFO, "Starting Processor\n")
-	procReady := make(chan bool)
-
-	wg.Add(1)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
-		if err := tpa.proc.Start(); err != nil {
+		serv.socketHub.Start()
+	}()
+	go func() {
+		defer wg.Done()
+		serv.httpRouter.Start(&api.RouterOptions{
+			ApiPort: 8080,
+			ApiHost: "0.0.0.0",
+			ApiRoot: "/api/thea",
+		})
+	}()
+	go func() {
+		defer wg.Done()
+		if err := serv.thea.Start(); err != nil {
 			mainLogger.Emit(logger.FATAL, "Failed to start Processor: %v", err.Error())
 		}
 
-		close(procReady)
-
 		mainLogger.Emit(logger.STOP, "Processor shutdown, cleaning up supporting services...\n")
-		tpa.socketHub.Close()
-		tpa.httpRouter.Stop()
+		serv.socketHub.Close()
+		serv.httpRouter.Stop()
 	}()
-
-	// Wait for processor to be fully online before constructing other services that rely
-	// on certain fields being set/populated.
-	v, ok := <-procReady
-	if v && ok {
-		mainLogger.Emit(logger.INFO, "Confguring HTTP and Websocket routes...\n")
-		tpa.setupRoutes()
-		tpa.socketHub.WithConnectionCallback(tpa.newClientConnection)
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tpa.socketHub.Start()
-		}()
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tpa.httpRouter.Start(&api.RouterOptions{
-				ApiPort: 8080,
-				ApiHost: "0.0.0.0",
-				ApiRoot: "/api/tpa",
-			})
-		}()
-	}
 
 	// Wait for all processes to finish
 	wg.Wait()
@@ -98,37 +82,37 @@ func (tpa *services) Start() {
 
 // setupRoutes initialises the routes and commands for the HTTP
 // REST router, and the websocket hub
-func (tpa *services) setupRoutes() {
-	tpa.httpRouter.CreateRoute("v0/queue", "GET", tpa.httpGateway.HttpQueueIndex)
-	tpa.httpRouter.CreateRoute("v0/queue/{id}", "GET", tpa.httpGateway.HttpQueueGet)
-	tpa.httpRouter.CreateRoute("v0/queue/promote/{id}", "POST", tpa.httpGateway.HttpQueueUpdate)
-	tpa.httpRouter.CreateRoute("v0/ws", "GET", tpa.socketHub.UpgradeToSocket)
+func (serv *services) setupRoutes() {
+	serv.httpRouter.CreateRoute("v0/queue", "GET", serv.httpGateway.HttpQueueIndex)
+	serv.httpRouter.CreateRoute("v0/queue/{id}", "GET", serv.httpGateway.HttpQueueGet)
+	serv.httpRouter.CreateRoute("v0/queue/promote/{id}", "POST", serv.httpGateway.HttpQueueUpdate)
+	serv.httpRouter.CreateRoute("v0/ws", "GET", serv.socketHub.UpgradeToSocket)
 
-	tpa.socketHub.BindCommand("QUEUE_INDEX", tpa.wsGateway.WsQueueIndex)
-	tpa.socketHub.BindCommand("QUEUE_DETAILS", tpa.wsGateway.WsQueueDetails)
-	tpa.socketHub.BindCommand("QUEUE_REORDER", tpa.wsGateway.WsQueueReorder)
-	tpa.socketHub.BindCommand("TROUBLE_RESOLVE", tpa.wsGateway.WsTroubleResolve)
-	tpa.socketHub.BindCommand("TROUBLE_DETAILS", tpa.wsGateway.WsTroubleDetails)
-	tpa.socketHub.BindCommand("PROMOTE_ITEM", tpa.wsGateway.WsItemPromote)
-	tpa.socketHub.BindCommand("PAUSE_ITEM", tpa.wsGateway.WsItemPause)
-	tpa.socketHub.BindCommand("CANCEL_ITEM", tpa.wsGateway.WsItemCancel)
+	serv.socketHub.BindCommand("QUEUE_INDEX", serv.wsGateway.WsQueueIndex)
+	serv.socketHub.BindCommand("QUEUE_DETAILS", serv.wsGateway.WsQueueDetails)
+	serv.socketHub.BindCommand("QUEUE_REORDER", serv.wsGateway.WsQueueReorder)
+	serv.socketHub.BindCommand("TROUBLE_RESOLVE", serv.wsGateway.WsTroubleResolve)
+	serv.socketHub.BindCommand("TROUBLE_DETAILS", serv.wsGateway.WsTroubleDetails)
+	serv.socketHub.BindCommand("PROMOTE_ITEM", serv.wsGateway.WsItemPromote)
+	serv.socketHub.BindCommand("PAUSE_ITEM", serv.wsGateway.WsItemPause)
+	serv.socketHub.BindCommand("CANCEL_ITEM", serv.wsGateway.WsItemCancel)
 
-	tpa.socketHub.BindCommand("PROFILE_INDEX", tpa.wsGateway.WsProfileIndex)
-	tpa.socketHub.BindCommand("PROFILE_CREATE", tpa.wsGateway.WsProfileCreate)
-	tpa.socketHub.BindCommand("PROFILE_REMOVE", tpa.wsGateway.WsProfileRemove)
-	tpa.socketHub.BindCommand("PROFILE_MOVE", tpa.wsGateway.WsProfileMove)
-	tpa.socketHub.BindCommand("PROFILE_SET_MATCH_CONDITIONS", tpa.wsGateway.WsProfileSetMatchConditions)
-	tpa.socketHub.BindCommand("PROFILE_UPDATE_COMMAND", tpa.wsGateway.WsProfileUpdateCommand)
+	serv.socketHub.BindCommand("PROFILE_INDEX", serv.wsGateway.WsProfileIndex)
+	serv.socketHub.BindCommand("PROFILE_CREATE", serv.wsGateway.WsProfileCreate)
+	serv.socketHub.BindCommand("PROFILE_REMOVE", serv.wsGateway.WsProfileRemove)
+	serv.socketHub.BindCommand("PROFILE_MOVE", serv.wsGateway.WsProfileMove)
+	serv.socketHub.BindCommand("PROFILE_SET_MATCH_CONDITIONS", serv.wsGateway.WsProfileSetMatchConditions)
+	serv.socketHub.BindCommand("PROFILE_UPDATE_COMMAND", serv.wsGateway.WsProfileUpdateCommand)
 }
 
-func (tpa *services) OnProcessorUpdate(update *internal.Update) {
+func (serv *services) handleTpaUpdate(update *internal.Update) {
 	body := map[string]interface{}{"context": update}
 	if update.UpdateType == internal.PROFILE_UPDATE {
-		body["profiles"] = tpa.proc.GetAllProfiles()
-		body["targetOpts"] = tpa.proc.GetKnownFfmpegOptions()
+		body["profiles"] = serv.thea.GetAllProfiles()
+		body["targetOpts"] = serv.thea.GetKnownFfmpegOptions()
 	}
 
-	tpa.socketHub.Send(&socket.SocketMessage{
+	serv.socketHub.Send(&socket.SocketMessage{
 		Title: "UPDATE",
 		Body:  body,
 		Type:  socket.Update,
@@ -144,11 +128,11 @@ func main() {
 		log.Panicf(err.Error())
 	}
 
-	procCfg := new(internal.TPAConfig)
-	if err := procCfg.LoadFromFile(filepath.Join(homeDir, ".config/tpa/config.yaml")); err != nil {
+	procCfg := new(internal.TheaConfig)
+	if err := procCfg.LoadFromFile(filepath.Join(homeDir, ".config/thea/config.yaml")); err != nil {
 		panic(err)
 	}
 
-	tpa := NewTpa(*procCfg)
-	tpa.Start()
+	servs := NewTpa(*procCfg)
+	servs.Start()
 }

@@ -1,6 +1,6 @@
 package worker
 
-import "github.com/hbomb79/TPA/pkg/logger"
+import "github.com/hbomb79/Thea/pkg/logger"
 
 var workerLogger = logger.Get("Worker")
 

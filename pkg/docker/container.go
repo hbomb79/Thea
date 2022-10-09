@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/api/types"
 	dCont "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 type ContainerStatus int

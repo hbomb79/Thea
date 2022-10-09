@@ -1,6 +1,6 @@
 package internal
 
-import "github.com/hbomb79/TPA/internal/queue"
+import "github.com/hbomb79/Thea/internal/queue"
 
 type UpdateManager interface {
 	NotifyItemUpdate(int)
@@ -27,7 +27,7 @@ type Update struct {
 type UpdateManagerSubmitFn func(*Update)
 
 type updateManager struct {
-	tpa            TPA
+	thea           Thea
 	submitFn       UpdateManagerSubmitFn
 	pendingUpdates map[int]bool
 }
@@ -46,7 +46,7 @@ func (mgr *updateManager) NotifyQueueUpdate() {
 
 func (mgr *updateManager) SubmitUpdates() {
 	for itemID := range mgr.pendingUpdates {
-		queueItem, idx := mgr.tpa.queue().FindById(itemID)
+		queueItem, idx := mgr.thea.queue().FindById(itemID)
 		if queueItem == nil || idx < 0 {
 			mgr.submitFn(&Update{
 				UpdateType:   ITEM_UPDATE,
@@ -66,9 +66,10 @@ func (mgr *updateManager) SubmitUpdates() {
 	}
 }
 
-func NewUpdateManager(submitFn UpdateManagerSubmitFn, tpa TPA) UpdateManager {
+func NewUpdateManager(submitFn UpdateManagerSubmitFn, thea Thea) UpdateManager {
 	return &updateManager{
-		submitFn: submitFn,
-		tpa:      tpa,
+		submitFn:       submitFn,
+		thea:           thea,
+		pendingUpdates: make(map[int]bool),
 	}
 }

@@ -61,7 +61,7 @@ export const socketStream = writable({
 // that allows components to send messages directly via the websocket
 // rather than through a Commander instance.
 const config = SERVER_CONFIG
-const socket = new WebSocket(`ws://${config.host}:${config.port}/api/tpa/v0/ws`)
+const socket = new WebSocket(`ws://${config.host}:${config.port}/api/thea/v0/ws`)
 export function sendMessage(message: string) {
     if (socket.readyState <= 1) {
         socket.send(message)

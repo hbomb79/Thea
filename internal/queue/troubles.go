@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/hbomb79/TPA/internal/profile"
+	"github.com/hbomb79/Thea/internal/profile"
 	"github.com/mitchellh/mapstructure"
 )
 

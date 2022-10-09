@@ -6,15 +6,15 @@ Thea Processing API
 ## Installation
 
 ### Configuration
-TPA configuration is looked for in `$HOME/.config/tpa/config.yaml`, this file is loaded during initial startup and is used to populate the below configuration options.
+TPA configuration is looked for in `$HOME/.config/thea/config.yaml`, this file is loaded during initial startup and is used to populate the below configuration options.
 
 Below is an reference .yaml file containing all the possible configuration options. The value of each configuration represents it's _default option_, however, if an option is marked "REQUIRED!", then it has **no default option** and the server will fail to launch unless the configuration is specified in either your config.yaml, or the environment.
 
 Each option is documented below, along with it's environment variable override. You can change the config from it's default by either providing an alternative value in your config.yaml, or by setting the corresponding environment variable (env vars will override any values in the config.yaml)
 
 ```yaml
-config_dir: ".config/tpa/"
-cache_dir: ".cache/tpa"
+config_dir: ".config/thea/"
+cache_dir: ".cache/thea"
 omdb_api_key: "REQUIRED!"
 host: "0.0.0.0"
 port: "8080"
@@ -42,12 +42,12 @@ database:
 
 #### Configuration Directory
 ##### YAML: config_dir (ENV: CONFIG_DIR)
-##### Default: `".config/tpa/"`
+##### Default: `".config/thea/"`
 This path is relative to the users $HOME directory and is used by TPA to store any relevant configuration (mainly created profiles and targets). Files will be created in this directory and it's intended to be persistent storage.
 
 #### Cache Directory
 ##### YAML: cache_dir (ENV: CACHE_DIR)
-##### Default: `".cache/tpa/"`
+##### Default: `".cache/thea/"`
 This path is relative to the users $HOME directory and is used by TPA to store cache information. This is not intended to be permanent and the program will gracefully handle data loss in this directory.
 
 #### OMDB Api Key

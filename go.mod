@@ -1,4 +1,4 @@
-module github.com/hbomb79/TPA
+module github.com/hbomb79/Thea
 
 go 1.18
 

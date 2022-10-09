@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/hbomb79/TPA/pkg/cache"
-	"github.com/hbomb79/TPA/pkg/logger"
+	"github.com/hbomb79/Thea/pkg/cache"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/mitchellh/mapstructure"
 )
 

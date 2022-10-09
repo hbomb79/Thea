@@ -3,8 +3,8 @@ package internal
 import (
 	"fmt"
 
-	"github.com/hbomb79/TPA/internal/ffmpeg"
-	"github.com/hbomb79/TPA/internal/queue"
+	"github.com/hbomb79/Thea/internal/ffmpeg"
+	"github.com/hbomb79/Thea/internal/queue"
 )
 
 // QueueService is responsible for exposing methods for reading or mutating
@@ -22,17 +22,17 @@ type QueueService interface {
 }
 
 type queueService struct {
-	tpa TPA
+	thea Thea
 }
 
 // GetAllItems returns all QueueItems currently managed by the queue service
 func (service *queueService) GetAllItems() *[]*queue.QueueItem {
-	return service.tpa.queue().Items()
+	return service.thea.queue().Items()
 }
 
 // GetItem returns the QueueItem with the matching ID, if found
 func (service *queueService) GetItem(itemID int) (*queue.QueueItem, error) {
-	item, position := service.tpa.queue().FindById(itemID)
+	item, position := service.thea.queue().FindById(itemID)
 	if position == -1 || item == nil {
 		return nil, fmt.Errorf("failed to GetItem(%d) -> No item with this ID exists", itemID)
 	}
@@ -42,7 +42,7 @@ func (service *queueService) GetItem(itemID int) (*queue.QueueItem, error) {
 // ReorderList accepts a list of IDs representing the desired ordering,
 // and will reorder the internal data to match.
 func (service *queueService) ReorderQueue(newOrder []int) error {
-	if err := service.tpa.queue().Reorder(newOrder); err != nil {
+	if err := service.thea.queue().Reorder(newOrder); err != nil {
 		return fmt.Errorf("failed to ReorderList(%v) -> %s", newOrder, err.Error())
 	}
 
@@ -52,7 +52,7 @@ func (service *queueService) ReorderQueue(newOrder []int) error {
 // PromoteItem reorders the queue (via ReorderQueue) so that the provided
 // ID is at index 0
 func (service *queueService) PromoteItem(itemID int) error {
-	item, idx := service.tpa.queue().FindById(itemID)
+	item, idx := service.thea.queue().FindById(itemID)
 	if item == nil || idx == -1 {
 		return fmt.Errorf("failed to PromoteItem(%d) -> No item with this ID exists", itemID)
 	} else if idx == 0 {
@@ -71,7 +71,7 @@ func (service *queueService) PromoteItem(itemID int) error {
 		newOrder = append(extracted, newOrder[idx+1:]...)
 	}
 
-	if err := service.tpa.queue().Reorder(newOrder); err != nil {
+	if err := service.thea.queue().Reorder(newOrder); err != nil {
 		return fmt.Errorf("failed to PromoteItem(%d) -> %s", itemID, err.Error())
 	}
 
@@ -80,7 +80,7 @@ func (service *queueService) PromoteItem(itemID int) error {
 
 // CancelItem will cancel the item with the ID provided if it can be found
 func (service *queueService) CancelItem(itemID int) error {
-	item, pos := service.tpa.queue().FindById(itemID)
+	item, pos := service.thea.queue().FindById(itemID)
 	if item == nil || pos == -1 {
 		return fmt.Errorf("failed to CancelItem(%d) -> No item with this ID exists", itemID)
 	}
@@ -89,7 +89,7 @@ func (service *queueService) CancelItem(itemID int) error {
 	item.Cancel()
 
 	// Cancel any/all ffmpeg instances for this item
-	for _, instance := range service.tpa.ffmpeg().GetInstancesForItem(itemID) {
+	for _, instance := range service.thea.ffmpeg().GetInstancesForItem(itemID) {
 		instance.Stop()
 	}
 
@@ -99,14 +99,14 @@ func (service *queueService) CancelItem(itemID int) error {
 // PauseItem will pause a specified item if it can be found, and will
 // also pause any associatted Ffmpeg instances.
 func (service *queueService) PauseItem(itemID int) error {
-	item, pos := service.tpa.queue().FindById(itemID)
+	item, pos := service.thea.queue().FindById(itemID)
 	if item == nil || pos == -1 {
 		return fmt.Errorf("failed to PauseItem(%d) -> No item with this ID exists", itemID)
 	}
 
 	item.SetPaused(true)
 
-	instances := service.tpa.ffmpeg().GetInstancesForItem(itemID)
+	instances := service.thea.ffmpeg().GetInstancesForItem(itemID)
 	for _, v := range instances {
 		v.SetPaused(true)
 	}
@@ -117,7 +117,7 @@ func (service *queueService) PauseItem(itemID int) error {
 // ResumeItem will resume an items progress by "unpausing" it. If all Ffmpeg Instances are
 // paused at the time, they will also be resumed
 func (service *queueService) ResumeItem(itemID int) error {
-	item, pos := service.tpa.queue().FindById(itemID)
+	item, pos := service.thea.queue().FindById(itemID)
 	if item == nil || pos == -1 {
 		return fmt.Errorf("failed to ResumeItem(%d) -> No item with this ID exists", itemID)
 	} else if item.Status != queue.Paused {
@@ -127,7 +127,7 @@ func (service *queueService) ResumeItem(itemID int) error {
 	item.SetPaused(false)
 	// If all ffmpeg instances were paused then we can somewhat safely assume that unpausing
 	// the item means we should unpause all instances too
-	instances := service.tpa.ffmpeg().GetInstancesForItem(itemID)
+	instances := service.thea.ffmpeg().GetInstancesForItem(itemID)
 	areAllPaused := func() bool {
 		for _, v := range instances {
 			if v.Status() != ffmpeg.PAUSED {
@@ -148,15 +148,15 @@ func (service *queueService) ResumeItem(itemID int) error {
 }
 
 func (service *queueService) AdvanceItem(item *queue.QueueItem) {
-	service.tpa.queue().AdvanceStage(item)
+	service.thea.queue().AdvanceStage(item)
 }
 
 func (service *queueService) PickItem(stage queue.QueueItemStage) *queue.QueueItem {
-	return service.tpa.queue().Pick(stage)
+	return service.thea.queue().Pick(stage)
 }
 
-func NewQueueService(tpa TPA) QueueService {
+func NewQueueService(thea Thea) QueueService {
 	return &queueService{
-		tpa: tpa,
+		thea: thea,
 	}
 }

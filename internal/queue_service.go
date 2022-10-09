@@ -146,23 +146,17 @@ func (service *queueService) ResumeItem(itemID int) error {
 	}
 
 	item.SetPaused(false)
+
 	// If all ffmpeg instances were paused then we can somewhat safely assume that unpausing
 	// the item means we should unpause all instances too
 	instances := service.thea.ffmpeg().GetInstancesForItem(itemID)
-	areAllPaused := func() bool {
-		for _, v := range instances {
-			if v.Status() != ffmpeg.PAUSED {
-				return false
-			}
+	for _, instance := range instances {
+		if instance.Status() != ffmpeg.PAUSED {
+			return nil
 		}
-		return true
 	}
-
-	if areAllPaused() {
-		// Unpause all
-		for _, v := range instances {
-			v.SetPaused(false)
-		}
+	for _, instance := range instances {
+		instance.SetPaused(false)
 	}
 
 	return nil
@@ -183,7 +177,7 @@ func (service *queueService) PickItem(stage queue.ItemStage) *queue.QueueItem {
 func (service *queueService) ExportItem(item *queue.QueueItem) error {
 	if item.Stage != queue.Database || item.Status != queue.Processing {
 		// Cannot export an item that is at any other stage!
-		return fmt.Errorf("failed to ExportItem(%s) -> Item is not at correct stage/status", item)
+		return fmt.Errorf("failed to ExportItem(%d) -> Item is not at correct stage/status", item.ItemID)
 	}
 
 	// Form a database model of the item which can be persisted. This differs from the standard item
@@ -206,7 +200,7 @@ func (service *queueService) ExportItem(item *queue.QueueItem) error {
 
 	if item.TitleInfo.Episodic {
 		if item.TitleInfo.Episode == -1 || item.TitleInfo.Season == -1 {
-			return fmt.Errorf("failed to ExportItem(%s) -> Item declared itself as Episodic, however season/episode information is invalid", item)
+			return fmt.Errorf("failed to ExportItem(%d) -> Item declared itself as Episodic, however season/episode information is invalid", item.ItemID)
 		}
 
 		exportItem.EpisodeNumber = &item.TitleInfo.Episode
@@ -217,7 +211,7 @@ func (service *queueService) ExportItem(item *queue.QueueItem) error {
 	exports := service.thea.ffmpeg().GetInstancesForItem(item.ItemID)
 	for _, v := range exports {
 		if v.Status() != ffmpeg.FINISHED {
-			return fmt.Errorf("failed to ExportItem(%s) -> One or more FFmpeg instances are not finished (found instance %v as incomplete)", item, v)
+			return fmt.Errorf("failed to ExportItem(%d) -> One or more FFmpeg instances are not finished (found instance %v as incomplete)", item.ItemID, v)
 		}
 
 		exportItem.Exports = append(exportItem.Exports, &export.ExportDetail{
@@ -228,7 +222,7 @@ func (service *queueService) ExportItem(item *queue.QueueItem) error {
 
 	// Attempt to persist the formed exportItem to the database
 	if err := db.DB.GetInstance().Debug().Save(exportItem).Error; err != nil {
-		return fmt.Errorf("failed to ExportItem(%s) -> Database save operation FAILED: %s", item, err.Error())
+		return fmt.Errorf("failed to ExportItem(%d) -> Database save operation FAILED: %s", item.ItemID, err.Error())
 	}
 
 	return nil

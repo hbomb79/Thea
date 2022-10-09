@@ -114,6 +114,10 @@ func NewThea(config TheaConfig, updateFn UpdateManagerSubmitFn) Thea {
 // Start will start TPA by initialising all supporting services/objects and starting
 // the event loops
 func (thea *theaImpl) Start() error {
+	exitChannel := make(chan os.Signal, 1)
+	signal.Notify(exitChannel, os.Interrupt, syscall.SIGTERM)
+
+	procLogger.Emit(logger.DEBUG, "Starting Thea initialisation with config: %#v\n", thea.config())
 	if err := thea.initialise(); err != nil {
 		return fmt.Errorf("failed to initialise TPA: %s", err)
 	}
@@ -123,7 +127,7 @@ func (thea *theaImpl) Start() error {
 	go thea.workers.StartWorkers(thea.shutdownWaitGroup)
 	go thea.ffmpegMgr.Start(thea.shutdownWaitGroup)
 	defer func() {
-		procLogger.Emit(logger.DEBUG, "TPA event loop has terminated.. deferred shutdown!\n")
+		procLogger.Emit(logger.DEBUG, "Event loop has terminated.. deferred shutdown!\n")
 		thea.Stop()
 	}()
 
@@ -131,8 +135,7 @@ func (thea *theaImpl) Start() error {
 	updateTicker := time.NewTicker(TPA_UPDATE_INTERVAL)
 	queueSyncTicker := time.NewTicker(TPA_QUEUE_SYNC_INTERVAL)
 
-	exitChannel := make(chan os.Signal, 1)
-	signal.Notify(exitChannel, os.Interrupt, syscall.SIGTERM)
+	procLogger.Emit(logger.SUCCESS, " --- Thea Startup Complete --- \n")
 
 	for {
 		select {
@@ -141,10 +144,10 @@ func (thea *theaImpl) Start() error {
 		case <-queueSyncTicker.C:
 			thea.synchroniseQueue()
 		case <-exitChannel:
-			procLogger.Emit(logger.INFO, "Interrupt detected!\n")
+			procLogger.Emit(logger.STOP, "Interrupt detected!\n")
 			return nil
 		case <-thea.theaCtx.Done():
-			procLogger.Emit(logger.WARNING, "TPA context has been cancelled!\n")
+			procLogger.Emit(logger.WARNING, "Context has been cancelled!\n")
 			return nil
 		}
 	}

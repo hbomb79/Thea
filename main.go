@@ -16,6 +16,8 @@ import (
 
 var mainLogger = logger.Get("Main")
 
+const VERSION = 0.7
+
 type services struct {
 	thea        internal.Thea
 	socketHub   *socket.SocketHub
@@ -47,6 +49,8 @@ func (serv *services) newClientConnection() map[string]interface{} {
 }
 
 func (serv *services) Start() {
+	mainLogger.Emit(logger.INFO, " --- Starting Thea (version %v) ---\n", VERSION)
+
 	serv.setupRoutes()
 	serv.socketHub.WithConnectionCallback(serv.newClientConnection)
 

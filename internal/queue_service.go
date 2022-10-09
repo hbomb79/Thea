@@ -3,10 +3,11 @@ package internal
 import (
 	"fmt"
 
-	"github.com/hbomb79/Thea/internal/db"
+	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/export"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/queue"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 // QueueService is responsible for exposing methods for reading or mutating
@@ -163,7 +164,9 @@ func (service *queueService) ResumeItem(itemID int) error {
 }
 
 func (service *queueService) AdvanceItem(item *queue.QueueItem) {
+	procLogger.Emit(logger.DEBUG, "Advancing item %s to next stage\n", item)
 	service.thea.queue().AdvanceStage(item)
+	service.thea.workerPool().WakeupWorkers()
 }
 
 func (service *queueService) PickItem(stage queue.ItemStage) *queue.QueueItem {
@@ -185,13 +188,13 @@ func (service *queueService) ExportItem(item *queue.QueueItem) error {
 	// et cetera...). For the most part, this is just converting the data from the current structure (useful for
 	// state-management), to another (useful for DB storage/lookup).
 	exportItem := &export.ExportedItem{
-		Name:          item.Name,
+		Name:          item.OmdbInfo.Title,
 		Description:   item.OmdbInfo.Description,
 		Runtime:       item.OmdbInfo.Runtime,
 		ReleaseYear:   item.OmdbInfo.ReleaseYear,
 		Image:         item.OmdbInfo.PosterUrl,
-		Genres:        item.OmdbInfo.Genre.ToGenreList(),
 		Exports:       make([]*export.ExportDetail, 0),
+		Genres:        nil,
 		EpisodeNumber: nil,
 		SeasonNumber:  nil,
 		SeriesID:      nil,
@@ -208,6 +211,31 @@ func (service *queueService) ExportItem(item *queue.QueueItem) error {
 		exportItem.Series = &export.Series{Name: item.TitleInfo.Title}
 	}
 
+	// Extract all genres and find pre-existing ones in the DB - for ones we could NOT find,
+	// create them manually and omit the gorm model ID so that the genre is created a s new row
+	db := database.DB.GetInstance()
+	var exportGenres []*export.Genre
+	isGenreNew := func(genre string) bool {
+		for _, v := range exportGenres {
+			if v.Name == genre {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	db.Where("name in ?", item.OmdbInfo.Genre).Find(&exportGenres)
+	for _, v := range item.OmdbInfo.Genre {
+		// Add missing genres to the above result
+		if isGenreNew(v) {
+			exportGenres = append(exportGenres, &export.Genre{
+				Name: v,
+			})
+		}
+	}
+	exportItem.Genres = exportGenres
+
 	exports := service.thea.ffmpeg().GetInstancesForItem(item.ItemID)
 	for _, v := range exports {
 		if v.Status() != ffmpeg.FINISHED {
@@ -221,7 +249,7 @@ func (service *queueService) ExportItem(item *queue.QueueItem) error {
 	}
 
 	// Attempt to persist the formed exportItem to the database
-	if err := db.DB.GetInstance().Debug().Save(exportItem).Error; err != nil {
+	if err := database.DB.GetInstance().Debug().Save(exportItem).Error; err != nil {
 		return fmt.Errorf("failed to ExportItem(%d) -> Database save operation FAILED: %s", item.ItemID, err.Error())
 	}
 

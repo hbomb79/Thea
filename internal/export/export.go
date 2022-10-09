@@ -1,12 +1,12 @@
 package export
 
 import (
-	"github.com/hbomb79/Thea/internal/db"
+	"github.com/hbomb79/Thea/internal/database"
 	"gorm.io/gorm"
 )
 
 func init() {
-	db.DB.RegisterModel(&ExportedItem{}, &ExportDetail{}, &Series{}, &Genre{})
+	database.DB.RegisterModel(&ExportedItem{}, &ExportDetail{}, &Series{}, &Genre{})
 }
 
 type ExportedItemDto struct {
@@ -62,5 +62,6 @@ type Series struct {
 // We store genres in their own table using this struct - this allows us to view all Genres we know about by consulting this
 // table, rather than using the ExportedItem table.
 type Genre struct {
-	Name string `gorm:"primaryKey"`
+	*gorm.Model
+	Name string
 }

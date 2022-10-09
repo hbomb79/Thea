@@ -45,6 +45,11 @@ func (mgr *updateManager) NotifyQueueUpdate() {
 }
 
 func (mgr *updateManager) SubmitUpdates() {
+	if len(mgr.pendingUpdates) > 0 {
+		// Something has changed, wakeup sleeping workers to detect if any work can be done.
+		mgr.thea.workerPool().WakeupWorkers()
+	}
+
 	for itemID := range mgr.pendingUpdates {
 		queueItem, idx := mgr.thea.queue().FindById(itemID)
 		if queueItem == nil || idx < 0 {

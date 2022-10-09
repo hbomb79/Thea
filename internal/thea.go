@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hbomb79/Thea/internal/db"
+	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/profile"
 	"github.com/hbomb79/Thea/internal/queue"
@@ -142,7 +142,9 @@ func (thea *theaImpl) Start() error {
 		case <-updateTicker.C:
 			thea.SubmitUpdates()
 		case <-queueSyncTicker.C:
-			thea.synchroniseQueue()
+			if err := thea.synchroniseQueue(); err != nil {
+				procLogger.Emit(logger.WARNING, "Failed to synchronise item queue: %s\n", err.Error())
+			}
 		case <-exitChannel:
 			procLogger.Emit(logger.STOP, "Interrupt detected!\n")
 			return nil
@@ -177,6 +179,7 @@ func (thea *theaImpl) workerPool() *worker.WorkerPool   { return thea.workers }
 func (thea *theaImpl) config() TheaConfig               { return thea.cfg }
 
 // ** PRIVATE IMPL ** //
+
 // synchroniseQueue will first discover all items inside the import directory,
 // and then will injest any that do not already exist in the queue. Any items
 // in the queue that no longer exist in the discovered items will also be cancelled
@@ -194,7 +197,7 @@ func (thea *theaImpl) synchroniseQueue() error {
 
 	thea.queueMgr.Filter(func(queue queue.QueueManager, key int, item *queue.QueueItem) bool {
 		if _, ok := presentItems[item.Path]; !ok {
-			item.Cancel()
+			thea.CancelItem(item.ItemID)
 			return false
 		}
 
@@ -213,7 +216,8 @@ func (thea *theaImpl) synchroniseQueue() error {
 		}
 
 		if time.Since(info.ModTime()) > time.Minute*2 {
-			q.AdvanceStage(item)
+			procLogger.Emit(logger.INFO, "Advancing item %s from Import hold as it's exceeded modtime threshold\n", item)
+			thea.AdvanceItem(item)
 		}
 
 		return false
@@ -256,8 +260,6 @@ func (thea *theaImpl) discoverItems() (map[string]fs.FileInfo, error) {
 // for TPA (Docker based Postgres, PgAdmin and Web front-end)
 func (thea *theaImpl) initialiseSupportServices() error {
 	// Instantiate watcher for async errors for the below containers
-	config := thea.cfg
-	serviceConfig := config.Services
 	asyncErrorReport := make(chan error, 2)
 	go func() {
 		err := <-asyncErrorReport
@@ -270,25 +272,24 @@ func (thea *theaImpl) initialiseSupportServices() error {
 	// Initialise all services which are enabled. If a service is disabled, then the
 	// user doesn't want us to create it for them. For the DB, this means the user *must*
 	// provide the DB themselves
-	if serviceConfig.EnablePostgres {
+	config := thea.cfg
+	if config.Services.EnablePostgres {
 		procLogger.Emit(logger.INFO, "Initialising embedded database...\n")
-		_, err := db.InitialiseDockerDatabase(config.Database, asyncErrorReport)
+		_, err := database.InitialiseDockerDatabase(config.Database, asyncErrorReport)
 		if err != nil {
 			return err
 		}
 	}
-
-	if serviceConfig.EnablePgAdmin {
+	if config.Services.EnablePgAdmin {
 		procLogger.Emit(logger.INFO, "Initialising embedded pgAdmin server...\n")
-		_, err := db.InitialiseDockerPgAdmin(asyncErrorReport)
+		_, err := database.InitialiseDockerPgAdmin(asyncErrorReport)
 		if err != nil {
 			return err
 		}
 	}
-
-	if serviceConfig.EnableFrontend {
-		// TODO
-	}
+	// TODO
+	// if serviceConfig.EnableFrontend {
+	// }
 
 	return nil
 
@@ -301,14 +302,14 @@ func (thea *theaImpl) initialise() error {
 	}
 
 	procLogger.Emit(logger.INFO, "Connecting to database with GORM...\n")
-	if err := db.DB.Connect(thea.cfg.Database); err != nil {
+	if err := database.DB.Connect(thea.cfg.Database); err != nil {
 		return err
 	}
 
-	advanceFunc := thea.queue().AdvanceStage
+	advanceFunc := thea.AdvanceItem
 	baseTask := queue.BaseTask{ItemProducer: thea}
 	thea.workers.PushWorker(worker.NewWorker("Title_Parser", &queue.TitleTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Title)))
-	thea.workers.PushWorker(worker.NewWorker("OMDB_Handler", &queue.OmdbTask{OnComplete: advanceFunc, BaseTask: baseTask}, int(queue.Omdb)))
+	thea.workers.PushWorker(worker.NewWorker("OMDB_Handler", &queue.OmdbTask{OnComplete: advanceFunc, BaseTask: baseTask, OmdbKey: thea.cfg.OmdbKey}, int(queue.Omdb)))
 	thea.workers.PushWorker(worker.NewWorker("Database_Committer", &queue.DatabaseTask{OnComplete: advanceFunc, CommitHandler: thea.ExportItem, BaseTask: baseTask}, int(queue.Database)))
 
 	return nil

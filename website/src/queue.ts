@@ -212,6 +212,7 @@ export class ContentManager {
     // can then be filtered by the client in order to perform filtering,
     // searching, etc...
     requestMovies() {
+        if (true) { return }
         const handleReply = (response: SocketData): boolean => {
             if (response.type == SocketMessageType.RESPONSE) {
                 this.itemIndex.set(response.arguments.payload.items)
@@ -257,7 +258,7 @@ export class ContentManager {
     requestQueueIndex() {
         const handleReply = (response: SocketData): boolean => {
             if (response.type == SocketMessageType.RESPONSE) {
-                this.itemIndex.set(response.arguments.payload.items)
+                this.itemIndex.set(response.arguments.payload)
             } else {
                 console.warn("[QueueManager] Invalid reply while fetching queue index.", response)
             }

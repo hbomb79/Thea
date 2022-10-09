@@ -21,6 +21,8 @@ const (
 	FATAL
 )
 
+const MIN_STAT = SUCCESS
+
 func (e LogStatus) String() string {
 	return []string{
 		"D",
@@ -79,6 +81,10 @@ func (l *loggerMgr) GetLogger(name string) Logger {
 }
 
 func (l *loggerMgr) Emit(status LogStatus, name string, message string, interpolations ...interface{}) {
+	if status < MIN_STAT {
+		return
+	}
+
 	l.setNameOffset(len(name))
 	padding := strings.Repeat(" ", l.offset-len(name))
 	msg := fmt.Sprintf("[%s] %s(%s) %s", name, padding, status, fmt.Sprintf(message, interpolations...))

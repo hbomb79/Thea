@@ -126,6 +126,7 @@ func (thea *theaImpl) Start() error {
 
 	// Initialise our async service managers
 	thea.shutdownWaitGroup.Add(2)
+
 	go thea.workers.StartWorkers(thea.shutdownWaitGroup)
 	go thea.ffmpegMgr.Start(thea.shutdownWaitGroup)
 

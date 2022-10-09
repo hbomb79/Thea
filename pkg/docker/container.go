@@ -232,9 +232,9 @@ func (container *dockerContainer) parseContainerEvent(ev *ContainerEvent) {
 	if ev.Error != "" {
 		dockerLogger.Emit(logger.ERROR, "\n%s: %s\n", container, ev.Error)
 	} else if ev.Progress != "" {
-		dockerLogger.Emit(logger.INFO, "%s: %s\n", container, ev.Progress)
+		dockerLogger.Emit(logger.DEBUG, "%s: %s\n", container, ev.Progress)
 	} else if ev.Status != "" {
-		dockerLogger.Emit(logger.INFO, "%s: %s\n", container, ev.Status)
+		dockerLogger.Emit(logger.DEBUG, "%s: %s\n", container, ev.Status)
 	} else {
 		dockerLogger.Emit(logger.WARNING, "Container %s emitted unknown event %v\n", container, ev)
 	}

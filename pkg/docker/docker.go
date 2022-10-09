@@ -177,7 +177,7 @@ func (docker *docker) monitorContainer(container DockerContainer, wg *sync.WaitG
 			if !ok {
 				return
 			}
-			dockerLogger.Emit(logger.INFO, "%s: %s\n", container, stat)
+			dockerLogger.Emit(logger.DEBUG, "%s: %s\n", container, stat)
 		}
 	}
 }

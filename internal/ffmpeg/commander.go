@@ -173,11 +173,7 @@ main:
 
 // Stop will stop all activities from the commander by terminating each ffmpeg instance
 func (commander *ffmpegCommander) Stop() {
-	select {
-	case commander.doneChannel <- 1:
-	default:
-		ffmpegLogger.Emit(logger.WARNING, "Attempt to Stop FFmpeg commander failed - channel is blocked\n")
-	}
+	close(commander.doneChannel)
 }
 
 // startInstance is an internal method that will attempt to start an ffmpegInstance,

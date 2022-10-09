@@ -42,7 +42,7 @@ func (e LogStatus) Color() *color.Color {
 		color.New(color.FgWhite),                              //Info
 		color.New(color.FgGreen, color.Italic),                //New
 		color.New(color.FgYellow, color.Italic),               //Remove
-		color.New(color.FgRed),                                //Stop
+		color.New(color.FgHiYellow),                           //Stop
 		color.New(color.FgYellow, color.Underline),            //Warning
 		color.New(color.FgHiRed, color.Bold),                  //Error
 		color.New(color.FgHiRed, color.Bold, color.Underline), //PANIC

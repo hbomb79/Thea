@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/TPA/internal/profile"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -117,7 +118,7 @@ type TitleTaskError struct {
 // Args returns the arguments required to resolve this
 // trouble
 func (ex *TitleTaskError) Args() map[string]string {
-	v, err := ToArgsMap(TitleInfo{})
+	v, err := profile.ToArgsMap(TitleInfo{})
 	if err != nil {
 		panic(err)
 	}
@@ -204,7 +205,7 @@ func (ex *OmdbTaskError) Resolve(args map[string]interface{}) error {
 // struct for use with the 'replacementStruct' paramater
 // during a resolution
 func (ex *OmdbTaskError) Args() map[string]string {
-	v, err := ToArgsMap(OmdbInfo{})
+	v, err := profile.ToArgsMap(OmdbInfo{})
 	if err != nil {
 		panic(err)
 	}

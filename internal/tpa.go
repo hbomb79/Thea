@@ -12,7 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hbomb79/TPA/internal/dockerService"
+	"github.com/hbomb79/TPA/internal/db"
+	"github.com/hbomb79/TPA/internal/profile"
 	"github.com/hbomb79/TPA/pkg/docker"
 	"github.com/hbomb79/TPA/pkg/logger"
 	"github.com/hbomb79/TPA/pkg/worker"
@@ -36,37 +37,38 @@ var procLogger = logger.Get("Proc")
 // layer APIs are preferred). These internal APIs allow code that knows what it's doing to selectively change the
 // state of TPA without unindented side-effects (however these side-effects are often a good thing!).
 type TPA interface {
-	// ** Public API ** //
+	UpdateManager
+	CoreService
+	ProfileService
+	QueueService
+	MovieService
+
 	Start() error
 	Stop()
 
-	// ** Service Layer APIs ** //
-	CoreService() CoreService
-	QueueService() QueueService
-	MovieService() MovieService
-
-	// ** Internal APIs ** //
-	Queue() QueueManager
-	Ffmpeg() Commander
-	Profiles() ProfileList
-	Updates() UpdateManager
-	WorkerPool() *worker.WorkerPool
-	Config() TPAConfig
+	queue() QueueManager
+	ffmpeg() FfmpegManager
+	profiles() profile.ProfileManager
+	workerPool() *worker.WorkerPool
+	config() TPAConfig
 }
 
 // TPA represents the top-level object for the server, and is responsible
 // for initialising embedded support services, workers, threads, event
 // handling, et cetera...
 type tpa struct {
-	coreService       CoreService
-	queueService      QueueService
-	movieService      MovieService
-	queue             QueueManager
-	ffmpeg            Commander
-	profile           ProfileList
-	updates           UpdateManager
-	workerPool        *worker.WorkerPool
-	config            TPAConfig
+	UpdateManager
+	CoreService
+	ProfileService
+	QueueService
+	MovieService
+
+	queueMgr   QueueManager
+	ffmpegMgr  FfmpegManager
+	profileMgr profile.ProfileManager
+	workers    *worker.WorkerPool
+
+	cfg               TPAConfig
 	tpaContext        context.Context
 	tpaContextCancel  context.CancelFunc
 	shutdownWaitGroup *sync.WaitGroup
@@ -79,25 +81,31 @@ const TPA_QUEUE_SYNC_INTERVAL = time.Second * 5
 
 // ** PUBLIC API ** //
 
-func NewTPA(config TPAConfig, updateFn UpdateManagerSubmitFn) TPA {
-	// Construct a tpa instance with all supporting services injected
-	t := &tpa{config: config}
-
+func NewTpa(config TPAConfig, updateFn UpdateManagerSubmitFn) TPA {
+	ctx, ctxCancel := context.WithCancel(context.Background())
 	configPath := config.getConfigPath()
 	cachePath := config.getCachePath()
 
-	ctx, ctxCancel := context.WithCancel(context.Background())
-	t.tpaContext = ctx
-	t.tpaContextCancel = ctxCancel
+	// Construct a tpa instance
+	t := &tpa{
+		cfg:               config,
+		tpaContext:        ctx,
+		tpaContextCancel:  ctxCancel,
+		shutdownWaitGroup: &sync.WaitGroup{},
+	}
 
-	t.coreService = NewCoreApi(t)
-	t.queueService = NewQueueApi(t)
-	t.queue = NewProcessorQueue(cachePath)
-	t.ffmpeg = NewCommander(t)
-	t.profile = NewProfileList(configPath)
-	t.updates = NewUpdateManager(updateFn, t)
-	t.workerPool = worker.NewWorkerPool()
-	t.shutdownWaitGroup = &sync.WaitGroup{}
+	// Inject services
+	t.UpdateManager = NewUpdateManager(updateFn, t)
+	t.ProfileService = NewProfileService(t)
+	t.CoreService = NewCoreApi(t)
+	t.QueueService = NewQueueApi(t)
+	t.MovieService = nil
+
+	// Inject state managers
+	t.queueMgr = NewProcessorQueue(cachePath)
+	t.ffmpegMgr = NewCommander(t)
+	t.profileMgr = profile.NewProfileList(configPath)
+	t.workers = worker.NewWorkerPool()
 
 	return t
 }
@@ -110,8 +118,9 @@ func (tpa *tpa) Start() error {
 	}
 
 	// Initialise our async service managers
-	go tpa.workerPool.StartWorkers(tpa.shutdownWaitGroup)
-	go tpa.ffmpeg.Start(tpa.shutdownWaitGroup)
+	go tpa.workers.StartWorkers(tpa.shutdownWaitGroup)
+	go tpa.ffmpegMgr.Start(tpa.shutdownWaitGroup)
+	defer tpa.Stop()
 
 	// Initialise some tickers
 	updateTicker := time.NewTicker(TPA_UPDATE_INTERVAL)
@@ -120,11 +129,10 @@ func (tpa *tpa) Start() error {
 	exitChannel := make(chan os.Signal, 1)
 	signal.Notify(exitChannel, os.Interrupt, syscall.SIGTERM)
 
-	defer tpa.Stop()
 	for {
 		select {
 		case <-updateTicker.C:
-			tpa.updates.SubmitUpdates()
+			tpa.SubmitUpdates()
 		case <-queueSyncTicker.C:
 			tpa.synchroniseQueue()
 		case <-exitChannel:
@@ -132,6 +140,7 @@ func (tpa *tpa) Start() error {
 			return nil
 		case <-tpa.tpaContext.Done():
 			procLogger.Emit(logger.WARNING, "TPA context has been cancelled!\n")
+			return nil
 		}
 	}
 }
@@ -140,8 +149,8 @@ func (tpa *tpa) Start() error {
 func (tpa *tpa) Stop() {
 	procLogger.Emit(logger.STOP, "--- TPA is shutting down ---\n")
 	procLogger.Emit(logger.STOP, "Closing all managers...\n")
-	tpa.workerPool.CloseWorkers()
-	tpa.ffmpeg.Stop()
+	tpa.workers.CloseWorkers()
+	tpa.ffmpegMgr.Stop()
 	tpa.shutdownWaitGroup.Wait()
 
 	procLogger.Emit(logger.STOP, "Closing all containers...\n")
@@ -151,22 +160,30 @@ func (tpa *tpa) Stop() {
 	tpa.tpaContextCancel()
 }
 
+// ** INTERNAL API ** //
+func (tpa *tpa) queue() QueueManager              { return tpa.queueMgr }
+func (tpa *tpa) ffmpeg() FfmpegManager            { return tpa.ffmpegMgr }
+func (tpa *tpa) profiles() profile.ProfileManager { return tpa.profileMgr }
+func (tpa *tpa) workerPool() *worker.WorkerPool   { return tpa.workers }
+func (tpa *tpa) config() TPAConfig                { return tpa.cfg }
+
+// ** PRIVATE IMPL ** //
 // synchroniseQueue will first discover all items inside the import directory,
 // and then will injest any that do not already exist in the queue. Any items
 // in the queue that no longer exist in the discovered items will also be cancelled
 func (tpa *tpa) synchroniseQueue() error {
 	// Find new items
-	tpa.queue.Reload()
+	tpa.queueMgr.Reload()
 	presentItems, err := tpa.discoverItems()
 	if err != nil {
 		return err
 	}
 
 	for path, info := range presentItems {
-		tpa.queue.Push(NewQueueItem(info, path, tpa))
+		tpa.queueMgr.Push(NewQueueItem(info, path, tpa))
 	}
 
-	tpa.queue.Filter(func(queue QueueManager, key int, item *QueueItem) bool {
+	tpa.queueMgr.Filter(func(queue QueueManager, key int, item *QueueItem) bool {
 		if _, ok := presentItems[item.Path]; !ok {
 			item.Cancel()
 			return false
@@ -175,7 +192,7 @@ func (tpa *tpa) synchroniseQueue() error {
 		return true
 	})
 
-	tpa.queue.ForEach(func(q QueueManager, idx int, item *QueueItem) bool {
+	tpa.queueMgr.ForEach(func(q QueueManager, idx int, item *QueueItem) bool {
 		if item.Stage != Import {
 			return false
 		}
@@ -196,26 +213,12 @@ func (tpa *tpa) synchroniseQueue() error {
 	return nil
 }
 
-func (tpa *tpa) CoreService() CoreService   { return tpa.coreService }
-func (tpa *tpa) QueueService() QueueService { return tpa.queueService }
-func (tpa *tpa) MovieService() MovieService { return tpa.movieService }
-
-// ** INTERNAL API ** //
-func (tpa *tpa) Queue() QueueManager            { return tpa.queue }
-func (tpa *tpa) Ffmpeg() Commander              { return tpa.ffmpeg }
-func (tpa *tpa) Profiles() ProfileList          { return tpa.profile }
-func (tpa *tpa) Updates() UpdateManager         { return tpa.updates }
-func (tpa *tpa) WorkerPool() *worker.WorkerPool { return tpa.workerPool }
-func (tpa *tpa) Config() TPAConfig              { return tpa.config }
-
-// ** PRIVATE IMPL ** //
-
 // discoverItems will walk through the import directory and construct a map
 // of all the items inside the import directory (or any nested directories).
 // The key of the map is the path, and the value contains the FileInfo
 func (tpa *tpa) discoverItems() (map[string]fs.FileInfo, error) {
 	presentItems := make(map[string]fs.FileInfo, 0)
-	config := tpa.config
+	config := tpa.cfg
 	err := filepath.WalkDir(config.Format.ImportPath, func(path string, dir fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -244,11 +247,11 @@ func (tpa *tpa) discoverItems() (map[string]fs.FileInfo, error) {
 // for TPA (Docker based Postgres, PgAdmin and Web front-end)
 func (tpa *tpa) initialiseSupportServices() error {
 	// Instantiate watcher for async errors for the below containers
-	config := tpa.config
+	config := tpa.cfg
 	serviceConfig := config.Services
 	asyncErrorReport := make(chan error, 2)
 	go func() {
-		err, _ := <-asyncErrorReport
+		err := <-asyncErrorReport
 		procLogger.Emit(logger.ERROR, "One or more support services has crashed with error: %v ... Shutting down", err)
 
 		// Shutdown now because a support service has crashed...
@@ -260,7 +263,7 @@ func (tpa *tpa) initialiseSupportServices() error {
 	// provide the DB themselves
 	if serviceConfig.EnablePostgres {
 		procLogger.Emit(logger.INFO, "Initialising embedded database...\n")
-		_, err := dockerService.InitialiseDockerDatabase(config.Database, asyncErrorReport)
+		_, err := db.InitialiseDockerDatabase(config.Database, asyncErrorReport)
 		if err != nil {
 			return err
 		}
@@ -268,7 +271,7 @@ func (tpa *tpa) initialiseSupportServices() error {
 
 	if serviceConfig.EnablePgAdmin {
 		procLogger.Emit(logger.INFO, "Initialising embedded pgAdmin server...\n")
-		_, err := dockerService.InitialiseDockerPgAdmin(asyncErrorReport)
+		_, err := db.InitialiseDockerPgAdmin(asyncErrorReport)
 		if err != nil {
 			return err
 		}
@@ -282,31 +285,20 @@ func (tpa *tpa) initialiseSupportServices() error {
 
 }
 
-func (tpa *tpa) initialiseDatabaseConnection() error {
-	procLogger.Emit(logger.INFO, "Connecting to database with GORM...\n")
-	if err := dockerService.DB.Connect(tpa.config.Database); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (tpa *tpa) initialiseWorkers() {
-	tpa.workerPool.PushWorker(worker.NewWorker("Title_Parser", &TitleTask{tpa: tpa}, int(Title), make(chan int)))
-	tpa.workerPool.PushWorker(worker.NewWorker("OMDB_Handler", &OmdbTask{tpa: tpa}, int(Omdb), make(chan int)))
-	tpa.workerPool.PushWorker(worker.NewWorker("Database_Committer", &DatabaseTask{tpa: tpa}, int(Database), make(chan int)))
-}
-
 // initialise will intialise all support services and workers, and connect to the backing DB
 func (tpa *tpa) initialise() error {
 	if err := tpa.initialiseSupportServices(); err != nil {
 		return err
 	}
 
-	if err := tpa.initialiseDatabaseConnection(); err != nil {
+	procLogger.Emit(logger.INFO, "Connecting to database with GORM...\n")
+	if err := db.DB.Connect(tpa.cfg.Database); err != nil {
 		return err
 	}
 
-	tpa.initialiseWorkers()
+	tpa.workers.PushWorker(worker.NewWorker("Title_Parser", &TitleTask{tpa: tpa}, int(Title), make(chan int)))
+	tpa.workers.PushWorker(worker.NewWorker("OMDB_Handler", &OmdbTask{tpa: tpa}, int(Omdb), make(chan int)))
+	tpa.workers.PushWorker(worker.NewWorker("Database_Committer", &DatabaseTask{tpa: tpa}, int(Database), make(chan int)))
+
 	return nil
 }

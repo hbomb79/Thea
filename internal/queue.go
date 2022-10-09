@@ -9,13 +9,13 @@ import (
 )
 
 type QueueManager interface {
+	Items() *[]*QueueItem
 	Retrieve(string) *QueueItem
 	Contains(string) bool
 	Push(*QueueItem) error
 	Remove(*QueueItem) error
 	Pick(QueueItemStage) *QueueItem
 	AdvanceStage(*QueueItem)
-	PromoteItem(*QueueItem) error
 	Filter(ItemFn)
 	ForEach(ItemFn)
 	FindById(id int) (*QueueItem, int)
@@ -26,7 +26,7 @@ type QueueManager interface {
 // processorQueue is the Queue of items to be processed by this
 // processor
 type processorQueue struct {
-	Items  []*QueueItem `json:"items" groups:"api"`
+	items  []*QueueItem
 	lastId int
 	cache  *cache.Cache
 	sync.Mutex
@@ -37,7 +37,7 @@ type processorQueue struct {
 // already populated.
 func NewProcessorQueue(cachePath string) QueueManager {
 	return &processorQueue{
-		Items:  make([]*QueueItem, 0),
+		items:  make([]*QueueItem, 0),
 		lastId: 0,
 		cache:  cache.New(cachePath),
 	}
@@ -51,7 +51,7 @@ func (queue *processorQueue) Reload() {
 // the one provided. If one is found, a pointer to the item is returned; otherwise
 // nil is returned.
 func (queue *processorQueue) Retrieve(path string) *QueueItem {
-	for _, item := range queue.Items {
+	for _, item := range queue.items {
 		if item.Path == path {
 			return item
 		}
@@ -70,6 +70,11 @@ func (queue *processorQueue) Contains(path string) bool {
 	return false
 }
 
+// Items returns all the items inside of this queue
+func (queue *processorQueue) Items() *[]*QueueItem {
+	return &queue.items
+}
+
 // Push accepts a QueueItem pointer and will push (append) it to
 // the Queue. This method also sets the 'Id' of the QueueItem
 // automatically (queue.lastId)
@@ -82,7 +87,7 @@ func (queue *processorQueue) Push(item *QueueItem) error {
 	}
 
 	item.ItemID = queue.lastId
-	queue.Items = append(queue.Items, item)
+	queue.items = append(queue.items, item)
 	queue.lastId++
 
 	return nil
@@ -101,7 +106,7 @@ func (queue *processorQueue) Remove(item *QueueItem) error {
 		queue.cache.PushItem(item.Path, "cancelled")
 	}
 
-	queue.Items = append(queue.Items[:idx], queue.Items[idx+1:len(queue.Items)]...)
+	queue.items = append(queue.items[:idx], queue.items[idx+1:len(queue.items)]...)
 	return nil
 }
 
@@ -114,7 +119,7 @@ func (queue *processorQueue) Pick(stage QueueItemStage) *QueueItem {
 	queue.Lock()
 	defer queue.Unlock()
 
-	for _, item := range queue.Items {
+	for _, item := range queue.items {
 		if item.Stage == stage && item.Status == Pending {
 			item.SetStatus(Processing)
 
@@ -147,44 +152,6 @@ func (queue *processorQueue) AdvanceStage(item *QueueItem) {
 	}
 }
 
-// PromoteItem accepts a QueueItem and will restructure the processor
-// queue items to mean that the item provided is the first QueueItem in
-// the slice. Returns an error if the queue item provided is not found
-// inside the queue slice.
-// Note: this method will lock the mutex for protected access to the
-// shared queue.
-func (queue *processorQueue) PromoteItem(item *QueueItem) error {
-	queue.Lock()
-	defer queue.Unlock()
-
-	// Restructures the slice by taking the items before and
-	// after the index given, and appending them together
-	// before appending the result to a new slice containing
-	// only the item referenced by the index given.
-	promote := func(source []*QueueItem, index int) []*QueueItem {
-		if index == 0 {
-			return source
-		} else if index == len(source)-1 {
-			return append([]*QueueItem{source[index]}, source[:len(source)-1]...)
-		}
-
-		out := append([]*QueueItem{source[index]}, source[:index]...)
-		return append(out, source[index+1:]...)
-	}
-
-	// Search for the item and promote it if/when found
-	for position := 0; position <= len(queue.Items); position++ {
-		if queue.Items[position] == item {
-			queue.Items = promote(queue.Items, position)
-
-			return nil
-		}
-	}
-
-	// Not found, return error
-	return errors.New("cannot promote: item does not exist inside this queue")
-}
-
 type ItemFn func(QueueManager, int, *QueueItem) bool
 
 // Filter runs the provided callback for every item inside the queue. If the callback
@@ -195,13 +162,13 @@ func (queue *processorQueue) Filter(cb ItemFn) {
 	defer queue.Unlock()
 
 	newItems := make([]*QueueItem, 0)
-	for key, item := range queue.Items {
+	for key, item := range queue.items {
 		if cb(queue, key, item) {
 			newItems = append(newItems, item)
 		}
 	}
 
-	queue.Items = newItems
+	queue.items = newItems
 }
 
 // ForEach iterates over each item in the ProcessorQueue and executes
@@ -210,7 +177,7 @@ func (queue *processorQueue) Filter(cb ItemFn) {
 // each time (see type itemFn). If the callback at any point returns 'True', the
 // loop is broken. A 'false' return from the callback has no impact.
 func (queue *processorQueue) ForEach(cb ItemFn) {
-	for key, item := range queue.Items {
+	for key, item := range queue.items {
 		if cb(queue, key, item) {
 			break
 		}
@@ -221,7 +188,7 @@ func (queue *processorQueue) ForEach(cb ItemFn) {
 // the int 'id' provided to this method. If found, a pointer to this QueueItem, and the index
 // of the QueueItem in the queue is returned. If not found, nil and -1 is returned
 func (queue *processorQueue) FindById(id int) (*QueueItem, int) {
-	for idx, item := range queue.Items {
+	for idx, item := range queue.items {
 		if item.ItemID == id {
 			return item, idx
 		}
@@ -238,7 +205,7 @@ func (queue *processorQueue) Reorder(indexOrder []int) error {
 	queue.Lock()
 	defer queue.Unlock()
 
-	queueLength := len(queue.Items)
+	queueLength := len(queue.items)
 	if len(indexOrder) != queueLength {
 		return errors.New("indexOrder provided must be equal in length to the queue")
 	}
@@ -253,6 +220,6 @@ func (queue *processorQueue) Reorder(indexOrder []int) error {
 		return fmt.Errorf("indexOrder key %v specifies item ID %v, which does not exist", k, v)
 	}
 
-	queue.Items = newQueue
+	queue.items = newQueue
 	return nil
 }

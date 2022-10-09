@@ -48,7 +48,7 @@ func (task *baseTask) executeTask(w worker.Worker, tpa TPA, fn taskFn) error {
 			default:
 			}
 
-			item := tpa.Queue().Pick(QueueItemStage(w.Stage()))
+			item := tpa.queue().Pick(QueueItemStage(w.Stage()))
 			if item == nil {
 				break inner
 			}
@@ -149,7 +149,7 @@ func (task *TitleTask) processTitle(w worker.Worker, queueItem *QueueItem) error
 
 // advances the item by advancing the stage of the item
 func (task *TitleTask) advance(item *QueueItem) {
-	task.tpa.Queue().AdvanceStage(item)
+	task.tpa.queue().AdvanceStage(item)
 }
 
 // OmdbTask is the task responsible for querying to OMDB API for information
@@ -342,7 +342,7 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (bool, error) {
 // fails for another reason, an OmdbRequestError is returned.
 func (task *OmdbTask) search(w worker.Worker, queueItem *QueueItem) (*OmdbInfo, error) {
 	// Peform the search
-	cfg := task.tpa.Config()
+	cfg := task.tpa.config()
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "s", queueItem.TitleInfo.Title, cfg.OmdbKey))
 	if err != nil {
 		// Request exception
@@ -379,7 +379,7 @@ func (task *OmdbTask) search(w worker.Worker, queueItem *QueueItem) (*OmdbInfo, 
 // If no match is found a OmdbNoResultError is returned - if the request fails
 // for another reason, an OmdbRequestError is returned.
 func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, error) {
-	cfg := task.tpa.Config()
+	cfg := task.tpa.config()
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "i", imdbId, cfg.OmdbKey))
 	if err != nil {
 		// Request exception
@@ -425,7 +425,7 @@ func (task *OmdbTask) find(w worker.Worker, queueItem *QueueItem) error {
 // for that stage
 func (task *OmdbTask) advance(item *QueueItem) {
 	// Release the QueueItem by advancing it to the next pipeline stage
-	task.tpa.Queue().AdvanceStage(item)
+	task.tpa.queue().AdvanceStage(item)
 }
 
 type DatabaseTask struct {
@@ -481,5 +481,5 @@ func (task *DatabaseTask) commitToDatabase(w worker.Worker, queueItem *QueueItem
 
 // advances the item by advancing the stage of the item
 func (task *DatabaseTask) advance(item *QueueItem) {
-	task.tpa.Queue().AdvanceStage(item)
+	task.tpa.queue().AdvanceStage(item)
 }

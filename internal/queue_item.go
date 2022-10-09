@@ -7,7 +7,8 @@ import (
 	"io/fs"
 	"regexp"
 
-	"github.com/hbomb79/TPA/internal/dockerService"
+	"github.com/hbomb79/TPA/internal/db"
+	"github.com/hbomb79/TPA/internal/profile"
 	"github.com/hbomb79/TPA/pkg/logger"
 	"gorm.io/gorm"
 )
@@ -15,7 +16,7 @@ import (
 var itemLogger = logger.Get("QueueItem")
 
 func init() {
-	dockerService.DB.RegisterModel(&ExportedItem{}, &ExportDetail{}, &Series{}, &Genre{})
+	db.DB.RegisterModel(&ExportedItem{}, &ExportDetail{}, &Series{}, &Genre{})
 }
 
 // Each stage represents a certain stage in the pipeline
@@ -117,7 +118,7 @@ func (item *QueueItem) SetStatus(status QueueItemStatus) {
 		// Item has been cancelled and has wrapped up what it was doing
 		// Remove this item from the queue, mark it in the queue cache
 		// so we don't re-ingest it later
-		item.tpa.Queue().Remove(item)
+		item.tpa.queue().Remove(item)
 	}
 
 	item.NotifyUpdate()
@@ -198,7 +199,7 @@ func (item *QueueItem) FormatTitle() error {
 // ValidateProfileSuitable accepts a profile and will check it's match conditions, and potentially
 // other criteria, to asertain if the profile should be used when transcoding this items content
 // via the FFmpeg commander.
-func (item *QueueItem) ValidateProfileSuitable(pr Profile) bool {
+func (item *QueueItem) ValidateProfileSuitable(pr profile.Profile) bool {
 	matchConds := pr.MatchConditions()
 
 	// Check that this item matches the the conditions specified by the profile. If there
@@ -212,27 +213,27 @@ func (item *QueueItem) ValidateProfileSuitable(pr Profile) bool {
 		var v interface{}
 
 		switch condition.Key {
-		case TITLE:
+		case profile.TITLE:
 			v = item.TitleInfo.Title
-		case RESOLUTION:
+		case profile.RESOLUTION:
 			v = item.TitleInfo.Resolution
-		case EPISODE_NUMBER:
+		case profile.EPISODE_NUMBER:
 			if item.TitleInfo.Episodic && item.TitleInfo.Episode != -1 {
 				v = item.TitleInfo.Episode
 			} else {
 				v = nil
 			}
-		case SEASON_NUMBER:
+		case profile.SEASON_NUMBER:
 			if item.TitleInfo.Episodic && item.TitleInfo.Season != -1 {
 				v = item.TitleInfo.Season
 			} else {
 				v = nil
 			}
-		case SOURCE_EXTENSION:
+		case profile.SOURCE_EXTENSION:
 			v = item.Path
-		case SOURCE_NAME:
+		case profile.SOURCE_NAME:
 			v = item.Name
-		case SOURCE_PATH:
+		case profile.SOURCE_PATH:
 			v = item.Path
 		}
 
@@ -245,7 +246,7 @@ func (item *QueueItem) ValidateProfileSuitable(pr Profile) bool {
 			currentEval = isMatch
 		}
 
-		if condition.Modifier == OR {
+		if condition.Modifier == profile.OR {
 			// End of this block
 			if currentEval {
 				return true
@@ -280,7 +281,7 @@ func (item *QueueItem) Cancel() error {
 }
 
 func (item *QueueItem) CommitToDatabase() error {
-	db := dockerService.DB.GetInstance()
+	db := db.DB.GetInstance()
 
 	// Compose optional/nil-able fields of the export
 	var episodeNumber *int = nil
@@ -302,7 +303,7 @@ func (item *QueueItem) CommitToDatabase() error {
 
 	// Construct exports based on the completed ffmpeg instances
 	exports := make([]*ExportDetail, 0)
-	for _, instance := range item.tpa.Ffmpeg().GetInstancesForItem(item.ItemID) {
+	for _, instance := range item.tpa.ffmpeg().GetInstancesForItem(item.ItemID) {
 		exports = append(exports, &ExportDetail{
 			Name: instance.ProfileTag(),
 			Path: instance.GetOutputPath(),
@@ -336,11 +337,6 @@ func (item *QueueItem) SetPaused(paused bool) error {
 		return nil
 	}
 
-	// (Un)Pause any ffmpeg instances for this item
-	for _, ffmpegInstance := range item.tpa.Ffmpeg().GetInstancesForItem(item.ItemID) {
-		ffmpegInstance.SetPaused(paused)
-	}
-
 	if paused {
 		item.Status = Paused
 	} else {
@@ -351,7 +347,7 @@ func (item *QueueItem) SetPaused(paused bool) error {
 }
 
 func (item *QueueItem) NotifyUpdate() {
-	item.tpa.Updates().NotifyItemUpdate(item.ItemID)
+	item.tpa.NotifyItemUpdate(item.ItemID)
 }
 
 func (item *QueueItem) String() string {
@@ -380,6 +376,6 @@ func (item *QueueItem) MarshalJSON() ([]byte, error) {
 		item.OmdbInfo,
 		item.Trouble,
 		item.ProfileTag,
-		item.tpa.Ffmpeg().GetInstancesForItem(item.ItemID),
+		item.tpa.ffmpeg().GetInstancesForItem(item.ItemID),
 	})
 }

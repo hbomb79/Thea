@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/hbomb79/TPA/internal/profile"
 	"github.com/hbomb79/TPA/pkg/logger"
 )
 
@@ -268,12 +269,12 @@ func (ffmpegI *ffmpegInstance) SetProfileTag(newProfile string) {
 }
 
 func (ffmpegI *ffmpegInstance) GetOutputPath() string {
-	outputFormat := ffmpegI.item.tpa.Config().Format.TargetFormat
+	outputFormat := ffmpegI.item.tpa.config().Format.TargetFormat
 	profile := ffmpegI.getProfileInstance()
 	var itemOutputPath string
 	if profile == nil || profile.Output() == "" {
 		itemOutputPath = fmt.Sprintf("%s.%s", ffmpegI.item.TitleInfo.OutputPath(), outputFormat)
-		itemOutputPath = filepath.Join(ffmpegI.item.tpa.Config().Format.OutputPath, itemOutputPath)
+		itemOutputPath = filepath.Join(ffmpegI.item.tpa.config().Format.OutputPath, itemOutputPath)
 	} else {
 		itemOutputPath = profile.Output()
 	}
@@ -282,8 +283,8 @@ func (ffmpegI *ffmpegInstance) GetOutputPath() string {
 	return itemOutputPath
 }
 
-func (ffmpegI *ffmpegInstance) getProfileInstance() Profile {
-	_, profile := ffmpegI.item.tpa.Profiles().FindProfileByTag(ffmpegI.profileTag)
+func (ffmpegI *ffmpegInstance) getProfileInstance() profile.Profile {
+	_, profile := ffmpegI.item.tpa.profiles().FindProfileByTag(ffmpegI.profileTag)
 
 	return profile
 }
@@ -300,14 +301,14 @@ func (ffmpegI *ffmpegInstance) beginTranscode() error {
 	ffmpegI.SetStatus(WORKING)
 
 	tpa := ffmpegI.item.tpa
-	config := tpa.Config().Format
+	config := tpa.config().Format
 	ffmpegCfg := &ffmpeg.Config{
 		ProgressEnabled: true,
 		FfmpegBinPath:   config.FfmpegBinaryPath,
 		FfprobeBinPath:  config.FfprobeBinaryPath,
 	}
 
-	pIdx, p := tpa.Profiles().FindProfileByTag(ffmpegI.profileTag)
+	pIdx, p := tpa.profiles().FindProfileByTag(ffmpegI.profileTag)
 	if pIdx == -1 {
 		return fmt.Errorf("ffmpeg instance %s failed to start as the profile tag %s no longer exists", ffmpegI, ffmpegI.profileTag)
 	}

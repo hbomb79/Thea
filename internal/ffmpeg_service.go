@@ -5,14 +5,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hbomb79/TPA/internal/profile"
 	"github.com/hbomb79/TPA/pkg/logger"
-	// "github.com/mitchellh/mapstructure"
 )
 
 var commanderLogger = logger.Get("Commander")
 
-// Commander interface for use outside of this file/package
-type Commander interface {
+// FfmpegManager interface for use outside of this file/package
+type FfmpegManager interface {
 	Start(*sync.WaitGroup) error
 	Stop()
 	SetWindowSize(int)
@@ -253,9 +253,9 @@ func (commander *ffmpegCommander) consumeNewTargets() {
 // items in the queue do not contribute to this window, and are skipped with no effect
 // on the algorithm.
 func (commander *ffmpegCommander) extractItemsFromWindow() []*QueueItem {
-	items, itemsScanned := make([]*QueueItem, 0), 0
+	outputItems, itemsScanned := make([]*QueueItem, 0), 0
 
-	commander.tpa.Queue().ForEach(func(_ QueueManager, index int, item *QueueItem) bool {
+	commander.tpa.queue().ForEach(func(_ QueueManager, index int, item *QueueItem) bool {
 		if item.Status == Paused || item.Status == Completed {
 			return false
 		}
@@ -273,13 +273,13 @@ func (commander *ffmpegCommander) extractItemsFromWindow() []*QueueItem {
 				item.SetStatus(Pending)
 			}
 
-			items = append(items, item)
+			outputItems = append(outputItems, item)
 		}
 
 		return itemsScanned == commander.windowSize
 	})
 
-	return items
+	return outputItems
 }
 
 // extractTargetsFromWindow is similar to extractItemsFromWindow, however it explodes each item
@@ -309,9 +309,9 @@ func (commander *ffmpegCommander) extractTargetsFromWindow() []*taskData {
 
 // selectMatchingProfiles iterates over each TPA profile, checking to see which is
 // the best fit for our QueueItem.
-func (commander *ffmpegCommander) selectMatchingProfiles(item *QueueItem) ([]Profile, error) {
-	output := make([]Profile, 0)
-	profileList := commander.tpa.Profiles()
+func (commander *ffmpegCommander) selectMatchingProfiles(item *QueueItem) ([]profile.Profile, error) {
+	output := make([]profile.Profile, 0)
+	profileList := commander.tpa.profiles()
 	if len(profileList.Profiles()) == 0 {
 		return nil, fmt.Errorf("cannot perform profile selection for item %s because server has NO profiles", item)
 	}
@@ -359,7 +359,7 @@ func (commander *ffmpegCommander) runHealthChecks() {
 					continue
 				}
 
-				commander.tpa.Queue().AdvanceStage(item)
+				commander.tpa.queue().AdvanceStage(item)
 			} else {
 				item.SetStatus(Processing)
 			}
@@ -424,7 +424,7 @@ func (commander *ffmpegCommander) GetInstancesForItem(ID int) []CommanderTask {
 
 // NewCommander creates a new ffmpegCommander instance, with the channels
 // already initialised for use.
-func NewCommander(tpa TPA) Commander {
+func NewCommander(tpa TPA) FfmpegManager {
 	return &ffmpegCommander{
 		queueChangedChannel: make(chan int),
 		tpa:                 tpa,

@@ -1,11 +1,19 @@
 package internal
 
+import (
+	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/hbomb79/TPA/internal/profile"
+	"github.com/hbomb79/TPA/pkg/logger"
+)
+
 type GetTroubleDetailsRequest struct{}
 type ResolveTroubleRequest struct{}
 
 type CoreService interface {
 	GetTroubleDetails()
 	ResolveTrouble()
+	GetKnownFfmpegOptions() any
+	GetFfmpegInstancesForItem(int) []CommanderTask
 }
 
 func (coreApi *coreService) GetTroubleDetails() {
@@ -16,9 +24,27 @@ func (coreApi *coreService) ResolveTrouble() {
 
 }
 
+func (service *coreService) GetKnownFfmpegOptions() any {
+	return service.knownFfmpegOptions
+}
+
+func (service *coreService) GetFfmpegInstancesForItem(itemID int) []CommanderTask {
+	return service.tpa.ffmpeg().GetInstancesForItem(itemID)
+}
+
 type coreService struct {
+	tpa                TPA
+	knownFfmpegOptions any
 }
 
 func NewCoreApi(tpa TPA) CoreService {
-	return &coreService{}
+	opts, err := profile.ToArgsMap(&ffmpeg.Options{})
+	if err != nil {
+		procLogger.Emit(logger.ERROR, "Failure to get known FFmpeg options as args map!")
+	}
+
+	return &coreService{
+		tpa:                tpa,
+		knownFfmpegOptions: opts,
+	}
 }

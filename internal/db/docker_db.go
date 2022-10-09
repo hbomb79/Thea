@@ -1,4 +1,4 @@
-package dockerService
+package db
 
 import (
 	"fmt"

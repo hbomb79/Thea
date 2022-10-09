@@ -1,4 +1,4 @@
-package internal
+package profile
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 var profileLogger = logger.Get("ProfileList")
 
 type ProfileFindCallback func(Profile) bool
-type ProfileList interface {
+type ProfileManager interface {
 	Profiles() []Profile
 	InsertProfile(Profile) error
 	RemoveProfile(string) error
@@ -31,7 +31,7 @@ type safeList struct {
 
 // NewProfileList returns a new instance of profileList by address, with
 // the slide of Profile instances created ready for use.
-func NewProfileList(persistentPath string) ProfileList {
+func NewProfileList(persistentPath string) ProfileManager {
 	list := &safeList{
 		profiles: make([]Profile, 0),
 		cache:    cache.New(persistentPath),

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -10,11 +9,11 @@ import (
 )
 
 type HttpGateway struct {
-	queue internal.QueueManager
+	tpa internal.TPA
 }
 
-func NewHttpGateway(queue internal.QueueManager) *HttpGateway {
-	return &HttpGateway{queue: queue}
+func NewHttpGateway(tpa internal.TPA) *HttpGateway {
+	return &HttpGateway{tpa: tpa}
 }
 
 // ** HTTP API Methods ** //
@@ -22,7 +21,7 @@ func NewHttpGateway(queue internal.QueueManager) *HttpGateway {
 // httpQueueIndex returns the current processor queue with some information
 // omitted. Full information for each item can be found via HttpQueueGet
 func (httpGateway *HttpGateway) HttpQueueIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := sheriffApiMarshal(httpGateway.queue, "api")
+	data, err := sheriffApiMarshal(httpGateway.tpa.GetAllItems(), "api")
 	if err != nil {
 		JsonMessage(w, err.Error(), http.StatusInternalServerError)
 
@@ -34,7 +33,7 @@ func (httpGateway *HttpGateway) HttpQueueIndex(w http.ResponseWriter, r *http.Re
 
 // httpQueueGet returns full details for a queue item at the index {id} inside the queue
 func (httpGateway *HttpGateway) HttpQueueGet(w http.ResponseWriter, r *http.Request) {
-	queue, stringId := httpGateway.queue, mux.Vars(r)["id"]
+	stringId := mux.Vars(r)["id"]
 
 	id, err := strconv.Atoi(stringId)
 	if err != nil {
@@ -42,8 +41,8 @@ func (httpGateway *HttpGateway) HttpQueueGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	queueItem, idx := queue.FindById(id)
-	if queueItem == nil || idx < 0 {
+	queueItem, err := httpGateway.tpa.GetItem(id)
+	if err != nil {
 		JsonMessage(w, "QueueItem ID '"+stringId+"' cannot be found", http.StatusBadRequest)
 		return
 	}
@@ -56,7 +55,7 @@ func (httpGateway *HttpGateway) HttpQueueGet(w http.ResponseWriter, r *http.Requ
 // reorder the queue by sending an item to the top of the
 // queue, therefore priorisiting it - similar to the Steam library
 func (httpGateway *HttpGateway) HttpQueueUpdate(w http.ResponseWriter, r *http.Request) {
-	queue, stringId := httpGateway.queue, mux.Vars(r)["id"]
+	stringId := mux.Vars(r)["id"]
 
 	id, err := strconv.Atoi(stringId)
 	if err != nil {
@@ -64,10 +63,7 @@ func (httpGateway *HttpGateway) HttpQueueUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	queueItem, idx := queue.FindById(id)
-	if queueItem == nil || idx < 0 {
-		JsonMessage(w, "QueueItem with ID "+fmt.Sprint(id)+" not found", http.StatusNotFound)
-	} else if queue.PromoteItem(queueItem) != nil {
+	if httpGateway.tpa.PromoteItem(id) != nil {
 		JsonMessage(w, "Failed to promote QueueItem #"+stringId+": "+err.Error(), http.StatusInternalServerError)
 	} else {
 		JsonMessage(w, "Queue item promoted successfully", http.StatusOK)

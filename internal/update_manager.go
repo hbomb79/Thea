@@ -44,7 +44,7 @@ func (mgr *updateManager) NotifyQueueUpdate() {
 
 func (mgr *updateManager) SubmitUpdates() {
 	for itemID := range mgr.pendingUpdates {
-		queueItem, idx := mgr.tpa.Queue().FindById(itemID)
+		queueItem, idx := mgr.tpa.queue().FindById(itemID)
 		if queueItem == nil || idx < 0 {
 			mgr.submitFn(&Update{
 				UpdateType:   ITEM_UPDATE,

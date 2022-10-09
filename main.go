@@ -8,6 +8,7 @@ import (
 
 	"github.com/hbomb79/TPA/internal"
 	"github.com/hbomb79/TPA/internal/api"
+	"github.com/hbomb79/TPA/internal/profile"
 	"github.com/hbomb79/TPA/pkg/logger"
 	"github.com/hbomb79/TPA/pkg/socket"
 )
@@ -28,10 +29,10 @@ func NewTpa(config internal.TPAConfig) *services {
 		socketHub:  socket.NewSocketHub(),
 	}
 
-	tpa := internal.NewTPA(config, services.OnProcessorUpdate)
+	tpa := internal.NewTpa(config, services.OnProcessorUpdate)
 	services.proc = tpa
 	services.wsGateway = api.NewWsGateway(tpa)
-	services.httpGateway = api.NewHttpGateway(tpa.Queue())
+	services.httpGateway = api.NewHttpGateway(tpa)
 	return services
 
 }
@@ -40,7 +41,7 @@ func (tpa *services) newClientConnection() map[string]interface{} {
 	return map[string]interface{}{
 		// "ffmpegOptions":          tpa.proc.KnownFfmpegOptions,
 		"ffmpegMatchKeys":        internal.FFMPEG_COMMAND_SUBSTITUTIONS,
-		"profileAcceptableTypes": internal.MatchKeyAcceptableTypes(),
+		"profileAcceptableTypes": profile.MatchKeyAcceptableTypes(),
 	}
 }
 
@@ -122,8 +123,8 @@ func (tpa *services) setupRoutes() {
 func (tpa *services) OnProcessorUpdate(update *internal.Update) {
 	body := map[string]interface{}{"context": update}
 	if update.UpdateType == internal.PROFILE_UPDATE {
-		body["profiles"] = tpa.proc.Profiles().Profiles()
-		// body["targetOpts"] = tpa.proc.KnownFfmpegOptions
+		body["profiles"] = tpa.proc.GetAllProfiles()
+		body["targetOpts"] = tpa.proc.GetKnownFfmpegOptions()
 	}
 
 	tpa.socketHub.Send(&socket.SocketMessage{

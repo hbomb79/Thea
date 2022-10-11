@@ -20,7 +20,7 @@ var dbLogger = logger.Get("DB")
 type DatabaseServer interface {
 	Connect(DatabaseConfig) error
 	GetInstance() *gorm.DB
-	RegisterModel(...interface{})
+	RegisterModel(...any)
 }
 
 type dbServer struct {
@@ -28,7 +28,7 @@ type dbServer struct {
 	models []interface{}
 }
 
-var DB DatabaseServer = &dbServer{models: make([]interface{}, 0)}
+var DB DatabaseServer = &dbServer{models: make([]any, 0)}
 
 func (db *dbServer) Connect(config DatabaseConfig) error {
 	dsn := fmt.Sprintf(
@@ -73,6 +73,6 @@ func (db *dbServer) GetInstance() *gorm.DB {
 	return db.gorm
 }
 
-func (db *dbServer) RegisterModel(models ...interface{}) {
+func (db *dbServer) RegisterModel(models ...any) {
 	db.models = append(db.models, models...)
 }

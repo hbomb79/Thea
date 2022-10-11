@@ -232,46 +232,24 @@ func (ex *OmdbTaskError) MarshalJSON() ([]byte, error) {
 	return marshalToJson(ex)
 }
 
-// FormatTaskContainerError is an error/trouble type that is raised when one or more ffmpeg instances encounter
-// an error. Due to the way that Thea runs multiple format instances at once for a particular
-// item, a FormatTaskContainerError contains multiple smaller Trouble instances that can be individually
-// resolved via their uuid.
-type FormatTaskContainerError struct {
-	BaseTaskError
-	Troubles []Trouble
-}
-
-// Resolve will attempt to resolve this trouble by resetting the queue items status
-// and waking up any sleeping workers in the format worker pool. This essentially means
-// that a worker will try this queue item again. Repeated failures likely means the input
-// file is bad.
-func (ex *FormatTaskContainerError) Resolve(map[string]interface{}) error {
-	//TODO Alter this to resolve the instances trouble directly.
-	return errors.New("NYI")
-}
-
-func (ex *FormatTaskContainerError) MarshalJSON() ([]byte, error) {
-	return marshalToJson(ex)
-}
-
-func (ex *FormatTaskContainerError) Payload() map[string]interface{} {
-	return map[string]interface{}{"children": ex.Troubles}
-}
-
-func (ex *FormatTaskContainerError) Raise(t Trouble) {
-	ex.Troubles = append(ex.Troubles, t)
-}
-
-type FormatTaskError struct {
+type FfmpegTaskError struct {
 	BaseTaskError
 	// taskInstance CommanderTask
 }
 
-func (ex *FormatTaskError) Resolve(args map[string]interface{}) error {
-	return errors.New("illegal resolution on FormatTaskError - Troubles of this type can only be resolved via the owner CommanderTask")
+func (ex *FfmpegTaskError) Resolve(args map[string]interface{}) error {
+	if _, ok := args["retry"]; ok {
+		ex.ProvideResolutionContext("retry", true)
+		return nil
+	} else if _, ok := args["cancel"]; ok {
+		ex.ProvideResolutionContext("cancel", true)
+		return nil
+	}
+
+	return nil
 }
 
-func (ex *FormatTaskError) MarshalJSON() ([]byte, error) {
+func (ex *FfmpegTaskError) MarshalJSON() ([]byte, error) {
 	return marshalToJson(ex)
 }
 
@@ -280,15 +258,7 @@ type ProfileSelectionError struct {
 }
 
 func (ex *ProfileSelectionError) Resolve(args map[string]interface{}) error {
-	if _, ok := args["retry"]; ok {
-		ex.ProvideResolutionContext("retry", true)
-		return nil
-	} else if v, ok := args["profileTag"]; ok {
-		ex.ProvideResolutionContext("profileTag", v.(string))
-		return nil
-	} else {
-		return errors.New("unable to resolve ProfileSelectionError - arguments provided are invalid! One of 'action, profileTag' was expected")
-	}
+	return errors.New("there is no explicit resolution for this trouble - please add/correct your Thea profiles, or cancel this item, and this trouble will automatically resolve")
 }
 
 func (ex *ProfileSelectionError) MarshalJSON() ([]byte, error) {

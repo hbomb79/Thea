@@ -112,7 +112,7 @@ func (service *queueService) CancelItem(itemID int) error {
 	// to execute, so only the ffmpeg stage needs this "intervention" to cut the processing
 	// off... otherwise we could be waiting for hours.
 	for _, instance := range service.thea.ffmpeg().GetInstancesForItem(itemID) {
-		instance.Stop()
+		instance.Cancel()
 	}
 
 	return nil
@@ -130,7 +130,7 @@ func (service *queueService) PauseItem(itemID int) error {
 
 	instances := service.thea.ffmpeg().GetInstancesForItem(itemID)
 	for _, v := range instances {
-		v.SetPaused(true)
+		v.Pause()
 	}
 
 	return nil
@@ -152,12 +152,12 @@ func (service *queueService) ResumeItem(itemID int) error {
 	// the item means we should unpause all instances too
 	instances := service.thea.ffmpeg().GetInstancesForItem(itemID)
 	for _, instance := range instances {
-		if instance.Status() != ffmpeg.PAUSED {
+		if instance.Status() != ffmpeg.SUSPENDED {
 			return nil
 		}
 	}
 	for _, instance := range instances {
-		instance.SetPaused(false)
+		instance.Resume()
 	}
 
 	return nil
@@ -238,13 +238,13 @@ func (service *queueService) ExportItem(item *queue.QueueItem) error {
 
 	exports := service.thea.ffmpeg().GetInstancesForItem(item.ItemID)
 	for _, v := range exports {
-		if v.Status() != ffmpeg.FINISHED {
+		if v.Status() != ffmpeg.COMPLETE {
 			return fmt.Errorf("failed to ExportItem(%d) -> One or more FFmpeg instances are not finished (found instance %v as incomplete)", item.ItemID, v)
 		}
 
 		exportItem.Exports = append(exportItem.Exports, &export.ExportDetail{
-			Name: v.ProfileTag(),
-			Path: v.GetOutputPath(),
+			Name: v.Profile(),
+			Path: v.OutputPath(),
 		})
 	}
 

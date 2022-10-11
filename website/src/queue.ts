@@ -323,7 +323,7 @@ export class ContentManager {
     private handleUpdate(data: SocketData) {
         const update = data.arguments.context
         if (update.UpdateType == 0) {
-            const newItem = update.QueueItem as QueueDetails
+            const newItem = update.Payload as QueueDetails
 
             const idx = this._items.findIndex(item => item.id == update.ItemId)
             if (update.ItemPosition < 0 || !newItem) {
@@ -363,7 +363,6 @@ export class ContentManager {
             console.log("Profile update received from server - fetching profile information")
             this.requestTranscoderProfiles()
         } else if (update.UpdateType == 3) {
-            alert("Hit movies update - NYI so this is unexpected!")
             console.log("Movies update receives from server - refetching movies index")
             this.requestMovies()
         }

@@ -164,7 +164,7 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *socket.SocketHub, message *soc
 	if item, err := wsGateway.thea.GetItem(int(idArg.(float64))); err == nil {
 		if isEmbed {
 			for _, i := range wsGateway.thea.GetFfmpegInstancesForItem(item.ItemID) {
-				if i.ProfileTag() == instanceTag {
+				if i.Profile() == instanceTag {
 					if err := i.ResolveTrouble(message.Body); err != nil {
 						return fmt.Errorf("failed to resolve embedded ffmpeg trouble for queue item %v - %v", idArg, err.Error())
 					}

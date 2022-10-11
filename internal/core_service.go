@@ -14,7 +14,7 @@ type CoreService interface {
 	GetTroubleDetails()
 	ResolveTrouble()
 	GetKnownFfmpegOptions() any
-	GetFfmpegInstancesForItem(int) []f.CommanderTask
+	GetFfmpegInstancesForItem(int) []f.FfmpegInstance
 }
 
 func (coreApi *coreService) GetTroubleDetails() {
@@ -29,7 +29,7 @@ func (service *coreService) GetKnownFfmpegOptions() any {
 	return service.knownFfmpegOptions
 }
 
-func (service *coreService) GetFfmpegInstancesForItem(itemID int) []f.CommanderTask {
+func (service *coreService) GetFfmpegInstancesForItem(itemID int) []f.FfmpegInstance {
 	return service.thea.ffmpeg().GetInstancesForItem(itemID)
 }
 

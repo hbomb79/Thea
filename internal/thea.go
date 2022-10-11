@@ -48,7 +48,7 @@ type Thea interface {
 	Stop()
 
 	queue() queue.QueueManager
-	ffmpeg() ffmpeg.FfmpegManager
+	ffmpeg() ffmpeg.FfmpegCommander
 	profiles() profile.ProfileManager
 	workerPool() *worker.WorkerPool
 	config() TheaConfig
@@ -65,7 +65,7 @@ type theaImpl struct {
 	MovieService
 
 	queueMgr   queue.QueueManager
-	ffmpegMgr  ffmpeg.FfmpegManager
+	ffmpegMgr  ffmpeg.FfmpegCommander
 	profileMgr profile.ProfileManager
 	workers    *worker.WorkerPool
 
@@ -104,7 +104,7 @@ func NewThea(config TheaConfig, updateFn UpdateManagerSubmitFn) Thea {
 
 	// Inject state managers
 	t.queueMgr = queue.NewProcessorQueue(cachePath)
-	t.ffmpegMgr = ffmpeg.NewCommander(t, config.Format)
+	t.ffmpegMgr = ffmpeg.NewFfmpegCommander(ctx, t, config.Format)
 	t.profileMgr = profile.NewProfileList(configPath)
 	t.workers = worker.NewWorkerPool()
 
@@ -128,7 +128,7 @@ func (thea *theaImpl) Start() error {
 	thea.shutdownWaitGroup.Add(2)
 
 	go thea.workers.StartWorkers(thea.shutdownWaitGroup)
-	go thea.ffmpegMgr.Start(thea.shutdownWaitGroup)
+	go thea.ffmpegMgr.Start(thea.shutdownWaitGroup, thea.theaCtx)
 
 	// Initialise some tickers
 	updateTicker := time.NewTicker(THEA_UPDATE_INTERVAL)
@@ -163,7 +163,6 @@ func (thea *theaImpl) Stop() {
 
 	procLogger.Emit(logger.STOP, "Closing all managers...\n")
 	thea.workers.CloseWorkers()
-	thea.ffmpegMgr.Stop()
 	thea.shutdownWaitGroup.Wait()
 
 	procLogger.Emit(logger.STOP, "Closing all containers...\n")
@@ -172,7 +171,7 @@ func (thea *theaImpl) Stop() {
 
 // ** INTERNAL API ** //
 func (thea *theaImpl) queue() queue.QueueManager        { return thea.queueMgr }
-func (thea *theaImpl) ffmpeg() ffmpeg.FfmpegManager     { return thea.ffmpegMgr }
+func (thea *theaImpl) ffmpeg() ffmpeg.FfmpegCommander   { return thea.ffmpegMgr }
 func (thea *theaImpl) profiles() profile.ProfileManager { return thea.profileMgr }
 func (thea *theaImpl) workerPool() *worker.WorkerPool   { return thea.workers }
 func (thea *theaImpl) config() TheaConfig               { return thea.cfg }

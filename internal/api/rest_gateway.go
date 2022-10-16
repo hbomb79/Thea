@@ -6,6 +6,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/hbomb79/Thea/internal"
+	"github.com/hbomb79/Thea/internal/ffmpeg"
+	"github.com/hbomb79/Thea/internal/queue"
 )
 
 type HttpGateway struct {
@@ -47,7 +49,12 @@ func (httpGateway *HttpGateway) HttpQueueGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	JsonMarshal(w, queueItem)
+	instances := httpGateway.thea.GetFfmpegInstancesForItem(id)
+
+	JsonMarshal(w, struct {
+		*queue.QueueItem
+		Instances []ffmpeg.FfmpegInstance `json:"ffmpegInstances"`
+	}{queueItem, instances})
 }
 
 // httpQueueUpdate pushes an update to the processor dictating the new

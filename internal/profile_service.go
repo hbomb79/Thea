@@ -4,7 +4,7 @@ import "github.com/hbomb79/Thea/internal/profile"
 
 type ProfileService interface {
 	GetAllProfiles() []profile.Profile
-	CreateProfile(profile.Profile) error
+	InsertProfile(profile.Profile) error
 	GetProfileByTag(string) profile.Profile
 	DeleteProfileByTag(string) error
 	MoveProfile(string, int) error
@@ -18,8 +18,13 @@ func (service *profileService) GetAllProfiles() []profile.Profile {
 	return service.thea.profiles().Profiles()
 }
 
-func (service *profileService) CreateProfile(profile profile.Profile) error {
-	return service.thea.profiles().InsertProfile(profile)
+func (service *profileService) InsertProfile(profile profile.Profile) error {
+	if err := service.thea.profiles().InsertProfile(profile); err != nil {
+		return err
+	}
+
+	service.notifyUpdate()
+	return nil
 }
 
 func (service *profileService) GetProfileByTag(tag string) profile.Profile {
@@ -28,11 +33,26 @@ func (service *profileService) GetProfileByTag(tag string) profile.Profile {
 }
 
 func (service *profileService) DeleteProfileByTag(tag string) error {
-	return service.thea.profiles().RemoveProfile(tag)
+	if err := service.thea.profiles().RemoveProfile(tag); err != nil {
+		return err
+	}
+
+	service.notifyUpdate()
+	return nil
 }
 
 func (service *profileService) MoveProfile(tag string, position int) error {
-	return service.thea.profiles().MoveProfile(tag, position)
+	if err := service.thea.profiles().MoveProfile(tag, position); err != nil {
+		return err
+	}
+
+	service.notifyUpdate()
+	return nil
+}
+
+func (service *profileService) notifyUpdate() {
+	service.thea.profiles().Save()
+	service.thea.NotifyProfileUpdate()
 }
 
 func NewProfileService(thea Thea) ProfileService {

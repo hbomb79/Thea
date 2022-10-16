@@ -12,7 +12,7 @@ type UpdateManager interface {
 	NotifyProfileUpdate()
 	NotifyFfmpegUpdate(int, ffmpeg.FfmpegInstance)
 	SubmitUpdates()
-	EventBus() EventBus.Bus
+	EventBus() EventBus.BusSubscriber
 }
 
 type processorUpdateType = int
@@ -30,9 +30,14 @@ type Update struct {
 }
 
 type itemUpdate struct {
-	QueueItem    *queue.QueueItem
-	ItemPosition int
-	ItemId       int
+	QueueItem    *queue.QueueItem `json:"item"`
+	ItemPosition int              `json:"item_position"`
+	ItemId       int              `json:"item_id"`
+}
+
+type ffmpegUpdate struct {
+	ItemId    int                     `json:"item_id"`
+	Instances []ffmpeg.FfmpegInstance `json:"ffmpeg_instances"`
 }
 
 type UpdateManagerSubmitFn func(*Update)
@@ -90,26 +95,24 @@ func (mgr *updateManager) SubmitUpdates() {
 
 	for itemID := range mgr.pendingFfmpegUpdates {
 		instances := mgr.thea.GetFfmpegInstancesForItem(itemID)
-		details := make([]ffmpeg.InstanceProgress, len(instances))
-		for _, v := range instances {
-			// Generate details
-			details = append(details, *mgr.thea.ffmpeg().GetLastKnownProgressForInstance(v.Id()))
-		}
 
 		mgr.submitFn(&Update{
 			UpdateType: FFMPEG_UPDATE,
-			Payload:    details,
+			Payload:    &ffmpegUpdate{itemID, instances},
 		})
+
+		delete(mgr.pendingFfmpegUpdates, itemID)
 	}
 }
 
-func (mgr *updateManager) EventBus() EventBus.Bus { return mgr.eventBus }
+func (mgr *updateManager) EventBus() EventBus.BusSubscriber { return mgr.eventBus }
 
 func NewUpdateManager(submitFn UpdateManagerSubmitFn, thea Thea) UpdateManager {
 	return &updateManager{
-		submitFn:           submitFn,
-		thea:               thea,
-		pendingItemUpdates: make(map[int]bool),
-		eventBus:           EventBus.New(),
+		submitFn:             submitFn,
+		thea:                 thea,
+		pendingItemUpdates:   make(map[int]bool),
+		pendingFfmpegUpdates: make(map[int]bool),
+		eventBus:             EventBus.New(),
 	}
 }

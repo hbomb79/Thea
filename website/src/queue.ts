@@ -84,11 +84,10 @@ export interface TranscodeTarget {
 }
 
 export interface CommanderTask {
-    Progress: FfmpegProgress
-    Status: CommanderTaskStatus
-    Trouble: QueueTroubleDetails
-    ItemId: number
-    ProfileTag: string
+    id: string
+    progress: FfmpegProgress
+    status: CommanderTaskStatus
+    trouble: QueueTroubleDetails
 }
 
 export interface FfmpegProgress {
@@ -105,6 +104,9 @@ export interface QueueItem {
     stage: QueueStage
     status: QueueStatus
     statusLine: string
+    title_info: QueueTitleInfo
+    omdb_info: QueueOmdbInfo
+    trouble: QueueTroubleDetails
 }
 
 // QueueTroubleInfo represents the data we receive
@@ -151,12 +153,21 @@ export interface QueueDetails extends QueueItem {
     title_info: QueueTitleInfo
     omdb_info: QueueOmdbInfo
     trouble: QueueTroubleDetails
-    profile_tag: string
-    ffmpeg_instances: CommanderTask[]
 }
 
 export interface Movie {
     //TODO
+}
+
+export interface ItemUpdate {
+    item: QueueDetails
+    item_position: number
+    item_id: number
+}
+
+export interface FfmpegUpdate {
+    item_id: number
+    ffmpeg_instances: CommanderTask[]
 }
 
 // The ContentManager class is available for use by components
@@ -167,10 +178,12 @@ export class ContentManager {
     private _items: QueueItem[] = []
     private _details: Map<number, QueueDetails> = new Map()
     private _profiles: TranscodeProfile[] = []
+    private _ffmpeg: Map<number, CommanderTask[]> = new Map()
     private _movies: Movie[] = []
 
     itemIndex: Writable<QueueItem[]>
     itemDetails: Writable<Map<number, QueueDetails>>
+    itemFfmpegInstances: Writable<Map<number, CommanderTask[]>>
     serverProfiles: Writable<TranscodeProfile[]>
     knownMovies: Writable<Movie[]>
     // movieDetails: Writable<<>>
@@ -185,6 +198,7 @@ export class ContentManager {
         this.itemDetails = writable(this._details)
         this.serverProfiles = writable(this._profiles)
         this.knownMovies = writable(this._movies)
+        this.itemFfmpegInstances = writable(this._ffmpeg)
 
         this.itemIndex.subscribe((items) => {
             console.log("itemIndex change:", items)
@@ -200,6 +214,11 @@ export class ContentManager {
         this.serverProfiles.subscribe((profiles) => {
             console.log("serverProfiles change:", profiles)
             this._profiles = profiles
+        })
+
+        this.itemFfmpegInstances.subscribe((instances) => {
+            console.log("ffmpegInstances change:", instances)
+            this._ffmpeg = instances
         })
 
         this.requestMovies()
@@ -279,6 +298,9 @@ export class ContentManager {
             if (response.type == SocketMessageType.RESPONSE) {
                 this._details.set(itemId, response.arguments.payload)
                 this.itemDetails.set(this._details)
+
+                this._ffmpeg.set(itemId, response.arguments.instances)
+                this.itemFfmpegInstances.set(this._ffmpeg)
             } else {
                 console.warn("[QueueManager] Invalid reply while fetching queue details.", response)
             }
@@ -323,10 +345,10 @@ export class ContentManager {
     private handleUpdate(data: SocketData) {
         const update = data.arguments.context
         if (update.UpdateType == 0) {
-            const newItem = update.Payload as QueueDetails
+            const itemUpdate = update.Payload as ItemUpdate
 
-            const idx = this._items.findIndex(item => item.id == update.ItemId)
-            if (update.ItemPosition < 0 || !newItem) {
+            const idx = this._items.findIndex(item => item.id == itemUpdate.item_id)
+            if (itemUpdate.item_position < 0 || !itemUpdate.item) {
                 // Item has been removed from queue! Find the item
                 // in the queue with the ID that matches the one removed
                 // and pull it from the list
@@ -339,7 +361,7 @@ export class ContentManager {
 
                 this._items.splice(idx, 1)
                 this.itemIndex.set(this._items)
-            } else if (idx != update.ItemPosition) {
+            } else if (idx != update.item_position) {
                 // The position for this item has changed.. likely due to a item promotion.
                 // Update the order of the queue - to do this we should
                 // simply re-query the server for an up-to-date queue index.
@@ -347,11 +369,11 @@ export class ContentManager {
             } else {
                 if (idx < 0) {
                     // New item
-                    this._items.push(newItem)
+                    this._items.push(itemUpdate.item)
                     this.itemIndex.set(this._items)
                 } else {
                     // An existing item has had an in-place update.
-                    this._details.set(newItem.id, newItem)
+                    this._details.set(itemUpdate.item_id, itemUpdate.item)
                     this.itemDetails.set(this._details)
                 }
 
@@ -363,8 +385,19 @@ export class ContentManager {
             console.log("Profile update received from server - fetching profile information")
             this.requestTranscoderProfiles()
         } else if (update.UpdateType == 3) {
-            console.log("Movies update receives from server - refetching movies index")
-            this.requestMovies()
+            console.log("FFmpeg update receives from server")
+
+            const ffmpegUpdate = update.Payload as FfmpegUpdate
+            if (!this._details.has(ffmpegUpdate.item_id)) {
+                // Hm, we received an ffmpeg update for an item we don't even know aboout...
+                console.warn("Received ffmpeg update for unknown item. Forcing refresh!")
+                this.requestQueueIndex()
+
+                return
+            }
+
+            this._ffmpeg.set(ffmpegUpdate.item_id, ffmpegUpdate.ffmpeg_instances)
+            this.itemFfmpegInstances.set(this._ffmpeg)
         }
     }
 }

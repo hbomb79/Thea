@@ -47,7 +47,9 @@ func (wsGateway *WsGateway) WsQueueDetails(hub *socket.SocketHub, message *socke
 		return err
 	}
 
-	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem}, socket.Response))
+	ffmpegInstances := wsGateway.thea.GetFfmpegInstancesForItem(int(v))
+
+	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": queueItem, "instances": ffmpegInstances}, socket.Response))
 	return nil
 }
 
@@ -108,7 +110,7 @@ func (wsGateway *WsGateway) WsItemPause(hub *socket.SocketHub, message *socket.S
 
 	idArg := int(message.Body["id"].(float64))
 	if err := wsGateway.thea.PauseItem(idArg); err != nil {
-		return err
+		return fmt.Errorf(ERR_FMT, err.Error())
 	}
 
 	hub.Send(message.FormReply("COMMAND_SUCCESS", map[string]interface{}{"payload": idArg}, socket.Response))
@@ -200,11 +202,10 @@ func (wsGateway *WsGateway) WsProfileCreate(hub *socket.SocketHub, message *sock
 	}
 
 	p := profile.NewProfile(message.Body["tag"].(string))
-	if err := wsGateway.thea.CreateProfile(p); err != nil {
+	if err := wsGateway.thea.InsertProfile(p); err != nil {
 		return err
 	}
 
-	wsGateway.thea.NotifyProfileUpdate()
 	hub.Send(message.FormReply("COMMAND_SUCCESS", nil, socket.Response))
 	return nil
 }

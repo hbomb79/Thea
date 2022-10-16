@@ -11,18 +11,8 @@ type GetTroubleDetailsRequest struct{}
 type ResolveTroubleRequest struct{}
 
 type CoreService interface {
-	GetTroubleDetails()
-	ResolveTrouble()
 	GetKnownFfmpegOptions() any
 	GetFfmpegInstancesForItem(int) []f.FfmpegInstance
-}
-
-func (coreApi *coreService) GetTroubleDetails() {
-
-}
-
-func (coreApi *coreService) ResolveTrouble() {
-
 }
 
 func (service *coreService) GetKnownFfmpegOptions() any {

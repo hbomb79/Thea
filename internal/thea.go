@@ -75,8 +75,9 @@ type theaImpl struct {
 	shutdownWaitGroup *sync.WaitGroup
 }
 
-const THEA_CONFIG_FILE_PATH = "/thea/config.json"
-const THEA_CACHE_FILE_PATH = "/thea/cache.json"
+const THEA_USER_DIR_PREFIX = "/thea/"
+const THEA_CACHE_FILE_PATH = "cache.json"
+const THEA_PROFILE_FILE_PATH = "profiles.json"
 const THEA_UPDATE_INTERVAL = time.Second * 2
 const THEA_QUEUE_SYNC_INTERVAL = time.Second * 5
 
@@ -84,8 +85,8 @@ const THEA_QUEUE_SYNC_INTERVAL = time.Second * 5
 
 func NewThea(config TheaConfig, updateFn UpdateManagerSubmitFn) Thea {
 	ctx, ctxCancel := context.WithCancel(context.Background())
-	configPath := config.getConfigPath()
-	cachePath := config.getCachePath()
+	configDir := config.getConfigDir()
+	cacheDir := config.getCacheDir()
 
 	// Construct a Thea instance
 	t := &theaImpl{
@@ -103,9 +104,9 @@ func NewThea(config TheaConfig, updateFn UpdateManagerSubmitFn) Thea {
 	t.MovieService = NewMovieService(t)
 
 	// Inject state managers
-	t.queueMgr = queue.NewProcessorQueue(cachePath)
+	t.queueMgr = queue.NewProcessorQueue(filepath.Join(cacheDir, THEA_CACHE_FILE_PATH))
 	t.ffmpegMgr = ffmpeg.NewFfmpegCommander(ctx, t, config.Format)
-	t.profileMgr = profile.NewProfileList(configPath)
+	t.profileMgr = profile.NewProfileList(filepath.Join(configDir, THEA_PROFILE_FILE_PATH))
 	t.workers = worker.NewWorkerPool()
 
 	return t

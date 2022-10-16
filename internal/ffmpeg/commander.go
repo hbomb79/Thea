@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/asaskevich/EventBus"
 	"github.com/floostack/transcoder"
@@ -53,8 +54,6 @@ type FfmpegCommander interface {
 	Start(*sync.WaitGroup, context.Context) error
 	CancelAllForItem(int)
 	GetInstancesForItem(int) []FfmpegInstance
-	HandleQueueUpdate()
-	GetLastKnownProgressForInstance(instanceID uuid.UUID) *InstanceProgress
 }
 
 type Provider interface {
@@ -62,7 +61,7 @@ type Provider interface {
 	GetAllItems() *[]*queue.QueueItem
 	GetAllProfiles() []profile.Profile
 	GetProfileByTag(string) profile.Profile
-	EventBus() EventBus.Bus
+	EventBus() EventBus.BusSubscriber
 	NotifyItemUpdate(int)
 	NotifyFfmpegUpdate(int, FfmpegInstance)
 	AdvanceItem(*queue.QueueItem)
@@ -75,6 +74,7 @@ type commander struct {
 	consumedThreads   uint32
 	config            FormatterConfig
 	lastKnownProgress map[uuid.UUID]transcoder.Progress
+	queueChangeChan   chan bool
 }
 
 type FfmpegTask interface {
@@ -86,21 +86,26 @@ func (com *commander) Start(parentWg *sync.WaitGroup, ctx context.Context) error
 	defer func() {
 		defer parentWg.Done()
 
-		com.provider.EventBus().Unsubscribe("update:queue", com.HandleQueueUpdate)
-		com.provider.EventBus().Unsubscribe("update:item", com.HandleQueueUpdate)
-		com.provider.EventBus().Unsubscribe("update:profile", com.HandleProfilesUpdate)
+		com.provider.EventBus().Unsubscribe("update:queue", com.queueEventHandler)
+		com.provider.EventBus().Unsubscribe("update:item", com.queueEventHandler)
+		com.provider.EventBus().Unsubscribe("update:profile", com.queueEventHandler)
 		com.stop()
 	}()
 
-	commanderLogger.Emit(logger.NEW, "FFmpeg Commander Started\n")
+	com.provider.EventBus().SubscribeAsync("update:queue", com.queueEventHandler, true)
+	com.provider.EventBus().SubscribeAsync("update:item", com.queueEventHandler, true)
+	com.provider.EventBus().SubscribeAsync("update:profile", com.queueEventHandler, true)
 
-	com.provider.EventBus().Subscribe("update:queue", com.HandleQueueUpdate)
-	com.provider.EventBus().Subscribe("update:item", com.HandleQueueUpdate)
-	com.provider.EventBus().Subscribe("update:profile", com.HandleProfilesUpdate)
+	debouncedQueueChangeChannel := debounceChannel(time.Second*2, time.Second*5, com.queueChangeChan)
+
+	commanderLogger.Emit(logger.NEW, "FFmpeg Commander Started\n")
 	for {
 		select {
 		case instanceID := <-com.updateChan:
 			com.HandleInstanceUpdate(instanceID)
+
+		case <-debouncedQueueChangeChannel:
+			com.IngestQueue()
 
 		case <-ctx.Done():
 			return nil
@@ -108,10 +113,7 @@ func (com *commander) Start(parentWg *sync.WaitGroup, ctx context.Context) error
 	}
 }
 
-// HandleQueueUpdate crawls through the entire item queue and injests any newly
-// found items. Items which have already been seen before will *not* be re-processed, and
-// items which have gone missing from the queue will have their instances cancelled.
-func (com *commander) HandleQueueUpdate() {
+func (com *commander) IngestQueue() {
 	commanderLogger.Emit(logger.INFO, "Handling queue/item update...\n")
 	seenItems := make(map[int]bool)
 	for _, item := range *com.provider.GetAllItems() {
@@ -121,9 +123,7 @@ func (com *commander) HandleQueueUpdate() {
 			continue
 		}
 
-		if _, ok := com.itemInstances[item.ItemID]; !ok {
-			com.ingestItem(item)
-		}
+		com.ingestItem(item)
 	}
 
 	commanderLogger.Emit(logger.INFO, "Queue/item update handled (saw %#v)\n", seenItems)
@@ -140,26 +140,11 @@ func (com *commander) HandleQueueUpdate() {
 	com.StartInstances()
 }
 
-// HandleProfilesUpdate performs a re-injest for all items we're aware of - this allows us
-// to detect any new profiles and create new instances accordingly.
-func (com *commander) HandleProfilesUpdate() {
-	commanderLogger.Emit(logger.INFO, "Handling profiles update...\n")
-	itemMapping := make(map[int]*queue.QueueItem)
-	for _, item := range *com.provider.GetAllItems() {
-		itemMapping[item.ItemID] = item
-	}
-
-	for itemID := range com.itemInstances {
-		if item, ok := itemMapping[itemID]; ok && item != nil {
-			com.ingestItem(item)
-		}
-	}
-}
-
 // Notify the parent provider that this instance has changed - it's likely
 // a progress update from FFmpeg, but could also be that the instance has
 // been cancelled.
 func (com *commander) HandleInstanceUpdate(instanceID uuid.UUID) {
+	commanderLogger.Emit(logger.INFO, "Handling update for instance %v\n", instanceID)
 	instance := com.getInstance(instanceID)
 	instances := com.GetInstancesForItem(instance.ItemID())
 	item, err := com.provider.GetItem(instance.ItemID())
@@ -171,7 +156,7 @@ func (com *commander) HandleInstanceUpdate(instanceID uuid.UUID) {
 	count := len(instances)
 	states := make(map[InstanceStatus]int)
 	for _, v := range instances {
-		states[v.Status()] = getOrDefault(states, v.Status(), -1) + 1
+		states[v.Status()] = getOrDefault(states, v.Status(), 0) + 1
 	}
 
 	// Recalculate the items state. In order of priority, the following rules are used:
@@ -195,7 +180,7 @@ func (com *commander) HandleInstanceUpdate(instanceID uuid.UUID) {
 		item.SetStatus(queue.Processing)
 	} else {
 		//TODO log unknown state
-		commanderLogger.Emit(logger.WARNING, "Unexpected item state (item %v)... %#v\n", item.ID, states)
+		commanderLogger.Emit(logger.WARNING, "Unexpected item state (item %v)... %#v\n", item.ItemID, states)
 	}
 
 	com.provider.NotifyItemUpdate(instance.ItemID())
@@ -206,7 +191,7 @@ func (com *commander) HandleInstanceUpdate(instanceID uuid.UUID) {
 // the value for the key provided in the map (or the default if the key does
 // not exist in the map)
 func getOrDefault(m map[InstanceStatus]int, key InstanceStatus, def int) int {
-	if prev, ok := m[key]; !ok {
+	if prev, ok := m[key]; ok {
 		return prev
 	}
 
@@ -230,7 +215,7 @@ func (com *commander) StartInstances() {
 		for _, instance := range instances {
 			if instance.Status() != WAITING {
 				// Instance is not waiting (so either busy, troubled or cancelled) - skip
-				commanderLogger.Emit(logger.INFO, "Instance %v is waiting (is %v)... skipping\n", instance.Id(), instance.Status())
+				commanderLogger.Emit(logger.INFO, "Instance %v is NOT waiting (is %v)... skipping\n", instance.Id(), instance.Status())
 				continue
 			}
 
@@ -257,13 +242,7 @@ func (com *commander) startInstance(instance FfmpegInstance, threads uint32) {
 	com.consumedThreads -= threads
 	go func() {
 		instance.Start(com.config, func(prog transcoder.Progress) {
-			if prog != nil {
-				// Progress callback may be called with `nil` to indicate
-				// that the instance has fundamentally changed, but no progress
-				// information is available/new
-				com.lastKnownProgress[instance.Id()] = prog
-			}
-
+			commanderLogger.Emit(logger.SUCCESS, "New progress for instance %v : %#v\n", instance.Id(), prog)
 			com.updateChan <- instance.Id()
 		})
 
@@ -284,29 +263,11 @@ func (com *commander) CancelAllForItem(itemID int) {
 }
 
 func (com *commander) GetInstancesForItem(itemID int) []FfmpegInstance {
-	return com.itemInstances[itemID]
-}
-
-type InstanceProgress struct {
-	Frames   string
-	Elapsed  string
-	Bitrate  string
-	Progress float64
-	Speed    string
-}
-
-func (com *commander) GetLastKnownProgressForInstance(instanceID uuid.UUID) *InstanceProgress {
-	if v, ok := com.lastKnownProgress[instanceID]; ok {
-		return &InstanceProgress{
-			v.GetFramesProcessed(),
-			v.GetCurrentTime(),
-			v.GetCurrentBitrate(),
-			v.GetProgress(),
-			v.GetSpeed(),
-		}
-	} else {
-		return nil
+	if v, ok := com.itemInstances[itemID]; ok {
+		return v
 	}
+
+	return nil
 }
 
 func (com *commander) stop() {
@@ -345,6 +306,10 @@ func (com *commander) ingestItem(item *queue.QueueItem) {
 		})
 
 		return
+	} else if _, ok := item.Trouble.(*queue.ProfileSelectionError); ok {
+		// Auto-resolve a profile selection trouble
+		commanderLogger.Emit(logger.SUCCESS, "Automatically resolving ProfileSelectionError for item %s!\n", item)
+		item.ClearTrouble()
 	}
 
 	// Append all new instances to the end of the list
@@ -363,12 +328,60 @@ func (com *commander) getInstance(instanceID uuid.UUID) FfmpegInstance {
 	return nil
 }
 
+func (com *commander) queueEventHandler() {
+	commanderLogger.Emit(logger.INFO, "Queue changed event!\n")
+	com.queueChangeChan <- true
+}
+
 func NewFfmpegCommander(ctx context.Context, provider Provider, config FormatterConfig) FfmpegCommander {
 	return &commander{
 		provider:          provider,
 		itemInstances:     make(map[int][]FfmpegInstance),
 		lastKnownProgress: make(map[uuid.UUID]transcoder.Progress),
 		updateChan:        make(chan uuid.UUID),
+		queueChangeChan:   make(chan bool),
 		config:            config,
 	}
+}
+
+// debounceChannel performs debounce filtering of events emitting on the input chan, and outputs
+// acceptable messages on the returned channel. If the input channel is given a un-steady stream of events,
+// the output channel will output one message once a break in the messages of atleast 'min' time occurs.
+// If the input channel is receiving a steady-stream of messages (with an interval < min), then the max time window can
+// be used to force a message to be emitted on the output channel atleast once per 'max' time duration.
+// Source: https://gist.github.com/gigablah/80d7160f3577edc153c9
+func debounceChannel[T any](min time.Duration, max time.Duration, input chan T) chan T {
+	output := make(chan T)
+
+	go func() {
+		var (
+			buffer   T
+			ok       bool
+			minTimer <-chan time.Time
+			maxTimer <-chan time.Time
+		)
+
+		// Start debouncing
+		for {
+			select {
+			case buffer, ok = <-input:
+				if !ok {
+					return
+				}
+
+				minTimer = time.After(min)
+				if maxTimer == nil {
+					maxTimer = time.After(max)
+				}
+			case <-minTimer:
+				minTimer, maxTimer = nil, nil
+				output <- buffer
+			case <-maxTimer:
+				minTimer, maxTimer = nil, nil
+				output <- buffer
+			}
+		}
+	}()
+
+	return output
 }

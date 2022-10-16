@@ -54,12 +54,12 @@ func (config *TheaConfig) LoadFromFile(configPath string) error {
 	return nil
 }
 
-// getCachePath will return the path used for storing cache information. It will first look to
+// getCacheDir will return the directory path used for storing cache information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned. If the default
 // cannot be derived due to an error, a panic will occur.
-func (config *TheaConfig) getCachePath() string {
+func (config *TheaConfig) getCacheDir() string {
 	if config.CacheDirPath != "" {
-		return filepath.Join(config.CacheDirPath, THEA_CACHE_FILE_PATH)
+		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_PREFIX)
 	}
 
 	// Derive default
@@ -68,14 +68,14 @@ func (config *TheaConfig) getCachePath() string {
 		panic(fmt.Sprintf("FAILURE to derive user cache dir %s", err))
 	}
 
-	return filepath.Join(dir, THEA_CACHE_FILE_PATH)
+	return filepath.Join(dir, THEA_USER_DIR_PREFIX)
 }
 
-// getConfigPath will return the path used for storing config information. It will first look to
+// getConfigDir will return the path used for storing config information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned
-func (config *TheaConfig) getConfigPath() string {
+func (config *TheaConfig) getConfigDir() string {
 	if config.CacheDirPath != "" {
-		return filepath.Join(config.CacheDirPath, THEA_CONFIG_FILE_PATH)
+		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_PREFIX)
 	}
 
 	// Derive default
@@ -84,5 +84,5 @@ func (config *TheaConfig) getConfigPath() string {
 		panic(fmt.Sprintf("FAILURE to derive user config dir %s", err))
 	}
 
-	return filepath.Join(dir, THEA_CONFIG_FILE_PATH)
+	return filepath.Join(dir, THEA_USER_DIR_PREFIX)
 }

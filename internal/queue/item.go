@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"reflect"
 	"regexp"
 
 	"github.com/hbomb79/Thea/internal/profile"
@@ -120,8 +121,16 @@ func (item *QueueItem) SetStatus(status ItemStatus) {
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
 func (item *QueueItem) SetTrouble(trouble Trouble) {
-	defer item.NotifyUpdate()
+	if trouble == nil {
+		itemLogger.Emit(logger.WARNING, "Ignoring QueueItem#SetTrouble as the trouble provided is 'nil'!\n")
+		return
+	} else if reflect.TypeOf(item.Trouble) == reflect.TypeOf(trouble) {
+		// Raising an error of the same type is not allowed!
+		itemLogger.Emit(logger.DEBUG, "Ignoring QueueItem#SetTrouble as the trouble provided has the same type as thee existing trouble set on this item (%s)\n", reflect.TypeOf(trouble))
+		return
+	}
 
+	defer item.NotifyUpdate()
 	itemLogger.Emit(logger.WARNING, "Raising trouble %T for QueueItem %s\n", trouble, item)
 	item.Trouble = trouble
 
@@ -351,17 +360,14 @@ func (item *QueueItem) String() string {
 
 func (item *QueueItem) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		ItemID     int        `json:"id"`
-		Path       string     `json:"path"`
-		Name       string     `json:"name"`
-		Status     ItemStatus `json:"status"`
-		Stage      ItemStage  `json:"stage"`
-		TitleInfo  *TitleInfo `json:"title_info"`
-		OmdbInfo   *OmdbInfo  `json:"omdb_info"`
-		Trouble    Trouble    `json:"trouble"`
-		ProfileTag string     `json:"profile_tag"`
-		//TODO
-		// FfmpegInstances []CommanderTask `json:"ffmpeg_instances"`
+		ItemID    int        `json:"id"`
+		Path      string     `json:"path"`
+		Name      string     `json:"name"`
+		Status    ItemStatus `json:"status"`
+		Stage     ItemStage  `json:"stage"`
+		TitleInfo *TitleInfo `json:"title_info"`
+		OmdbInfo  *OmdbInfo  `json:"omdb_info"`
+		Trouble   Trouble    `json:"trouble"`
 	}{
 		item.ItemID,
 		item.Path,
@@ -371,7 +377,5 @@ func (item *QueueItem) MarshalJSON() ([]byte, error) {
 		item.TitleInfo,
 		item.OmdbInfo,
 		item.Trouble,
-		item.ProfileTag,
-		// item.tpa.ffmpeg().GetInstancesForItem(item.ItemID),
 	})
 }

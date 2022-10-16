@@ -1,10 +1,13 @@
 package ffmpeg
 
 import (
+	"encoding/json"
 	"fmt"
 
+	"github.com/floostack/transcoder"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/queue"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 type InstanceStatus int
@@ -65,15 +68,16 @@ type FfmpegInstance interface {
 }
 
 type ffmpegInstance struct {
-	provider     Provider
-	trouble      queue.Trouble
-	status       InstanceStatus
-	message      string
-	profileLabel string
-	itemID       int
-	id           uuid.UUID
-	command      FfmpegCmd
-	retryChan    chan bool
+	provider          Provider
+	trouble           queue.Trouble
+	status            InstanceStatus
+	message           string
+	profileLabel      string
+	itemID            int
+	id                uuid.UUID
+	command           FfmpegCmd
+	retryChan         chan bool
+	lastKnownProgress transcoder.Progress
 }
 
 func (instance *ffmpegInstance) Start(config FormatterConfig, progressReportCallback ProgressCallback) {
@@ -118,7 +122,12 @@ func (instance *ffmpegInstance) tryStart(config FormatterConfig, progressReportC
 	instance.command = NewFfmpegCmd(item, profile)
 
 	// Start the command, providing a callback for progress notifications
-	ffmpegErr := instance.command.Run(progressReportCallback, config)
+	wrappedProgressReportCallback := func(prog transcoder.Progress) {
+		instance.lastKnownProgress = prog
+		progressReportCallback(prog)
+	}
+
+	ffmpegErr := instance.command.Run(wrappedProgressReportCallback, config)
 	if ffmpegErr != nil {
 		instance.raiseTrouble(item, ffmpegErr)
 	} else {
@@ -176,6 +185,8 @@ func (instance *ffmpegInstance) ResolveTrouble(payload map[string]any) error {
 func (instance *ffmpegInstance) raiseTrouble(item *queue.QueueItem, err error) {
 	instance.status = TROUBLED
 	instance.trouble = &queue.FfmpegTaskError{BaseTaskError: queue.NewBaseTaskError(err.Error(), item, queue.FFMPEG_FAILURE)}
+
+	commanderLogger.Emit(logger.ERROR, "Instance %v ERR: %s\n", instance.id, err.Error())
 }
 
 func (instance *ffmpegInstance) Status() InstanceStatus { return instance.status }
@@ -184,6 +195,42 @@ func (instance *ffmpegInstance) ItemID() int            { return instance.itemID
 func (instance *ffmpegInstance) Profile() string        { return instance.profileLabel }
 func (instance *ffmpegInstance) OutputPath() string     { return "" }
 func (instance *ffmpegInstance) Trouble() queue.Trouble { return instance.trouble }
+
+func (instance *ffmpegInstance) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Id       uuid.UUID         `json:"id"`
+		Progress *InstanceProgress `json:"progress"`
+		Status   InstanceStatus    `json:"status"`
+		Trouble  queue.Trouble     `json:"trouble"`
+	}{
+		instance.id,
+		instance.GetLastKnownProgressForInstance(),
+		instance.status,
+		instance.trouble,
+	})
+}
+
+type InstanceProgress struct {
+	Frames   string
+	Elapsed  string
+	Bitrate  string
+	Progress float64
+	Speed    string
+}
+
+func (instance *ffmpegInstance) GetLastKnownProgressForInstance() *InstanceProgress {
+	if instance.lastKnownProgress != nil {
+		return &InstanceProgress{
+			instance.lastKnownProgress.GetFramesProcessed(),
+			instance.lastKnownProgress.GetCurrentTime(),
+			instance.lastKnownProgress.GetCurrentBitrate(),
+			instance.lastKnownProgress.GetProgress(),
+			instance.lastKnownProgress.GetSpeed(),
+		}
+	} else {
+		return nil
+	}
+}
 
 func NewFfmpegInstance(itemID int, profileLabel string, provider Provider) FfmpegInstance {
 	return &ffmpegInstance{

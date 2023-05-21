@@ -15,27 +15,31 @@ import (
 	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/hbomb79/Thea/internal/profile"
 	"github.com/hbomb79/Thea/internal/queue"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 type FfmpegCmd interface {
 	// Run will attempt to construct and start an FFmpeg command
 	// on the host machine. Each FFmpeg update detected from the
 	// underlying command will be delivered to the callback.
-	Run(ProgressCallback, FormatterConfig) error
+	Run(ProgressChannel, FormatterConfig) error
 
 	Suspend()
 	Continue()
+
+	GetProcessID() int
 }
 
 type cmd struct {
-	item    *queue.QueueItem
-	profile profile.Profile
-	command *exec.Cmd
+	item       *queue.Item
+	profile    profile.Profile
+	command    *exec.Cmd
+	outputPath string
 }
 
-type ProgressCallback func(transcoder.Progress)
+type ProgressChannel chan transcoder.Progress
 
-func (cmd *cmd) Run(progressCallback ProgressCallback, config FormatterConfig) error {
+func (cmd *cmd) Run(progressReportChannel ProgressChannel, config FormatterConfig) error {
 	ffmpegCfg := &ffmpeg.Config{
 		ProgressEnabled: true,
 		FfmpegBinPath:   config.FfmpegBinaryPath,
@@ -61,33 +65,50 @@ func (cmd *cmd) Run(progressCallback ProgressCallback, config FormatterConfig) e
 
 	// Store command instance to allow for suspension/resuming from other threads
 	cmd.command = transcoderInstance.GetRunningCmdInstance()
+	cmd.outputPath = outputPath
 
 	// Listen on progress channel and forward messages to the provided channel
 	for {
 		prog, ok := <-progressChannel
 		if !ok {
-			// Progress has closed?
+			// FFmpeg instance has closed, shut the channel
+			log.Emit(logger.DEBUG, "FFmpeg command has closed progress channel... closing report channel\n")
+			close(progressReportChannel)
 			return nil
 		}
 
-		progressCallback(prog)
+		progressReportChannel <- prog
 	}
 }
 
 func (cmd *cmd) Suspend() {
 	if cmd.command == nil {
+		log.Emit(logger.ERROR, "Cannot suspend FFmpeg instance (for item %v and profile %v) because command is not intialised\n", cmd.item, cmd.profile)
 		return
 	}
 
+	log.Emit(logger.DEBUG, "Suspending FFmpeg process %v for item %v...\n", cmd.command.Process.Pid, cmd.item)
 	cmd.command.Process.Signal(syscall.SIGTSTP)
+	log.Emit(logger.SUCCESS, "Suspended FFmpeg process %v for item %v...\n", cmd.command.Process.Pid, cmd.item)
 }
 
 func (cmd *cmd) Continue() {
 	if cmd.command == nil {
+		log.Emit(logger.ERROR, "Cannot continue FFmpeg instance (for item %v and profile %v) because command is not intialised\n", cmd.item, cmd.profile)
 		return
 	}
 
+	log.Emit(logger.DEBUG, "Resuming FFmpeg process %v for item %v...\n", cmd.command.Process.Pid, cmd.item)
 	cmd.command.Process.Signal(syscall.SIGCONT)
+	log.Emit(logger.SUCCESS, "Resuming FFmpeg process %v for item %v...\n", cmd.command.Process.Pid, cmd.item)
+}
+
+func (cmd *cmd) GetProcessID() int {
+	if cmd.command == nil {
+		return -1
+	}
+
+	return cmd.command.Process.Pid
 }
 
 func (cmd *cmd) calculateOutputPath(config FormatterConfig) string {
@@ -130,7 +151,7 @@ func (cmd *cmd) parseFfmpegError(err error) error {
 	return errors.New(ffmpegException["string"].(string))
 }
 
-func NewFfmpegCmd(item *queue.QueueItem, profile profile.Profile) FfmpegCmd {
+func NewFfmpegCmd(item *queue.Item, profile profile.Profile) FfmpegCmd {
 	return &cmd{
 		item:    item,
 		profile: profile,

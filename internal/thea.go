@@ -20,7 +20,7 @@ import (
 	"github.com/hbomb79/Thea/pkg/worker"
 )
 
-var procLogger = logger.Get("Thea")
+var log = logger.Get("Thea")
 
 // Thea exposes the core workflow for the processor. There are two main categories of methods exposed here:
 //
@@ -75,7 +75,7 @@ type theaImpl struct {
 	shutdownWaitGroup *sync.WaitGroup
 }
 
-const THEA_USER_DIR_PREFIX = "/thea/"
+const THEA_USER_DIR_SUFFIX = "/thea/"
 const THEA_CACHE_FILE_PATH = "cache.json"
 const THEA_PROFILE_FILE_PATH = "profiles.json"
 const THEA_UPDATE_INTERVAL = time.Second * 2
@@ -89,7 +89,7 @@ func NewThea(config TheaConfig, updateFn UpdateManagerSubmitFn) Thea {
 	cacheDir := config.getCacheDir()
 
 	// Construct a Thea instance
-	t := &theaImpl{
+	thea := &theaImpl{
 		cfg:               config,
 		theaCtx:           ctx,
 		theaCtxCancel:     ctxCancel,
@@ -97,19 +97,19 @@ func NewThea(config TheaConfig, updateFn UpdateManagerSubmitFn) Thea {
 	}
 
 	// Inject services
-	t.UpdateManager = NewUpdateManager(updateFn, t)
-	t.ProfileService = NewProfileService(t)
-	t.CoreService = NewCoreService(t)
-	t.QueueService = NewQueueService(t)
-	t.MovieService = NewMovieService(t)
+	thea.UpdateManager = NewUpdateManager(updateFn, thea)
+	thea.ProfileService = NewProfileService(thea)
+	thea.CoreService = NewCoreService(thea)
+	thea.QueueService = NewQueueService(thea)
+	thea.MovieService = NewMovieService(thea)
 
 	// Inject state managers
-	t.queueMgr = queue.NewProcessorQueue(filepath.Join(cacheDir, THEA_CACHE_FILE_PATH))
-	t.ffmpegMgr = ffmpeg.NewFfmpegCommander(ctx, t, config.Format)
-	t.profileMgr = profile.NewProfileList(filepath.Join(configDir, THEA_PROFILE_FILE_PATH))
-	t.workers = worker.NewWorkerPool()
+	thea.queueMgr = queue.NewProcessorQueue(filepath.Join(cacheDir, THEA_CACHE_FILE_PATH))
+	thea.ffmpegMgr = ffmpeg.NewFfmpegCommander(thea, config.Format)
+	thea.profileMgr = profile.NewProfileList(filepath.Join(configDir, THEA_PROFILE_FILE_PATH))
+	thea.workers = worker.NewWorkerPool()
 
-	return t
+	return thea
 }
 
 // Start will start Thea by initialising all supporting services/objects and starting
@@ -118,24 +118,20 @@ func (thea *theaImpl) Start() error {
 	exitChannel := make(chan os.Signal, 1)
 	signal.Notify(exitChannel, os.Interrupt, syscall.SIGTERM)
 
-	procLogger.Emit(logger.DEBUG, "Starting Thea initialisation with config: %#v\n", thea.config())
+	log.Emit(logger.DEBUG, "Starting Thea initialisation with config: %#v\n", thea.config())
 
 	defer thea.Stop()
 	if err := thea.initialise(); err != nil {
 		return fmt.Errorf("failed to initialise Thea: %s", err)
 	}
 
-	// Initialise our async service managers
-	thea.shutdownWaitGroup.Add(2)
+	thea.spawnAsyncService(thea.workers.StartWorkers)
+	thea.spawnAsyncService(thea.ffmpegMgr.Start)
 
-	go thea.workers.StartWorkers(thea.shutdownWaitGroup)
-	go thea.ffmpegMgr.Start(thea.shutdownWaitGroup, thea.theaCtx)
-
-	// Initialise some tickers
 	updateTicker := time.NewTicker(THEA_UPDATE_INTERVAL)
 	queueSyncTicker := time.NewTicker(THEA_QUEUE_SYNC_INTERVAL)
 
-	procLogger.Emit(logger.SUCCESS, " --- Thea Startup Complete --- \n")
+	log.Emit(logger.SUCCESS, " --- Thea Startup Complete --- \n")
 
 	for {
 		select {
@@ -143,13 +139,13 @@ func (thea *theaImpl) Start() error {
 			thea.SubmitUpdates()
 		case <-queueSyncTicker.C:
 			if err := thea.synchroniseQueue(); err != nil {
-				procLogger.Emit(logger.WARNING, "Failed to synchronise item queue: %s\n", err.Error())
+				log.Emit(logger.WARNING, "Failed to synchronise item queue: %s\n", err.Error())
 			}
 		case <-exitChannel:
-			procLogger.Emit(logger.STOP, "Interrupt detected!\n")
+			log.Emit(logger.STOP, "Interrupt detected!\n")
 			return nil
 		case <-thea.theaCtx.Done():
-			procLogger.Emit(logger.WARNING, "Context has been cancelled!\n")
+			log.Emit(logger.WARNING, "Context has been cancelled!\n")
 			return nil
 		}
 	}
@@ -157,17 +153,19 @@ func (thea *theaImpl) Start() error {
 
 // Stop will terminate Thea
 func (thea *theaImpl) Stop() {
-	procLogger.Emit(logger.STOP, "--- Thea is shutting down ---\n")
+	log.Emit(logger.STOP, "--- Thea is shutting down ---\n")
 
-	procLogger.Emit(logger.STOP, "Cancelling context...\n")
-	thea.theaCtxCancel()
-
-	procLogger.Emit(logger.STOP, "Closing all managers...\n")
+	log.Emit(logger.STOP, "Closing all managers...\n")
 	thea.workers.CloseWorkers()
+	thea.ffmpegMgr.Stop()
 	thea.shutdownWaitGroup.Wait()
 
-	procLogger.Emit(logger.STOP, "Closing all containers...\n")
+	log.Emit(logger.STOP, "Closing Docker containers...\n")
 	docker.DockerMgr.Shutdown(time.Second * 15)
+
+	log.Emit(logger.STOP, "Cancelling context...\n")
+	thea.theaCtxCancel()
+	log.Emit(logger.DEBUG, "Thea core shutdown complete\n")
 }
 
 // ** INTERNAL API ** //
@@ -178,6 +176,17 @@ func (thea *theaImpl) workerPool() *worker.WorkerPool   { return thea.workers }
 func (thea *theaImpl) config() TheaConfig               { return thea.cfg }
 
 // ** PRIVATE IMPL ** //
+
+// spawnAsyncService will run the provided function/service as it's own
+// go-routine, ensuring that the Thea service waitgroup is updated correctly
+func (thea *theaImpl) spawnAsyncService(service func()) {
+	thea.shutdownWaitGroup.Add(1)
+
+	go func() {
+		defer thea.shutdownWaitGroup.Done()
+		service()
+	}()
+}
 
 // synchroniseQueue will first discover all items inside the import directory,
 // and then will injest any that do not already exist in the queue. Any items
@@ -194,7 +203,7 @@ func (thea *theaImpl) synchroniseQueue() error {
 		thea.queueMgr.Push(queue.NewQueueItem(info, path, thea))
 	}
 
-	thea.queueMgr.Filter(func(queue queue.QueueManager, key int, item *queue.QueueItem) bool {
+	thea.queueMgr.Filter(func(queue queue.QueueManager, key int, item *queue.Item) bool {
 		if _, ok := presentItems[item.Path]; !ok {
 			thea.CancelItem(item.ItemID)
 			return false
@@ -203,19 +212,19 @@ func (thea *theaImpl) synchroniseQueue() error {
 		return true
 	})
 
-	thea.queueMgr.ForEach(func(q queue.QueueManager, idx int, item *queue.QueueItem) bool {
+	thea.queueMgr.ForEach(func(q queue.QueueManager, idx int, item *queue.Item) bool {
 		if item.Stage != queue.Import {
 			return false
 		}
 
 		info, err := os.Stat(item.Path)
 		if err != nil {
-			procLogger.Emit(logger.WARNING, "Failed to get file info for %v during import stage: %v\n", item.Path, err.Error())
+			log.Emit(logger.WARNING, "Failed to get file info for %v during import stage: %v\n", item.Path, err.Error())
 			return false
 		}
 
 		if time.Since(info.ModTime()) > time.Minute*2 {
-			procLogger.Emit(logger.INFO, "Advancing item %s from Import hold as it's exceeded modtime threshold\n", item)
+			log.Emit(logger.INFO, "Advancing item %s from Import hold as it's exceeded modtime threshold\n", item)
 			thea.AdvanceItem(item)
 		}
 
@@ -255,14 +264,14 @@ func (thea *theaImpl) discoverItems() (map[string]fs.FileInfo, error) {
 	return presentItems, nil
 }
 
-// initialiseSupportServices will initialise all supporting services
+// initialiseDockerServices will initialise all supporting services
 // for Thea (Docker based Postgres, PgAdmin and Web front-end)
-func (thea *theaImpl) initialiseSupportServices() error {
+func (thea *theaImpl) initialiseDockerServices() error {
 	// Instantiate watcher for async errors for the below containers
 	asyncErrorReport := make(chan error, 2)
 	go func() {
 		err := <-asyncErrorReport
-		procLogger.Emit(logger.ERROR, "One or more support services has crashed with error: %v ... Shutting down", err)
+		log.Emit(logger.ERROR, "One or more support services has crashed with error: %v ... Shutting down", err)
 
 		// Shutdown now because a support service has crashed...
 		thea.theaCtxCancel()
@@ -273,14 +282,14 @@ func (thea *theaImpl) initialiseSupportServices() error {
 	// provide the DB themselves
 	config := thea.cfg
 	if config.Services.EnablePostgres {
-		procLogger.Emit(logger.INFO, "Initialising embedded database...\n")
+		log.Emit(logger.INFO, "Initialising embedded database...\n")
 		_, err := database.InitialiseDockerDatabase(config.Database, asyncErrorReport)
 		if err != nil {
 			return err
 		}
 	}
 	if config.Services.EnablePgAdmin {
-		procLogger.Emit(logger.INFO, "Initialising embedded pgAdmin server...\n")
+		log.Emit(logger.INFO, "Initialising embedded pgAdmin server...\n")
 		_, err := database.InitialiseDockerPgAdmin(asyncErrorReport)
 		if err != nil {
 			return err
@@ -296,11 +305,12 @@ func (thea *theaImpl) initialiseSupportServices() error {
 
 // initialise will intialise all support services and workers, and connect to the backing DB
 func (thea *theaImpl) initialise() error {
-	if err := thea.initialiseSupportServices(); err != nil {
+	log.Emit(logger.INFO, "Initialising Docker services...\n")
+	if err := thea.initialiseDockerServices(); err != nil {
 		return err
 	}
 
-	procLogger.Emit(logger.INFO, "Connecting to database with GORM...\n")
+	log.Emit(logger.INFO, "Connecting to database with GORM...\n")
 	if err := database.DB.Connect(thea.cfg.Database); err != nil {
 		return err
 	}

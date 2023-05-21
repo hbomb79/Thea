@@ -70,16 +70,17 @@ const (
 	NeedsAttention
 )
 
-// QueueItem contains all the information needed to fully
+// Item contains all the information needed to fully
 // encapsulate the state of each item in the formatting queue.
 // This includes information found from the file-system, OMDB,
 // and the current processing status/stage
-type QueueItem struct {
+type Item struct {
 	gorm.Model
 	ItemID           int              `json:"id" groups:"api" gorm:"-"`
 	Path             string           `json:"path"`
 	Name             string           `json:"name" groups:"api"`
 	Status           ItemStatus       `json:"status" groups:"api" gorm:"-"`
+	StatusText       string           `json:"statusText" groups:"api" gorm:"-"`
 	Stage            ItemStage        `json:"stage" groups:"api" gorm:"-"`
 	TitleInfo        *TitleInfo       `json:"title_info"`
 	OmdbInfo         *OmdbInfo        `json:"omdb_info"`
@@ -92,8 +93,8 @@ type ChangeSubscriber interface {
 	NotifyItemUpdate(int)
 }
 
-func NewQueueItem(info fs.FileInfo, path string, changeSubscriber ChangeSubscriber) *QueueItem {
-	return &QueueItem{
+func NewQueueItem(info fs.FileInfo, path string, changeSubscriber ChangeSubscriber) *Item {
+	return &Item{
 		Name:             info.Name(),
 		Path:             path,
 		Status:           Pending,
@@ -102,25 +103,36 @@ func NewQueueItem(info fs.FileInfo, path string, changeSubscriber ChangeSubscrib
 	}
 }
 
-func (item *QueueItem) SetStage(stage ItemStage) {
+func (item *Item) SetStage(stage ItemStage) {
 	item.Stage = stage
 
 	item.NotifyUpdate()
 }
 
-func (item *QueueItem) SetStatus(status ItemStatus) {
+func (item *Item) SetStatus(status ItemStatus) {
 	if item.Status == status {
 		return
 	}
 
 	item.Status = status
+	item.StatusText = ""
+	item.NotifyUpdate()
+}
+
+func (item *Item) SetStatusWithMessage(status ItemStatus, message string) {
+	if item.Status == status && item.StatusText == message {
+		return
+	}
+
+	item.Status = status
+	item.StatusText = message
 	item.NotifyUpdate()
 }
 
 // SetTrouble is a method that can be called from
 // tasks that indicates a trouble-state has occured which
 // requires some form of intervention from the user
-func (item *QueueItem) SetTrouble(trouble Trouble) {
+func (item *Item) SetTrouble(trouble Trouble) {
 	if trouble == nil {
 		itemLogger.Emit(logger.WARNING, "Ignoring QueueItem#SetTrouble as the trouble provided is 'nil'!\n")
 		return
@@ -143,7 +155,7 @@ func (item *QueueItem) SetTrouble(trouble Trouble) {
 
 // ClearTrouble is used to remove the trouble state from
 // this item and notify the procesor of this change
-func (item *QueueItem) ClearTrouble() {
+func (item *Item) ClearTrouble() {
 	if item.Trouble == nil {
 		return
 	}
@@ -155,7 +167,7 @@ func (item *QueueItem) ClearTrouble() {
 // FormatTitle accepts a string (title) and reformats it
 // based on text-filtering configuration provided by
 // the user
-func (item *QueueItem) FormatTitle() error {
+func (item *Item) FormatTitle() error {
 	normaliserMatcher := regexp.MustCompile(`(?i)[\.\s]`)
 	seasonMatcher := regexp.MustCompile(`(?i)^(.*?)\_?s(\d+)\_?e(\d+)\_*((?:20|19)\d{2})?`)
 	movieMatcher := regexp.MustCompile(`(?i)^(.+?)\_*((?:20|19)\d{2})`)
@@ -200,7 +212,7 @@ func (item *QueueItem) FormatTitle() error {
 // ValidateProfileSuitable accepts a profile and will check it's match conditions, and potentially
 // other criteria, to asertain if the profile should be used when transcoding this items content
 // via the FFmpeg commander.
-func (item *QueueItem) ValidateProfileSuitable(pr profile.Profile) bool {
+func (item *Item) ValidateProfileSuitable(pr profile.Profile) bool {
 	matchConds := pr.MatchConditions()
 
 	// Check that this item matches the the conditions specified by the profile. If there
@@ -264,7 +276,7 @@ func (item *QueueItem) ValidateProfileSuitable(pr profile.Profile) bool {
 // If the item is currently in progress, it's command context will be cancelled, and it's
 // status will be set to Cancelling. Once the running task finishes, the items
 // state will be updated to Cancelled.
-func (item *QueueItem) Cancel() error {
+func (item *Item) Cancel() error {
 	itemLogger.Emit(logger.WARNING, "queue.Item#Cancel is DEPRECATED - prefer QueueService#cancelItem")
 	switch item.Status {
 	case Cancelled:
@@ -282,60 +294,7 @@ func (item *QueueItem) Cancel() error {
 	return nil
 }
 
-/*func (item *QueueItem) CommitToDatabase() error {
-	db := db.DB.GetInstance()
-
-	// Compose optional/nil-able fields of the export
-	var episodeNumber *int = nil
-	var seasonNumber *int = nil
-	var series *Series = nil
-	if item.TitleInfo.Episodic {
-		if item.TitleInfo.Episode > -1 {
-			episodeNumber = &item.TitleInfo.Episode
-		}
-
-		if item.TitleInfo.Season > -1 {
-			seasonNumber = &item.TitleInfo.Season
-		}
-
-		series = &Series{
-			Name: item.OmdbInfo.Title,
-		}
-	}
-
-	// Construct exports based on the completed ffmpeg instances
-	exports := make([]*ExportDetail, 0)
-	// TODO
-	// for _, instance := range item.thea.ffmpeg().GetInstancesForItem(item.ItemID) {
-	// 	exports = append(exports, &ExportDetail{
-	// 		Name: instance.ProfileTag(),
-	// 		Path: instance.GetOutputPath(),
-	// 	})
-	// }
-
-	// Compose our export item
-	export := &ExportedItem{
-		Name:          item.OmdbInfo.Title, //TODO Potentially we want to find titles of episodes (if episodic) via OMDB? Would require altering the title parser too
-		Description:   item.OmdbInfo.Description,
-		Runtime:       item.OmdbInfo.Runtime, //TODO Perhaps we can derive this from the actual exported file (all exports should have similar length... right?)
-		ReleaseYear:   item.OmdbInfo.ReleaseYear,
-		Image:         item.OmdbInfo.PosterUrl,
-		Genres:        item.OmdbInfo.Genre.ToGenreList(),
-		Exports:       exports,
-		EpisodeNumber: episodeNumber,
-		SeasonNumber:  seasonNumber,
-		Series:        series,
-	}
-
-	if err := db.Debug().Save(export).Error; err != nil {
-		return fmt.Errorf("failed to commit item %s to database: %s", item, err.Error())
-	}
-
-	return nil
-}
-*/
-
-func (item *QueueItem) SetPaused(paused bool) error {
+func (item *Item) SetPaused(paused bool) error {
 	if (paused && item.Status == Paused) ||
 		(!paused && item.Status != Paused) {
 		return nil
@@ -350,15 +309,15 @@ func (item *QueueItem) SetPaused(paused bool) error {
 	return nil
 }
 
-func (item *QueueItem) NotifyUpdate() {
+func (item *Item) NotifyUpdate() {
 	item.changeSubscriber.NotifyItemUpdate(item.ItemID)
 }
 
-func (item *QueueItem) String() string {
+func (item *Item) String() string {
 	return fmt.Sprintf("{%d PK=%d name=%s}", item.ItemID, item.ID, item.Name)
 }
 
-func (item *QueueItem) MarshalJSON() ([]byte, error) {
+func (item *Item) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		ItemID    int        `json:"id"`
 		Path      string     `json:"path"`

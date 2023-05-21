@@ -1,18 +1,20 @@
 package internal
 
 import (
-	"github.com/asaskevich/EventBus"
+	"sync"
+
+	"github.com/hbomb79/Thea/internal/event"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/queue"
 )
 
 type UpdateManager interface {
 	NotifyItemUpdate(int)
+	NotifyFfmpegUpdate(int)
 	NotifyQueueUpdate()
 	NotifyProfileUpdate()
-	NotifyFfmpegUpdate(int, ffmpeg.FfmpegInstance)
 	SubmitUpdates()
-	EventBus() EventBus.BusSubscriber
+	EventHandler() event.EventHandler
 }
 
 type processorUpdateType = int
@@ -30,9 +32,9 @@ type Update struct {
 }
 
 type itemUpdate struct {
-	QueueItem    *queue.QueueItem `json:"item"`
-	ItemPosition int              `json:"item_position"`
-	ItemId       int              `json:"item_id"`
+	QueueItem    *queue.Item `json:"item"`
+	ItemPosition int         `json:"item_position"`
+	ItemId       int         `json:"item_id"`
 }
 
 type ffmpegUpdate struct {
@@ -47,31 +49,40 @@ type updateManager struct {
 	submitFn             UpdateManagerSubmitFn
 	pendingItemUpdates   map[int]bool
 	pendingFfmpegUpdates map[int]bool
-	eventBus             EventBus.Bus
+	eventCoordinator     event.EventCoordinator
+	mutex                sync.Mutex
 }
 
 func (mgr *updateManager) NotifyItemUpdate(itemID int) {
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
+
 	mgr.pendingItemUpdates[itemID] = true
-	mgr.eventBus.Publish("update:item")
+	mgr.eventCoordinator.Dispatch(event.ITEM_UPDATE_EVENT, itemID)
 }
 
 func (mgr *updateManager) NotifyProfileUpdate() {
 	mgr.submitFn(&Update{PROFILE_UPDATE, nil})
-	mgr.eventBus.Publish("update:profile")
-
+	mgr.eventCoordinator.Dispatch(event.PROFILE_UPDATE_EVENT, nil)
 }
 
 func (mgr *updateManager) NotifyQueueUpdate() {
 	mgr.submitFn(&Update{QUEUE_UPDATE, nil})
-	mgr.eventBus.Publish("update:queue")
+	mgr.eventCoordinator.Dispatch(event.QUEUE_UPDATE_EVENT, nil)
 }
 
-func (mgr *updateManager) NotifyFfmpegUpdate(itemID int, instance ffmpeg.FfmpegInstance) {
+func (mgr *updateManager) NotifyFfmpegUpdate(itemID int) {
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
+
 	mgr.pendingFfmpegUpdates[itemID] = true
-	mgr.eventBus.Publish("update:ffmpeg")
+	// mgr.eventCoordinator.Dispatch(event.ITEM_FFMPEG_UPDATE_EVENT, itemID)
 }
 
 func (mgr *updateManager) SubmitUpdates() {
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
+
 	if len(mgr.pendingItemUpdates) > 0 {
 		// Something has changed, wakeup sleeping workers to detect if any work can be done.
 		mgr.thea.workerPool().WakeupWorkers()
@@ -79,16 +90,17 @@ func (mgr *updateManager) SubmitUpdates() {
 
 	for itemID := range mgr.pendingItemUpdates {
 		queueItem, idx := mgr.thea.queue().FindById(itemID)
+		var payload *itemUpdate
 		if queueItem == nil || idx < 0 {
-			mgr.submitFn(&Update{
-				UpdateType: ITEM_UPDATE,
-				Payload:    &itemUpdate{nil, -1, itemID}})
+			payload = &itemUpdate{nil, -1, itemID}
 		} else {
-			mgr.submitFn(&Update{
-				UpdateType: ITEM_UPDATE,
-				Payload:    &itemUpdate{queueItem, idx, itemID},
-			})
+			payload = &itemUpdate{queueItem, idx, itemID}
 		}
+
+		mgr.submitFn(&Update{
+			UpdateType: ITEM_UPDATE,
+			Payload:    payload,
+		})
 
 		delete(mgr.pendingItemUpdates, itemID)
 	}
@@ -105,7 +117,7 @@ func (mgr *updateManager) SubmitUpdates() {
 	}
 }
 
-func (mgr *updateManager) EventBus() EventBus.BusSubscriber { return mgr.eventBus }
+func (mgr *updateManager) EventHandler() event.EventHandler { return mgr.eventCoordinator }
 
 func NewUpdateManager(submitFn UpdateManagerSubmitFn, thea Thea) UpdateManager {
 	return &updateManager{
@@ -113,6 +125,7 @@ func NewUpdateManager(submitFn UpdateManagerSubmitFn, thea Thea) UpdateManager {
 		thea:                 thea,
 		pendingItemUpdates:   make(map[int]bool),
 		pendingFfmpegUpdates: make(map[int]bool),
-		eventBus:             EventBus.New(),
+		mutex:                sync.Mutex{},
+		eventCoordinator:     event.NewEventHandler(),
 	}
 }

@@ -31,7 +31,7 @@ type coreService struct {
 func NewCoreService(thea Thea) CoreService {
 	opts, err := profile.ToArgsMap(&ffmpeg.Options{})
 	if err != nil {
-		procLogger.Emit(logger.ERROR, "Failure to get known FFmpeg options as args map!")
+		log.Emit(logger.ERROR, "Failure to get known FFmpeg options as args map!")
 	}
 
 	return &coreService{

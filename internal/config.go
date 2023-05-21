@@ -38,9 +38,9 @@ type ConcurrentConfig struct {
 // supporting services for Thea. By default, these will be enabled so that Thea
 // will initialise them automatically.
 type ServiceConfig struct {
-	EnablePostgres bool `yaml:"enable_postgres" env-default:"true"`
-	EnablePgAdmin  bool `yaml:"enable_pg_admin" env-default:"true"`
-	EnableFrontend bool `yaml:"enable_frontend" env-default:"true"`
+	EnablePostgres bool `yaml:"enable_postgres" env:"SERVICE_ENABLE_POSTGRES" env-default:"true"`
+	EnablePgAdmin  bool `yaml:"enable_pg_admin" env:"SERVICE_ENABLE_PGADMIN" env-default:"true"`
+	EnableFrontend bool `yaml:"enable_frontend" env:"SERVICE_ENABLE_UI" env-default:"true"`
 }
 
 // Loads a configuration file formatted in YAML in to a
@@ -59,7 +59,7 @@ func (config *TheaConfig) LoadFromFile(configPath string) error {
 // cannot be derived due to an error, a panic will occur.
 func (config *TheaConfig) getCacheDir() string {
 	if config.CacheDirPath != "" {
-		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_PREFIX)
+		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_SUFFIX)
 	}
 
 	// Derive default
@@ -68,14 +68,14 @@ func (config *TheaConfig) getCacheDir() string {
 		panic(fmt.Sprintf("FAILURE to derive user cache dir %s", err))
 	}
 
-	return filepath.Join(dir, THEA_USER_DIR_PREFIX)
+	return filepath.Join(dir, THEA_USER_DIR_SUFFIX)
 }
 
 // getConfigDir will return the path used for storing config information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned
 func (config *TheaConfig) getConfigDir() string {
 	if config.CacheDirPath != "" {
-		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_PREFIX)
+		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_SUFFIX)
 	}
 
 	// Derive default
@@ -84,5 +84,5 @@ func (config *TheaConfig) getConfigDir() string {
 		panic(fmt.Sprintf("FAILURE to derive user config dir %s", err))
 	}
 
-	return filepath.Join(dir, THEA_USER_DIR_PREFIX)
+	return filepath.Join(dir, THEA_USER_DIR_SUFFIX)
 }

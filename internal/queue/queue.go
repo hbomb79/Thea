@@ -9,16 +9,16 @@ import (
 )
 
 type QueueManager interface {
-	Items() *[]*QueueItem
-	Retrieve(string) *QueueItem
+	Items() *[]*Item
+	Retrieve(string) *Item
 	Contains(string) bool
-	Push(*QueueItem) error
-	Remove(*QueueItem) error
-	Pick(ItemStage) *QueueItem
-	AdvanceStage(*QueueItem)
+	Push(*Item) error
+	Remove(*Item) error
+	Pick(ItemStage) *Item
+	AdvanceStage(*Item)
 	Filter(ItemFn)
 	ForEach(ItemFn)
-	FindById(id int) (*QueueItem, int)
+	FindById(id int) (*Item, int)
 	Reorder([]int) error
 	Reload()
 }
@@ -26,7 +26,7 @@ type QueueManager interface {
 // processorQueue is the Queue of items to be processed by this
 // processor
 type processorQueue struct {
-	items  []*QueueItem
+	items  []*Item
 	lastId int
 	cache  *cache.Cache
 	sync.Mutex
@@ -37,7 +37,7 @@ type processorQueue struct {
 // already populated.
 func NewProcessorQueue(cachePath string) QueueManager {
 	return &processorQueue{
-		items:  make([]*QueueItem, 0),
+		items:  make([]*Item, 0),
 		lastId: 0,
 		cache:  cache.New(cachePath),
 	}
@@ -50,7 +50,7 @@ func (queue *processorQueue) Reload() {
 // Retrieve will search the Queue for a QueueItem with a path that matches
 // the one provided. If one is found, a pointer to the item is returned; otherwise
 // nil is returned.
-func (queue *processorQueue) Retrieve(path string) *QueueItem {
+func (queue *processorQueue) Retrieve(path string) *Item {
 	for _, item := range queue.items {
 		if item.Path == path {
 			return item
@@ -71,14 +71,14 @@ func (queue *processorQueue) Contains(path string) bool {
 }
 
 // Items returns all the items inside of this queue
-func (queue *processorQueue) Items() *[]*QueueItem {
+func (queue *processorQueue) Items() *[]*Item {
 	return &queue.items
 }
 
 // Push accepts a QueueItem pointer and will push (append) it to
 // the Queue. This method also sets the 'Id' of the QueueItem
 // automatically (queue.lastId)
-func (queue *processorQueue) Push(item *QueueItem) error {
+func (queue *processorQueue) Push(item *Item) error {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -93,7 +93,7 @@ func (queue *processorQueue) Push(item *QueueItem) error {
 	return nil
 }
 
-func (queue *processorQueue) Remove(item *QueueItem) error {
+func (queue *processorQueue) Remove(item *Item) error {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -115,7 +115,7 @@ func (queue *processorQueue) Remove(item *QueueItem) error {
 // This is how workers should query the work pool for new tasks
 // Note: this method will lock the Mutex for protected access
 // to the shared queue.
-func (queue *processorQueue) Pick(stage ItemStage) *QueueItem {
+func (queue *processorQueue) Pick(stage ItemStage) *Item {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -134,7 +134,7 @@ func (queue *processorQueue) Pick(stage ItemStage) *QueueItem {
 // and set it's stage to the next stage and reset it's status to Pending
 // Note: this method will lock the mutex for protected access to the
 // shared queue.
-func (queue *processorQueue) AdvanceStage(item *QueueItem) {
+func (queue *processorQueue) AdvanceStage(item *Item) {
 	queue.Lock()
 	defer queue.Unlock()
 
@@ -152,7 +152,7 @@ func (queue *processorQueue) AdvanceStage(item *QueueItem) {
 	}
 }
 
-type ItemFn func(QueueManager, int, *QueueItem) bool
+type ItemFn func(QueueManager, int, *Item) bool
 
 // Filter runs the provided callback for every item inside the queue. If the callback
 // returns true, the item is retained. Otherwise, if the callback returns false, the item
@@ -161,7 +161,7 @@ func (queue *processorQueue) Filter(cb ItemFn) {
 	queue.Lock()
 	defer queue.Unlock()
 
-	newItems := make([]*QueueItem, 0)
+	newItems := make([]*Item, 0)
 	for key, item := range queue.items {
 		if cb(queue, key, item) {
 			newItems = append(newItems, item)
@@ -187,7 +187,7 @@ func (queue *processorQueue) ForEach(cb ItemFn) {
 // FindById iterates over the queue searching for a QueueItem with an ID that matches
 // the int 'id' provided to this method. If found, a pointer to this QueueItem, and the index
 // of the QueueItem in the queue is returned. If not found, nil and -1 is returned
-func (queue *processorQueue) FindById(id int) (*QueueItem, int) {
+func (queue *processorQueue) FindById(id int) (*Item, int) {
 	for idx, item := range queue.items {
 		if item.ItemID == id {
 			return item, idx
@@ -210,7 +210,7 @@ func (queue *processorQueue) Reorder(indexOrder []int) error {
 		return errors.New("indexOrder provided must be equal in length to the queue")
 	}
 
-	newQueue := make([]*QueueItem, queueLength)
+	newQueue := make([]*Item, queueLength)
 	for k, v := range indexOrder {
 		if item, idx := queue.FindById(v); item != nil && idx > -1 {
 			newQueue[k] = item

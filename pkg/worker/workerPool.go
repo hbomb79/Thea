@@ -24,8 +24,7 @@ func NewWorkerPool() *WorkerPool {
 // currently inside the WorkerPool and creates
 // a goroutine for each. The 'Start' method of
 // each worker is executed concurrently.
-func (pool *WorkerPool) StartWorkers(pWg *sync.WaitGroup) {
-	defer pWg.Done()
+func (pool *WorkerPool) StartWorkers() {
 	for _, worker := range pool.workers {
 		pool.Wg.Add(1)
 		go func(pool *WorkerPool, w Worker) {

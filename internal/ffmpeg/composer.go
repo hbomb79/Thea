@@ -22,7 +22,7 @@ var FFMPEG_COMMAND_SUBSTITUTIONS []string = []string{
 	"OUTPUT_PATH",
 }
 
-func composeCommandArguments(sourceCommand string, item *queue.QueueItem) string {
+func composeCommandArguments(sourceCommand string, item *queue.Item) string {
 	getVal := func(command string) string {
 		item := item
 		switch command {

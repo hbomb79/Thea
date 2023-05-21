@@ -10,9 +10,10 @@ import (
 type LogStatus int
 
 const (
-	DEBUG LogStatus = iota
-	SUCCESS
+	VERBOSE LogStatus = iota
+	DEBUG
 	INFO
+	SUCCESS
 	NEW
 	REMOVE
 	STOP
@@ -21,10 +22,11 @@ const (
 	FATAL
 )
 
-const MIN_STAT = SUCCESS
+const MIN_STAT = INFO
 
 func (e LogStatus) String() string {
 	return []string{
+		"V",
 		"D",
 		"✓",
 		"I",
@@ -39,6 +41,7 @@ func (e LogStatus) String() string {
 
 func (e LogStatus) Color() *color.Color {
 	return []*color.Color{
+		color.New(color.FgWhite, color.Italic),                //Verbose
 		color.New(color.FgWhite, color.Italic),                //Debug
 		color.New(color.FgHiGreen),                            //Success
 		color.New(color.FgWhite),                              //Info

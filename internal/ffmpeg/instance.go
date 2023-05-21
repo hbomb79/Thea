@@ -26,7 +26,7 @@ const (
 type FfmpegInstance interface {
 	// Start begins the execution of this instance. FFmpeg progress updates will cause
 	// this instance to send it's ID on the channel provided.
-	Start(FormatterConfig, ProgressCallback)
+	Start(FormatterConfig, ProgressChannel)
 
 	// Cancel stops the execution of the running FFmpeg task, cleaning up any partially
 	// transcoded footage before exiting.
@@ -80,24 +80,29 @@ type ffmpegInstance struct {
 	lastKnownProgress transcoder.Progress
 }
 
-func (instance *ffmpegInstance) Start(config FormatterConfig, progressReportCallback ProgressCallback) {
+func (instance *ffmpegInstance) Start(config FormatterConfig, progressReportCallback ProgressChannel) {
+	defer close(progressReportCallback)
+
+	if instance.status != WAITING {
+		log.Emit(logger.ERROR, "Cannot start instance %v due to invalid status %v, expected WAITING (%v)\n", instance, instance.status, WAITING)
+		return
+	}
+
 	for {
 		if instance.status == TROUBLED {
 			// Wait on the trouble channel to emit before re-trying
 			<-instance.retryChan
 		}
 
-		instance.tryStart(config, progressReportCallback)
+		instance.startAndMonitorFfmpeg(config, progressReportCallback)
 		if instance.status == CANCELLED || instance.status == COMPLETE {
 			// Done and dusted
 			return
 		}
-
-		progressReportCallback(nil)
 	}
 }
 
-func (instance *ffmpegInstance) tryStart(config FormatterConfig, progressReportCallback ProgressCallback) {
+func (instance *ffmpegInstance) startAndMonitorFfmpeg(config FormatterConfig, progressChan ProgressChannel) {
 	if instance.status != WAITING {
 		return
 	}
@@ -122,20 +127,27 @@ func (instance *ffmpegInstance) tryStart(config FormatterConfig, progressReportC
 	instance.command = NewFfmpegCmd(item, profile)
 
 	// Start the command, providing a callback for progress notifications
-	wrappedProgressReportCallback := func(prog transcoder.Progress) {
-		instance.lastKnownProgress = prog
-		progressReportCallback(prog)
-	}
-
-	ffmpegErr := instance.command.Run(wrappedProgressReportCallback, config)
+	proxyReportChannel := instance.createProxyProgressChannel(progressChan)
+	ffmpegErr := instance.command.Run(proxyReportChannel, config)
+	log.Emit(logger.DEBUG, "FFmpeg instance %v has completed with error=%v\n", instance, ffmpegErr)
 	if ffmpegErr != nil {
 		instance.raiseTrouble(item, ffmpegErr)
+		// Clear lastKnownProgress, and notify commander of trouble
+		proxyReportChannel <- nil
 	} else {
 		instance.status = COMPLETE
 	}
 }
 
 func (instance *ffmpegInstance) Cancel() {
+	log.Emit(logger.DEBUG, "Cancelling instance %v...", instance)
+	if instance.command == nil {
+		log.Emit(logger.WARNING, "Cannot cancel instance %v as no command is initialized yet", instance)
+		return
+	}
+
+	// TODO terminate command
+	// TODO cleanup partially transcoded output
 }
 
 func (instance *ffmpegInstance) Pause()  {}
@@ -146,7 +158,7 @@ func (instance *ffmpegInstance) RequiredThreads() (uint32, error) {
 	if profile == nil {
 		instance.status = CANCELLED
 		instance.message = "Automatically cancelled as profile was removed/could not be found"
-		return 0, fmt.Errorf("cancelled instance %v because it's profile could not be found", instance.id)
+		return 0, fmt.Errorf("cancelled instance %v because it's profile could not be found", instance)
 	}
 
 	if t := profile.Command().Threads; t != nil && *t >= 0 {
@@ -176,17 +188,44 @@ func (instance *ffmpegInstance) ResolveTrouble(payload map[string]any) error {
 	// this instance now that it's been resolved
 	select {
 	case instance.retryChan <- true:
+		log.Emit(logger.VERBOSE, "Trouble resolution complete, sending wake-up to instance %v\n", instance)
 	default:
+		log.Emit(logger.WARNING, "Failed to send wake-up to instance %v after resolving trouble... channel blocked\n", instance)
 	}
 
 	return nil
 }
 
-func (instance *ffmpegInstance) raiseTrouble(item *queue.QueueItem, err error) {
+func (instance *ffmpegInstance) raiseTrouble(item *queue.Item, err error) {
 	instance.status = TROUBLED
 	instance.trouble = &queue.FfmpegTaskError{BaseTaskError: queue.NewBaseTaskError(err.Error(), item, queue.FFMPEG_FAILURE)}
 
-	commanderLogger.Emit(logger.ERROR, "Instance %v ERR: %s\n", instance.id, err.Error())
+	log.Emit(logger.ERROR, "Raised trouble for instance %v - ERR: %s\n", instance, err.Error())
+}
+
+func (instance *ffmpegInstance) createProxyProgressChannel(source ProgressChannel) ProgressChannel {
+	proxyReportChannel := make(ProgressChannel)
+	go func(proxyChan ProgressChannel, forwardChan ProgressChannel) {
+		for {
+			progress, isOk := <-proxyChan
+			if !isOk {
+				log.Emit(logger.DEBUG, "FFmpeg instance %v has detected closure of progress channel for command, instance has either completed or crashed\n", instance)
+				break
+			}
+
+			instance.lastKnownProgress = progress
+
+			select {
+			case forwardChan <- progress:
+				log.Emit(logger.VERBOSE, "FFmpeg instance %v forwarded FFmpeg command progress to commander\n", instance)
+			default:
+				log.Emit(logger.WARNING, "FFmpef instance %v FAILED to forward FFmpeg command progress to commander due to channel blockage\n", instance)
+			}
+		}
+		log.Emit(logger.WARNING, "FFmpeg instance %v progress channel forwarding disconnected!\n", instance)
+	}(proxyReportChannel, source)
+
+	return proxyReportChannel
 }
 
 func (instance *ffmpegInstance) Status() InstanceStatus { return instance.status }
@@ -230,6 +269,14 @@ func (instance *ffmpegInstance) GetLastKnownProgressForInstance() *InstanceProgr
 	} else {
 		return nil
 	}
+}
+func (instance *ffmpegInstance) String() string {
+	var pid int = -1
+	if instance.command != nil {
+		pid = instance.command.GetProcessID()
+	}
+
+	return fmt.Sprintf("{%v Profile=%s ItemID=%d PID=%d}", instance.id, instance.profileLabel, instance.itemID, pid)
 }
 
 func NewFfmpegInstance(itemID int, profileLabel string, provider Provider) FfmpegInstance {

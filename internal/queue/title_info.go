@@ -34,7 +34,7 @@ func (tInfo *TitleInfo) OutputPath() string {
 }
 
 type TitleFormatError struct {
-	item    *QueueItem
+	item    *Item
 	message string
 }
 

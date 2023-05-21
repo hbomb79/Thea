@@ -21,7 +21,7 @@ type Trouble interface {
 	error
 	Args() map[string]string
 	Resolve(map[string]interface{}) error
-	Item() *QueueItem
+	Item() *Item
 	Type() TroubleType
 	Payload() map[string]interface{}
 	ResolutionContext() map[string]interface{}
@@ -42,13 +42,13 @@ const (
 
 type BaseTaskError struct {
 	message           string
-	queueItem         *QueueItem
+	queueItem         *Item
 	troubleType       TroubleType
 	resolutionContext map[string]interface{}
 	uuid              uuid.UUID
 }
 
-func NewBaseTaskError(message string, queueItem *QueueItem, troubleType TroubleType) BaseTaskError {
+func NewBaseTaskError(message string, queueItem *Item, troubleType TroubleType) BaseTaskError {
 	return BaseTaskError{
 		message,
 		queueItem,
@@ -62,7 +62,7 @@ func (base *BaseTaskError) Error() string {
 	return base.message
 }
 
-func (base *BaseTaskError) Item() *QueueItem {
+func (base *BaseTaskError) Item() *Item {
 	return base.queueItem
 }
 

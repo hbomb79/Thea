@@ -32,7 +32,7 @@ func NewTpa(config internal.TheaConfig) *services {
 		socketHub:  socket.NewSocketHub(),
 	}
 
-	thea := internal.NewThea(config, services.handleTpaUpdate)
+	thea := internal.NewThea(config, services.handleTheaUpdate)
 	services.thea = thea
 	services.wsGateway = api.NewWsGateway(thea)
 	services.httpGateway = api.NewHttpGateway(thea)
@@ -109,13 +109,14 @@ func (serv *services) setupRoutes() {
 	serv.socketHub.BindCommand("PROFILE_UPDATE_COMMAND", serv.wsGateway.WsProfileUpdateCommand)
 }
 
-func (serv *services) handleTpaUpdate(update *internal.Update) {
+func (serv *services) handleTheaUpdate(update *internal.Update) {
 	body := map[string]interface{}{"context": update}
 	if update.UpdateType == internal.PROFILE_UPDATE {
 		body["profiles"] = serv.thea.GetAllProfiles()
 		body["targetOpts"] = serv.thea.GetKnownFfmpegOptions()
 	}
 
+	mainLogger.Emit(logger.VERBOSE, "Emitting UPDATE message %#v\n", body)
 	serv.socketHub.Send(&socket.SocketMessage{
 		Title: "UPDATE",
 		Body:  body,

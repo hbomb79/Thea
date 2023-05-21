@@ -52,7 +52,7 @@ func (httpGateway *HttpGateway) HttpQueueGet(w http.ResponseWriter, r *http.Requ
 	instances := httpGateway.thea.GetFfmpegInstancesForItem(id)
 
 	JsonMarshal(w, struct {
-		*queue.QueueItem
+		*queue.Item
 		Instances []ffmpeg.FfmpegInstance `json:"ffmpegInstances"`
 	}{queueItem, instances})
 }

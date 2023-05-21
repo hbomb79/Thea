@@ -30,10 +30,10 @@ type BaseTask struct {
 	ItemProducer
 }
 
-type taskFn func(worker.Worker, *QueueItem) error
-type onComplete func(*QueueItem)
+type taskFn func(worker.Worker, *Item) error
+type onComplete func(*Item)
 type ItemProducer interface {
-	PickItem(ItemStage) *QueueItem
+	PickItem(ItemStage) *Item
 }
 
 // executeTask implements the core worker work/wait loop that
@@ -110,7 +110,7 @@ func (task *TitleTask) Execute(w worker.Worker) error {
 // This method will return an error if the processing fails. The second return (bool)
 // indicates whether or not the item has been fully processed. Item trouble is cleared
 // when this method returns
-func (task *TitleTask) processTroubleState(queueItem *QueueItem) (bool, error) {
+func (task *TitleTask) processTroubleState(queueItem *Item) (bool, error) {
 	if queueItem.Trouble != nil {
 		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
 			// Check for the mandatory 'info' key.
@@ -137,7 +137,7 @@ func (task *TitleTask) processTroubleState(queueItem *QueueItem) (bool, error) {
 
 // Processes a given queueItem by filtering out irrelevant information from it's
 // title, and finding relevant information such as the season, episode and resolution
-func (task *TitleTask) processTitle(w worker.Worker, queueItem *QueueItem) error {
+func (task *TitleTask) processTitle(w worker.Worker, queueItem *Item) error {
 	isComplete, err := task.processTroubleState(queueItem)
 	if err != nil {
 		taskLogger.Emit(logger.WARNING, "Unable to process items trouble state: %s\n", err.Error())
@@ -155,7 +155,7 @@ func (task *TitleTask) processTitle(w worker.Worker, queueItem *QueueItem) error
 }
 
 // advances the item by advancing the stage of the item
-func (task *TitleTask) advance(item *QueueItem) {
+func (task *TitleTask) advance(item *Item) {
 	task.OnComplete(item)
 }
 
@@ -202,7 +202,7 @@ func filterSearchItems(items []*OmdbSearchItem, strategy func(*OmdbSearchItem) b
 // parse searches through the result from Omdb and tries to find just one search result
 // to use based on filtering the results for their release date, type (movie/series) and
 // title. If this fails, an error is returned (e.g. OmdbNoResultError, OmdbMultipleResultError)
-func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*OmdbSearchItem, error) {
+func (result *OmdbSearchResult) parse(queueItem *Item, task *OmdbTask) (*OmdbSearchItem, error) {
 	// Check the response by parsing the response, and total results.
 	if !result.Response || result.Count == 0 {
 		// Response from OMDB failed!
@@ -279,7 +279,7 @@ func (result *OmdbSearchResult) parse(queueItem *QueueItem, task *OmdbTask) (*Om
 // Execute uses the provided baseTask.executeTask method to run this tasks
 // work function in a work/wait worker loop
 func (task *OmdbTask) Execute(w worker.Worker) error {
-	return task.executeTask(w, func(w worker.Worker, queueItem *QueueItem) error {
+	return task.executeTask(w, func(w worker.Worker, queueItem *Item) error {
 		isComplete, err := task.processTroubleState(queueItem)
 		if err != nil {
 			taskLogger.Emit(logger.WARNING, "Unable to process items trouble state: %s\n", err.Error())
@@ -298,7 +298,7 @@ func (task *OmdbTask) Execute(w worker.Worker) error {
 // This method will return an error if the processing fails. The second return (bool)
 // indicates whether or not the item has been fully processed. Trouble is cleared
 // once this method returns.
-func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (bool, error) {
+func (task *OmdbTask) processTroubleState(queueItem *Item) (bool, error) {
 	if queueItem.Trouble == nil {
 		return false, nil
 	}
@@ -348,7 +348,7 @@ func (task *OmdbTask) processTroubleState(queueItem *QueueItem) (bool, error) {
 // If multiple results are found a OmdbMultipleResultError is returned; if
 // no results are found then an OmdbNoResultError is returned. If the request
 // fails for another reason, an OmdbRequestError is returned.
-func (task *OmdbTask) search(w worker.Worker, queueItem *QueueItem) (*OmdbInfo, error) {
+func (task *OmdbTask) search(w worker.Worker, queueItem *Item) (*OmdbInfo, error) {
 	// Peform the search
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "s", queueItem.TitleInfo.Title, task.OmdbKey))
 	if err != nil {
@@ -385,7 +385,7 @@ func (task *OmdbTask) search(w worker.Worker, queueItem *QueueItem) (*OmdbInfo, 
 // fetch will perform an Omdb request using the given ID as the API argument.
 // If no match is found a OmdbNoResultError is returned - if the request fails
 // for another reason, an OmdbRequestError is returned.
-func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, error) {
+func (task *OmdbTask) fetch(imdbId string, queueItem *Item) (*OmdbInfo, error) {
 	res, err := http.Get(fmt.Sprintf(OMDB_API, "i", imdbId, task.OmdbKey))
 	if err != nil {
 		// Request exception
@@ -412,7 +412,7 @@ func (task *OmdbTask) fetch(imdbId string, queueItem *QueueItem) (*OmdbInfo, err
 
 // find is used to perform a search to Omdb using the title information stored inside
 // of a QueueItem.
-func (task *OmdbTask) find(w worker.Worker, queueItem *QueueItem) error {
+func (task *OmdbTask) find(w worker.Worker, queueItem *Item) error {
 	if queueItem.TitleInfo == nil {
 		return fmt.Errorf("cannot find OMDB info for queueItem (id: %v). TitleInfo missing", queueItem.ItemID)
 	}
@@ -429,12 +429,12 @@ func (task *OmdbTask) find(w worker.Worker, queueItem *QueueItem) error {
 
 // advance will push the stage of this queue item forward, and wakeup any workers
 // for that stage
-func (task *OmdbTask) advance(item *QueueItem) {
+func (task *OmdbTask) advance(item *Item) {
 	// Release the QueueItem by advancing it to the next pipeline stage
 	task.OnComplete(item)
 }
 
-type commitHandler func(*QueueItem) error
+type commitHandler func(*Item) error
 type DatabaseTask struct {
 	OnComplete    onComplete
 	CommitHandler commitHandler
@@ -452,7 +452,7 @@ func (task *DatabaseTask) Execute(w worker.Worker) error {
 // This method will return an error if the processing fails. The second return (bool)
 // indicates whether or not the item has been fully processed. Item trouble is cleared
 // when this method returns
-func (task *DatabaseTask) processTroubleState(queueItem *QueueItem) (bool, error) {
+func (task *DatabaseTask) processTroubleState(queueItem *Item) (bool, error) {
 	if queueItem.Trouble != nil {
 		if trblCtx := queueItem.Trouble.ResolutionContext(); trblCtx != nil {
 			_, ok := trblCtx["retry"]
@@ -469,7 +469,7 @@ func (task *DatabaseTask) processTroubleState(queueItem *QueueItem) (bool, error
 
 // Processes a given queueItem by filtering out irrelevant information from it's
 // title, and finding relevant information such as the season, episode and resolution
-func (task *DatabaseTask) commitToDatabase(w worker.Worker, queueItem *QueueItem) error {
+func (task *DatabaseTask) commitToDatabase(w worker.Worker, queueItem *Item) error {
 	isComplete, err := task.processTroubleState(queueItem)
 	if err != nil {
 		taskLogger.Emit(logger.WARNING, "Unable to process items trouble state: %s\n", err.Error())
@@ -488,6 +488,6 @@ func (task *DatabaseTask) commitToDatabase(w worker.Worker, queueItem *QueueItem
 }
 
 // advances the item by advancing the stage of the item
-func (task *DatabaseTask) advance(item *QueueItem) {
+func (task *DatabaseTask) advance(item *Item) {
 	task.OnComplete(item)
 }

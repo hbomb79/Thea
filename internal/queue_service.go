@@ -13,16 +13,16 @@ import (
 // QueueService is responsible for exposing methods for reading or mutating
 // the state of the Thea queue.
 type QueueService interface {
-	GetAllItems() *[]*queue.QueueItem
-	GetItem(int) (*queue.QueueItem, error)
+	GetAllItems() *[]*queue.Item
+	GetItem(int) (*queue.Item, error)
 	ReorderQueue([]int) error
 	PromoteItem(int) error
 	CancelItem(int) error
 	PauseItem(int) error
 	ResumeItem(int) error
-	AdvanceItem(*queue.QueueItem)
-	PickItem(stage queue.ItemStage) *queue.QueueItem
-	ExportItem(*queue.QueueItem) error
+	AdvanceItem(*queue.Item)
+	PickItem(stage queue.ItemStage) *queue.Item
+	ExportItem(*queue.Item) error
 }
 
 type queueService struct {
@@ -30,12 +30,12 @@ type queueService struct {
 }
 
 // GetAllItems returns all QueueItems currently managed by the queue service
-func (service *queueService) GetAllItems() *[]*queue.QueueItem {
+func (service *queueService) GetAllItems() *[]*queue.Item {
 	return service.thea.queue().Items()
 }
 
 // GetItem returns the QueueItem with the matching ID, if found
-func (service *queueService) GetItem(itemID int) (*queue.QueueItem, error) {
+func (service *queueService) GetItem(itemID int) (*queue.Item, error) {
 	item, position := service.thea.queue().FindById(itemID)
 	if position == -1 || item == nil {
 		return nil, fmt.Errorf("failed to GetItem(%d) -> No item with this ID exists", itemID)
@@ -103,6 +103,7 @@ func (service *queueService) CancelItem(itemID int) error {
 		item.SetStatus(queue.Cancelled)
 	case queue.Completed:
 		return fmt.Errorf("failed to CancelItem(%d) -> Item has already been completed", itemID)
+	case queue.NeedsAttention:
 	case queue.Processing:
 		// Item is busy, mark as cancelling!
 		item.SetStatus(queue.Cancelling)
@@ -163,13 +164,13 @@ func (service *queueService) ResumeItem(itemID int) error {
 	return nil
 }
 
-func (service *queueService) AdvanceItem(item *queue.QueueItem) {
-	procLogger.Emit(logger.DEBUG, "Advancing item %s to next stage\n", item)
+func (service *queueService) AdvanceItem(item *queue.Item) {
+	log.Emit(logger.DEBUG, "Advancing item %s to next stage\n", item)
 	service.thea.queue().AdvanceStage(item)
 	service.thea.workerPool().WakeupWorkers()
 }
 
-func (service *queueService) PickItem(stage queue.ItemStage) *queue.QueueItem {
+func (service *queueService) PickItem(stage queue.ItemStage) *queue.Item {
 	return service.thea.queue().Pick(stage)
 }
 
@@ -177,7 +178,7 @@ func (service *queueService) PickItem(stage queue.ItemStage) *queue.QueueItem {
 // 1. Form a database model with the item and it's completed ffmpeg instances.
 // 2. Save this model to the persisted database.
 // 3. Mark this item as *completed* in the queue.
-func (service *queueService) ExportItem(item *queue.QueueItem) error {
+func (service *queueService) ExportItem(item *queue.Item) error {
 	if item.Stage != queue.Database || item.Status != queue.Processing {
 		// Cannot export an item that is at any other stage!
 		return fmt.Errorf("failed to ExportItem(%d) -> Item is not at correct stage/status", item.ItemID)

@@ -361,7 +361,7 @@ export class ContentManager {
 
                 this._items.splice(idx, 1)
                 this.itemIndex.set(this._items)
-            } else if (idx != update.item_position) {
+            } else if (idx != itemUpdate.item_position) {
                 // The position for this item has changed.. likely due to a item promotion.
                 // Update the order of the queue - to do this we should
                 // simply re-query the server for an up-to-date queue index.

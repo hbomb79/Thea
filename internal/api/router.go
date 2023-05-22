@@ -98,7 +98,7 @@ func (router *Router) buildRoutes(opts *RouterOptions) {
 
 		muxRoute := router.Mux.HandleFunc(routePath, route.handler)
 		if len(route.methods) > 0 {
-			muxRoute = muxRoute.Methods(route.methods...)
+			muxRoute.Methods(route.methods...)
 		}
 	}
 }
@@ -107,7 +107,7 @@ func (router *Router) buildRoutes(opts *RouterOptions) {
 // so we can use them to configure our router
 func validateOpts(opts *RouterOptions) error {
 	if opts.ApiHost == "" || opts.ApiPort == 0 || opts.ApiRoot == "" {
-		return errors.New("router options must contain ApiHost, ApiPort and ApiRoot to be used for routing.")
+		return errors.New("router options must contain ApiHost, ApiPort and ApiRoot to be used for routing")
 	}
 
 	return nil

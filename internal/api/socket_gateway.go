@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal"
+	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/profile"
 	"github.com/hbomb79/Thea/pkg/socket"
 )
@@ -159,20 +161,31 @@ func (wsGateway *WsGateway) WsTroubleResolve(hub *socket.SocketHub, message *soc
 		return err
 	}
 
-	// Optional paramater for instance tag allows the client to resolve troubles embedded inside of ffmpeg instances
-	instanceTag, isEmbed := message.Body["instanceTag"]
+	// Optional paramater for instance ID allows the client to resolve troubles embedded inside of ffmpeg instances
+	instanceId, isEmbed := message.Body["instanceId"]
 
 	idArg := message.Body["id"]
 	if item, err := wsGateway.thea.GetItem(int(idArg.(float64))); err == nil {
 		if isEmbed {
-			for _, i := range wsGateway.thea.GetFfmpegInstancesForItem(item.ItemID) {
-				if i.Profile() == instanceTag {
-					if err := i.ResolveTrouble(message.Body); err != nil {
-						return fmt.Errorf("failed to resolve embedded ffmpeg trouble for queue item %v - %v", idArg, err.Error())
-					}
+			stringId := instanceId.(string)
+			id, err := uuid.Parse(stringId)
+			if err != nil {
+				return fmt.Errorf(ERR_FMT, idArg, "FFmpeg instance ID "+stringId+" is not a valid UUID")
+			}
 
+			var foundInstance *ffmpeg.FfmpegInstance
+			for _, instance := range wsGateway.thea.GetFfmpegInstancesForItem(item.ItemID) {
+				if instance.Id() == id {
+					foundInstance = &instance
 					break
 				}
+			}
+
+			if foundInstance == nil {
+				return fmt.Errorf(ERR_FMT, idArg, "FFmpeg instance with ID "+stringId+" not found")
+			}
+			if err := (*foundInstance).ResolveTrouble(message.Body); err != nil {
+				return fmt.Errorf("failed to resolve embedded ffmpeg trouble for queue item %v - %v", idArg, err.Error())
 			}
 		} else {
 			if item.Trouble != nil {

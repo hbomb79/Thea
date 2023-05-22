@@ -2,27 +2,110 @@ package logger
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/fatih/color"
 )
 
+// LogStatus represents the type of log level being emitted,
+// however it's important to note that each level here is not
+// discretely toggleable. For example, VERBOSE and DEBUG are
+// distinct tiers, however SUCCESS, NEW, REMOVE, and STOP are
+// all same tier and are 'important' logs. See the LogLevel
+// enum for the tiers and how each status maps to a level.
 type LogStatus int
 
 const (
+	// Verbose
 	VERBOSE LogStatus = iota
+
+	// Debug
 	DEBUG
+
+	// Info
 	INFO
+
+	// Important
 	SUCCESS
 	NEW
 	REMOVE
 	STOP
+
+	// Warning
 	WARNING
+
+	// Error
 	ERROR
 	FATAL
 )
 
-const MIN_STAT = INFO
+const DEFAULT_MIN_STATUS = info
+
+func getMinLogLevelFromEnv() LogLevel {
+	if value, ok := os.LookupEnv("THEA_LOG_LEVEL"); ok {
+		switch strings.ToLower(value) {
+		case "verbose":
+			return verbose
+		case "debug":
+			return debug
+		case "info":
+			return info
+		case "important":
+			return important
+		case "warning":
+			return warning
+		case "error":
+			return err
+		default:
+			fmt.Printf("ERR: logging level %v is not recognized, falling back to default\n", value)
+		}
+	}
+
+	return DEFAULT_MIN_STATUS
+}
+
+type LogLevel int
+
+const (
+	verbose LogLevel = iota
+	debug
+	info
+	important
+	warning
+	err
+)
+
+// Level returns the mapping between a LogStatus - used to describe the intent
+// of a log level - and it's LogLevel, which is a tiered set of enums that describe
+// the 'importance' of the message to the user. E.g. a 'FATAL' status error is mapped
+// to the most important level: err.
+func (e LogStatus) Level() LogLevel {
+	switch e {
+	case VERBOSE:
+		return verbose
+	case DEBUG:
+		return debug
+	case INFO:
+		return info
+	case SUCCESS:
+		fallthrough
+	case NEW:
+		fallthrough
+	case REMOVE:
+		fallthrough
+	case STOP:
+		return important
+	case WARNING:
+		return warning
+	case ERROR:
+		fallthrough
+	case FATAL:
+		fallthrough
+	default:
+		return err
+	}
+}
 
 func (e LogStatus) String() string {
 	return []string{
@@ -72,11 +155,13 @@ type LoggerManager interface {
 }
 
 var Log LoggerManager = &loggerMgr{
-	offset: 0,
+	offset:   0,
+	minLevel: getMinLogLevelFromEnv(),
 }
 
 type loggerMgr struct {
-	offset int
+	offset   int
+	minLevel LogLevel
 }
 
 func (l *loggerMgr) GetLogger(name string) Logger {
@@ -84,7 +169,7 @@ func (l *loggerMgr) GetLogger(name string) Logger {
 }
 
 func (l *loggerMgr) Emit(status LogStatus, name string, message string, interpolations ...interface{}) {
-	if status < MIN_STAT {
+	if status.Level() < l.minLevel {
 		return
 	}
 

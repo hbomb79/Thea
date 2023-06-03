@@ -1,0 +1,38 @@
+@use "tile.scss";
+
+.item {
+    h2 {
+        margin-top: 0;
+    }
+    .header {
+        /* Ocupy all remaining width of the flexbox */
+        .id {
+            color: #8c91b9;
+            align-self: center;
+            padding-left: 11px;
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+
+        h2 .season {
+            font-weight: 300;
+        }
+    }
+
+    main {
+        :global(.tile) {
+            padding: 2rem 1rem;
+        }
+
+        .tile.pending {
+            h2 {
+                color: #9681e2;
+            }
+
+            :global(.lds-ripple) {
+                display: block;
+                margin: 1rem auto 0 auto;
+            }
+        }
+    }
+}

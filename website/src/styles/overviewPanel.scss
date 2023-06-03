@@ -1,0 +1,102 @@
+.stages {
+    display: flex;
+    justify-content: space-around;
+    position: relative;
+
+    .active:not(:hover) :global(svg), .active:not(:hover) .caption {
+        /* animation: blinker 1s linear infinite; */
+    }
+
+    .stage {
+        display: flex;
+        flex-direction: column-reverse;
+        cursor: pointer;
+
+        /* ha nice */
+        background: radial-gradient(#f3f5fe 50%, transparent 69% 100%);
+        position: relative;
+
+        transition: box-shadow 200ms ease-out, transform 50ms ease-in-out;
+        border-radius: 4px;
+        padding: 1.1rem;
+        width: 60px;
+
+        z-index: 50;
+
+        &.hidden {
+            .caption {
+                opacity: 0.3;
+                transition: all 300ms ease-in-out;
+                transition-property: opacity, color;
+            }
+
+            :global(svg) {
+                transition: 300ms ease-in-out fill;
+                fill: #dedede;
+            }
+
+            &:hover {
+                .caption {
+                    opacity: 1;
+                    color: black;
+                }
+
+                :global(svg) {
+                    fill: black;
+                }
+            }
+        }
+
+        .caption {
+            display: block;
+            margin-top: 6px;
+            color: #9d99a7;
+            font-size: 0.8rem;
+            text-transform: capitalize;
+        }
+
+        &:hover {
+            background: #f1effc;
+            :global(svg) {
+                fill: black;
+            }
+
+            .caption {
+                color: black;
+            }
+        }
+
+        :global(svg) {
+            width: 2rem;
+            height: 2rem;
+            margin: 0 auto;
+            fill: #737070;
+        }
+
+        &:after {
+            opacity: 0;
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+
+            width: 100%;
+            height: 100%;
+
+            transition: opacity 200ms ease-out;
+            background: linear-gradient(326deg, #d9b6ea5e, #bfd9ff4f);
+            box-shadow: 0px 0px 6px -5px black;
+            border-radius: 4px;
+        }
+        
+        &:hover:after {
+            opacity: 1;
+        }
+    }
+
+    @import "../styles/stageIcon.scss";
+    .check-wrapper {
+        align-self: center;
+        width: 40px;
+    }
+}

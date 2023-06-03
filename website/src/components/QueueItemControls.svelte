@@ -49,7 +49,7 @@
     const onClick = (action: Action) => {
         if (currentAction == action) {
             dispatch("queue-control", action);
-            currentAction = Action.NONE;
+            resetSelection();
 
             return;
         }
@@ -79,7 +79,7 @@
 <div class="controls" on:mouseleave={resetSelection}>
     {#each controls as { label, action, icon, itemElement, spanElement }}
         <span
-            class="control"
+            class="control {label.toLowerCase()}"
             on:click|preventDefault={() => onClick(action)}
             bind:this={itemElement}
             class:active={currentAction == action}

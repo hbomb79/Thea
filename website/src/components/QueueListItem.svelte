@@ -1,6 +1,5 @@
 <script lang="ts">
     import { QueueStatus } from "../queue";
-    import type { QueueDetails } from "../queue";
     import { createEventDispatcher } from "svelte";
     import { selectedQueueItem } from "../stores/item";
     import { itemDetails } from "../stores/queue";
@@ -30,17 +29,19 @@
     <div class="item" on:click={() => dispatch("selected", details.id)} class:active={$selectedQueueItem == details.id}>
         <span class={`status ${getStatusClass()}`} />
 
-        {#if details.omdb_info?.Title}
-            {details.omdb_info.Title}
-        {:else if details.title_info?.Title}
-            {details.title_info.Title}
-        {:else}
-            {details.name}
-        {/if}
+        <span class="title">
+            {#if details.omdb_info?.Title}
+                {details.omdb_info.Title}
+            {:else if details.title_info?.Title}
+                {details.title_info.Title}
+            {:else}
+                {details.name}
+            {/if}
 
-        {#if details.title_info && details.title_info.Episodic}
-            <span class="season">S{details.title_info.Season}E{details.title_info.Episode}</span>
-        {/if}
+            {#if details.title_info && details.title_info.Episodic}
+                <span class="season">S{details.title_info.Season}E{details.title_info.Episode}</span>
+            {/if}
+        </span>
     </div>
 {/if}
 
@@ -58,6 +59,14 @@
         transition: all 200ms;
         transition-property: background, border, box-shadow, color;
 
+        overflow: hidden;
+        text-overflow: ellipsis;
+
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+
         &:hover {
             background: #ffffff85;
         }
@@ -68,6 +77,11 @@
             color: #8e82bf;
         }
 
+        .title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .status {
             background: #39d3fd96;
             height: 12px;
@@ -75,6 +89,7 @@
             display: inline-block;
             border-radius: 100%;
             margin-right: 8px;
+            flex: none;
 
             &.pending {
                 background: global.$pendingColour;

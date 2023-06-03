@@ -1,140 +1,68 @@
-<script lang="ts" context="module">
-    export enum QueueState {
-        SYNCED,
-        REORDERING,
-        SYNCING,
-        FAILURE,
-    }
-</script>
-
 <script lang="ts">
-    import { onMount } from "svelte";
-
     import healthSvg from "../assets/health.svg";
-    import { ContentManager } from "../queue";
-    import type { TranscodeProfile } from "../queue";
-    import type { QueueDetails, QueueItem } from "../queue";
+    import { contentManager } from "../queue";
     import QueueItemMini from "./QueueItemMini.svelte";
     import QueueItemFull from "./QueueItemFull.svelte";
     import QueueList from "./QueueList.svelte";
-    import { commander, ffmpegOptionsStream } from "../commander";
-    import { SocketMessageType } from "../store";
-    import type { SocketData } from "../store";
+    import { selectedQueueItem } from "../stores/item";
     import ServerSettings from "./ServerSettings.svelte";
     import { fade } from "svelte/transition";
     import Modal from "svelte-simple-modal";
-    import Viewer from "./Viewer.svelte";
+    import { writable } from "svelte/store";
+    import { itemIndex, queueState } from "../stores/queue";
+    import { QueueState } from "../queueOrderManager";
 
-    const comp = {
-        optionElements: new Array(3),
-        domCompleted: null,
-        options: ["Home", "Queue", "Settings"],
-        selectionOption: 0,
-    };
+    type DashboardPage = "Home" | "Queue" | "Settings";
 
-    let queueState = QueueState.SYNCED;
+    const dashboardOptions: DashboardPage[] = ["Home", "Queue", "Settings"];
+    const selectedDashboardPage = writable<DashboardPage>("Home");
 
-    const contentManager = new ContentManager();
-
-    let details: Map<number, QueueDetails> = null;
-    let index: QueueItem[] = [];
-    let profiles: TranscodeProfile[] = [];
-    let selectedItem: number = -1;
-
-    ffmpegOptionsStream.subscribe((options) => {
-        console.log("ffmpeg options changed!", options);
-    });
-
-    const handleQueueReorder = (event: CustomEvent) => {
-        index = event.detail;
-        queueState = QueueState.REORDERING;
-    };
-
-    const commitQueueReorder = () => {
-        console.warn(
-            "Syncing queue index with server - new index: ",
-            index,
-            "flattened: ",
-            index.flatMap((item) => item.id)
-        );
-        queueState = QueueState.SYNCING;
-        commander.sendMessage(
-            {
-                title: "QUEUE_REORDER",
-                type: SocketMessageType.COMMAND,
-                arguments: {
-                    index: index.flatMap((item) => item.id),
-                },
-            },
-            (replyData: SocketData): boolean => {
-                if (replyData.type == SocketMessageType.ERR_RESPONSE) {
-                    console.warn("Queue reordering failed - requesting up-to-date index from server", replyData);
-                    alert(`Failed to reorder queue: ${replyData.arguments.error}`);
-
-                    contentManager.requestQueueIndex();
-                }
-
-                queueState = QueueState.SYNCED;
-                return false;
-            }
-        );
-    };
-
-    const miniItemClick = (itemId: number) => {
-        selectedItem = itemId;
-        comp.selectionOption = 1;
-    };
-
-    onMount(() => {
-        comp.optionElements.forEach((item: HTMLElement, index) => {
-            item.addEventListener("click", () => (comp.selectionOption = index));
-        });
-
-        contentManager.itemDetails.subscribe((v) => (details = v));
-        contentManager.itemIndex.subscribe((v) => {
-            if (queueState == QueueState.REORDERING) {
-                console.warn("Queue index change from server was IGNORED as queue is being reordered!");
-                return;
-            }
-
-            queueState = QueueState.SYNCED;
-            index = v;
-        });
-        contentManager.serverProfiles.subscribe((v) => {
-            profiles = v;
-        });
-    });
+    function miniItemClick(itemId: number) {
+        selectedQueueItem.set(itemId);
+        selectedDashboardPage.set("Queue");
+    }
 </script>
 
 <Modal>
     <div class="dashboard tiled-layout">
-        <div class="wrapper" class:sidebar-open={comp.selectionOption == 1}>
+        <div class="wrapper" class:sidebar-open={$selectedDashboardPage === "Queue"}>
             <div class="overflow-wrapper">
                 <div class="options">
-                    {#each comp.options as title, k}
-                        <div class="option" class:active={comp.selectionOption == k} bind:this={comp.optionElements[k]}>
-                            {title}
+                    {#each dashboardOptions as label}
+                        <div
+                            class="option"
+                            class:active={$selectedDashboardPage == label}
+                            on:click={() => selectedDashboardPage.set(label)}
+                        >
+                            {label}
                         </div>
                     {/each}
                 </div>
 
                 <div class="respect-overflow">
                     <div class="sidebar">
-                        {#if comp.selectionOption == 1}
+                        {#if $selectedDashboardPage == "Queue"}
                             <h2 class="header">Items</h2>
-                            {#if queueState == QueueState.REORDERING || queueState == QueueState.SYNCING}
-                                <button id="queue-reorder-commit" on:click={commitQueueReorder}>Save Order</button>
+                            {#if $queueState == QueueState.REORDERING || $queueState == QueueState.SYNCING}
+                                <button
+                                    id="queue-reorder-commit"
+                                    on:click={() => contentManager.queueOrderManager.commitReorder()}
+                                >
+                                    Save Order
+                                </button>
                             {/if}
 
                             <div class="queue-items" style="width: 350px;">
-                                <QueueList {index} {details} bind:selectedItem on:index-reorder={handleQueueReorder} />
+                                <QueueList
+                                    on:index-reorder={(event) =>
+                                        contentManager.queueOrderManager.handleReorder(event.detail)}
+                                />
                             </div>
                         {/if}
                     </div>
 
-                    <div class="tiles" class:full-size={comp.selectionOption == 1}>
-                        {#if comp.selectionOption == 0}
-                            <!-- <Viewer /> -->
+                    <div class="tiles" class:full-size={$selectedDashboardPage == "Queue"}>
+                        {#if $selectedDashboardPage == "Home"}
                             <div class="column main">
                                 <div class="tile overview" in:fade={{ duration: 250 }}>
                                     <h2 class="header">Overview</h2>
@@ -149,7 +77,7 @@
                                     <div class="content">
                                         <div class="mini-tile complete">
                                             <div class="main">
-                                                <div class="progress" bind:this={comp.domCompleted} />
+                                                <div class="progress" />
                                             </div>
                                             <p class="tag">Items Complete</p>
                                         </div>
@@ -168,25 +96,27 @@
                                 <div class="tile queue">
                                     <h2 class="header">Queue</h2>
                                     <div class="content">
-                                        {#each index as item, k}
-                                            <div in:fade={{ duration: 120, delay: 120 + k * 100 }}>
-                                                <QueueItemMini
-                                                    on:click={() => miniItemClick(item.id)}
-                                                    queueDetails={details.get(item.id)}
-                                                />
-                                            </div>
-                                        {/each}
+                                        {#if $itemIndex !== undefined}
+                                            {#each $itemIndex as item, k}
+                                                <div in:fade={{ duration: 120, delay: 120 + k * 100 }}>
+                                                    <QueueItemMini
+                                                        on:click={() => miniItemClick(item.id)}
+                                                        queueItemID={item.id}
+                                                    />
+                                                </div>
+                                            {/each}
+                                        {/if}
                                     </div>
                                 </div>
                             </div>
-                        {:else if comp.selectionOption == 1}
-                            {#if selectedItem > -1 && details.has(selectedItem)}
-                                <QueueItemFull details={details.get(selectedItem)} />
+                        {:else if $selectedDashboardPage == "Queue"}
+                            {#if $selectedQueueItem != -1}
+                                <QueueItemFull />
                             {:else}
                                 <h2>Select an item</h2>
                             {/if}
-                        {:else if comp.selectionOption == 2}
-                            <ServerSettings {profiles} {index} {details} />
+                        {:else if $selectedDashboardPage == "Settings"}
+                            <ServerSettings />
                         {/if}
                     </div>
                 </div>

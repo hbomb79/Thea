@@ -8,10 +8,12 @@
     import { createEventDispatcher, onMount } from "svelte";
     import type { QueueDetails } from "../../queue";
     import { fade } from "svelte/transition";
+    import { itemDetails } from "../../stores/queue";
+    import { selectedQueueItem } from "../../stores/item";
 
     // details is the QueueDetails we're showing in this component,
     // passed in from the parent component
-    export let details: QueueDetails;
+    $: details = $itemDetails.get($selectedQueueItem);
 
     // els and checkEls are lists of HTMLElements that are
     // bound dynamically by svelte after mounting

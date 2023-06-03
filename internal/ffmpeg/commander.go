@@ -150,7 +150,7 @@ func (com *commander) CancelAllForItem(itemID int) {
 		return
 	}
 
-	log.Emit(logger.INFO, "Cancelling all tasks for item %s\n", itemID)
+	log.Emit(logger.INFO, "Cancelling all tasks for item %v\n", itemID)
 	for _, instance := range instances {
 		instance.Cancel()
 	}

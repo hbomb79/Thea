@@ -63,7 +63,8 @@ export const socketStream = writable({
 const config = SERVER_CONFIG
 const socket = new WebSocket(`ws://${config.host}:${config.port}/api/thea/v0/ws`)
 export function sendMessage(message: string) {
-    if (socket.readyState <= 1) {
+    console.debug("sending... ", message)
+    if (socket.readyState == 1) {
         socket.send(message)
 
         return true
@@ -75,7 +76,7 @@ export function sendMessage(message: string) {
 // open, message and close event listeners that send the
 // new packet downstream via 'socketStream'
 socket.addEventListener('open', function (event) {
-    console.log("[Websocket] Connection established", event)
+    console.debug("[Websocket] Connection established", event)
     socketStream.set({
         type: SocketPacketType.OPEN,
         ev: event
@@ -83,7 +84,7 @@ socket.addEventListener('open', function (event) {
 })
 
 socket.addEventListener('message', function (event) {
-    console.log("[Websocket] Message recieved: ", event.data)
+    console.debug("[Websocket] Message recieved: ", event.data)
     socketStream.set({
         type: SocketPacketType.MESSAGE,
         ev: event
@@ -97,3 +98,4 @@ socket.addEventListener('close', function (event) {
         ev: event
     })
 })
+

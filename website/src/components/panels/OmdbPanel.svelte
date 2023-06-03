@@ -1,7 +1,10 @@
 <script lang="ts">
     import type { QueueDetails } from "../../queue";
     import dualRing from "../../assets/html/dual-ring.html";
-    export let details: QueueDetails;
+    import { itemDetails } from "../../stores/queue";
+    import { selectedQueueItem } from "../../stores/item";
+
+    $: details = $itemDetails.get($selectedQueueItem);
 </script>
 
 {#if details.omdb_info && details.omdb_info.Response}

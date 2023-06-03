@@ -3,6 +3,7 @@ package ffmpeg
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/floostack/transcoder"
 	"github.com/google/uuid"
@@ -91,7 +92,12 @@ func (instance *ffmpegInstance) Start(config FormatterConfig, progressReportCall
 	for {
 		if instance.status == TROUBLED {
 			// Wait on the trouble channel to emit before re-trying
+			log.Emit(logger.INFO, "Instance %v now waiting for trouble resolution on retryChan\n", instance)
 			<-instance.retryChan
+
+			instance.status = WAITING
+			progressReportCallback <- nil
+			time.Sleep(time.Second * 2)
 		}
 
 		instance.startAndMonitorFfmpeg(config, progressReportCallback)
@@ -137,12 +143,16 @@ func (instance *ffmpegInstance) startAndMonitorFfmpeg(config FormatterConfig, pr
 	} else {
 		instance.status = COMPLETE
 	}
+
+	// Cleanup command after completion
+	instance.command = nil
+	instance.lastKnownProgress = nil
 }
 
 func (instance *ffmpegInstance) Cancel() {
-	log.Emit(logger.DEBUG, "Cancelling instance %v...", instance)
+	log.Emit(logger.DEBUG, "Cancelling instance %v...\n", instance)
 	if instance.command == nil {
-		log.Emit(logger.WARNING, "Cannot cancel instance %v as no command is initialized yet", instance)
+		log.Emit(logger.WARNING, "Cannot cancel instance %v as no command is initialized yet\n", instance)
 		return
 	}
 
@@ -287,5 +297,6 @@ func NewFfmpegInstance(itemID int, profileLabel string, provider Provider) Ffmpe
 		itemID:       itemID,
 		id:           uuid.New(),
 		command:      nil,
+		retryChan:    make(chan bool),
 	}
 }

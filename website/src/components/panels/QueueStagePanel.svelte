@@ -28,21 +28,21 @@
                     </div>
                 {/if}
                 <h2>This stage is queued</h2>
-                <span
-                    >All workers for this stage are busy with other items - progress will appear here once a worker is
-                    available.</span
-                >
+                <span>
+                    All workers for this stage are busy with other items - progress will appear here once a worker is
+                    available.
+                </span>
             </div>
             <div class="sub">
                 {@html rippleHtml}
             </div>
         </div>
     {:else}
-        <svelte:component this={stagePanel} details={queueDetails} />
+        <svelte:component this={stagePanel} />
     {/if}
 {:else if queueDetails.stage >= stageIndex || queueDetails.status == QueueStatus.PROCESSING}
     {#if stagePanel}
-        <svelte:component this={stagePanel} details={queueDetails} />
+        <svelte:component this={stagePanel} />
     {:else}
         <h2>Error: No stage panel defined for stageIndex {stageIndex}</h2>
     {/if}
@@ -50,10 +50,10 @@
     <div class="pending tile">
         <div class="main">
             <h2>This stage is scheduled</h2>
-            <span
-                >We're waiting on previous stages of the pipeline to succeed before we start this stage. Check the
-                'Overview' to track progress.</span
-            >
+            <span>
+                We're waiting on previous stages of the pipeline to succeed before we start this stage. Check the
+                'Overview' to track progress.
+            </span>
         </div>
         <div class="sub">
             {@html rippleHtml}

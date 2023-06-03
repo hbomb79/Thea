@@ -23,6 +23,8 @@
             return checkSvg;
         } else if (stageIndex == details.stage) {
             if (details.status == QueueStatus.NEEDS_RESOLVING) {
+                //TODO handle needs attention
+                //|\ details.status == QueueStatus.NEEDS_ATTENTION) {
                 return troubleSvg;
             } else if (details.status == QueueStatus.PENDING) {
                 return wrapSpinner(spinnerHtml);
@@ -44,7 +46,7 @@
         if (stageIndex < details.stage) {
             return "complete";
         } else if (stageIndex == details.stage) {
-            return details.status == QueueStatus.NEEDS_RESOLVING || details.status == QueueStatus.NEEDS_ATTENTION
+            return details.status == QueueStatus.NEEDS_RESOLVING //|| details.status == QueueStatus.NEEDS_ATTENTION
                 ? "trouble"
                 : details.status == 0
                 ? "pending"

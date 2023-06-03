@@ -2,11 +2,14 @@
     import { QueueStatus } from "../queue";
     import type { QueueDetails } from "../queue";
     import { createEventDispatcher } from "svelte";
+    import { selectedQueueItem } from "../stores/item";
+    import { itemDetails } from "../stores/queue";
 
     const dispatch = createEventDispatcher();
 
-    export let selectedItem: number = null;
-    export let details: QueueDetails = null;
+    export let itemID: number = undefined;
+    $: details = $itemDetails.get(itemID);
+
     $: getStatusClass = () => {
         switch (details?.status) {
             case QueueStatus.PENDING:
@@ -24,7 +27,7 @@
 </script>
 
 {#if details}
-    <div class="item" on:click={() => dispatch("selected", details.id)} class:active={selectedItem == details?.id}>
+    <div class="item" on:click={() => dispatch("selected", details.id)} class:active={$selectedQueueItem == details.id}>
         <span class={`status ${getStatusClass()}`} />
 
         {#if details.omdb_info?.Title}

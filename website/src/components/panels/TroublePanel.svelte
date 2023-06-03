@@ -1,8 +1,8 @@
 <script lang="ts">
     import { commander } from "../../commander";
-    import { SocketMessageType } from "../../store";
+    import { SocketMessageType } from "../../stores/socket";
 
-    import type { SocketData } from "../../store";
+    import type { SocketData } from "../../stores/socket";
     import { QueueTroubleType } from "../../queue";
     import type { QueueDetails } from "../../queue";
 

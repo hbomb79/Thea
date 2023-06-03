@@ -1,65 +1,12 @@
 <script lang="ts">
-import type { QueueDetails } from '../../queue';
-import StageIcon from '../StageIcon.svelte';
+    import type { QueueDetails } from "../../queue";
+    import { selectedQueueItem } from "../../stores/item";
+    import { itemDetails } from "../../stores/queue";
+    import StageIcon from "../StageIcon.svelte";
 
-export let details:QueueDetails;
+    export let details: QueueDetails;
+    $: details = $itemDetails.get($selectedQueueItem);
 </script>
-
-<style lang="scss">
-.title-info {
-    display: flex;
-    flex-direction: row;
-    padding: 0 !important;
-
-    .view {
-        flex: 1 auto;
-        padding: 1rem 2rem 1rem 1rem;
-        flex-direction: row;
-        min-width: 0;
-        flex-basis: auto;
-
-        .source {
-            text-align: center;
-
-            p {
-                display: inline-block;
-                padding: 14px 2rem;
-                color: #786da5;
-                background: white;
-                border-radius: 6px;
-                margin-bottom: 0;
-                border: solid 1px #dce1f9;
-            }
-        }
-
-        .result {
-            display: flex;
-            justify-content: space-around;
-
-            .main {
-                width: 60%;
-                margin-right: 1rem;
-            }
-
-            .prop {
-                margin: 1.3rem 0;
-
-                .title {
-                    color: #9184c5;
-                    font-weight: 400;
-                    margin: 0;
-                    font-size: 1.3rem;
-                }
-
-                span {
-                    color: #8c91b9;
-                    font-style: italic;
-                }
-            }
-        }
-    }
-}
-</style>
 
 {#if details.title_info}
     <div class="title-info tile">
@@ -100,3 +47,59 @@ export let details:QueueDetails;
         </section>
     </div>
 {/if}
+
+<style lang="scss">
+    .title-info {
+        display: flex;
+        flex-direction: row;
+        padding: 0 !important;
+
+        .view {
+            flex: 1 auto;
+            padding: 1rem 2rem 1rem 1rem;
+            flex-direction: row;
+            min-width: 0;
+            flex-basis: auto;
+
+            .source {
+                text-align: center;
+
+                p {
+                    display: inline-block;
+                    padding: 14px 2rem;
+                    color: #786da5;
+                    background: white;
+                    border-radius: 6px;
+                    margin-bottom: 0;
+                    border: solid 1px #dce1f9;
+                }
+            }
+
+            .result {
+                display: flex;
+                justify-content: space-around;
+
+                .main {
+                    width: 60%;
+                    margin-right: 1rem;
+                }
+
+                .prop {
+                    margin: 1.3rem 0;
+
+                    .title {
+                        color: #9184c5;
+                        font-weight: 400;
+                        margin: 0;
+                        font-size: 1.3rem;
+                    }
+
+                    span {
+                        color: #8c91b9;
+                        font-style: italic;
+                    }
+                }
+            }
+        }
+    }
+</style>

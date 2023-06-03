@@ -111,8 +111,8 @@ func (e LogStatus) String() string {
 	return []string{
 		"V",
 		"D",
-		"✓",
 		"I",
+		"✓",
 		"+",
 		"-",
 		"X",
@@ -126,8 +126,8 @@ func (e LogStatus) Color() *color.Color {
 	return []*color.Color{
 		color.New(color.FgWhite, color.Italic),                //Verbose
 		color.New(color.FgWhite, color.Italic),                //Debug
-		color.New(color.FgHiGreen),                            //Success
 		color.New(color.FgWhite),                              //Info
+		color.New(color.FgHiGreen),                            //Success
 		color.New(color.FgGreen, color.Italic),                //New
 		color.New(color.FgYellow, color.Italic),               //Remove
 		color.New(color.FgHiYellow),                           //Stop

@@ -3,8 +3,8 @@
 
     import { MatchKey, MatchType, ModifierType } from "../../../queue";
     import type { ProfileMatchCriterion, TranscodeProfile } from "../../../queue";
-    import type { SocketData } from "../../../store";
-    import { SocketMessageType } from "../../../store";
+    import type { SocketData } from "../../../stores/socket";
+    import { SocketMessageType } from "../../../stores/socket";
 
     export let profile: TranscodeProfile;
     export let matchComponents: ProfileMatchCriterion[] = [];

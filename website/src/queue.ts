@@ -1,6 +1,9 @@
 import { Writable, writable } from "svelte/store"
 import { commander, dataStream } from "./commander"
-import { SocketData, SocketMessageType } from "./store"
+import { SocketData, SocketMessageType, SocketPacketType, SocketStreamPacket, socketStream } from "./stores/socket"
+
+import { itemIndex, itemDetails, itemFfmpegInstances } from "./stores/queue"
+import { QueueOrderManager as QueueOrderManager } from "./queueOrderManager"
 
 export enum QueueStatus {
     PENDING,
@@ -9,6 +12,7 @@ export enum QueueStatus {
     NEEDS_RESOLVING,
     CANCELLING,
     CANCELLED,
+    PAUSED,
     NEEDS_ATTENTION
 }
 
@@ -22,12 +26,12 @@ export enum QueueStage {
 }
 
 export enum CommanderTaskStatus {
-    PENDING,
-    WORKING,
     WAITING,
-    FINISHED,
+    WORKING,
+    SUSPENDED,
+    TROUBLED,
     CANCELLED,
-    TROUBLED
+    COMPLETE
 }
 
 export enum QueueTroubleType {
@@ -174,56 +178,79 @@ export interface FfmpegUpdate {
 // who wish to keep track of the servers queue state. Generally
 // speaking, the class should only be instantiated once - however
 // it's perfecrtly capable of being instantiated multiple times.
-export class ContentManager {
-    private _items: QueueItem[] = []
+class ContentManager {
+    private _items: QueueItem[]
     private _details: Map<number, QueueDetails> = new Map()
     private _profiles: TranscodeProfile[] = []
     private _ffmpeg: Map<number, CommanderTask[]> = new Map()
     private _movies: Movie[] = []
 
-    itemIndex: Writable<QueueItem[]>
-    itemDetails: Writable<Map<number, QueueDetails>>
-    itemFfmpegInstances: Writable<Map<number, CommanderTask[]>>
+    private bootstrapped = false
+
+    queueOrderManager = new QueueOrderManager(
+        this.requestQueueIndex.bind(this)
+    )
+
     serverProfiles: Writable<TranscodeProfile[]>
     knownMovies: Writable<Movie[]>
     // movieDetails: Writable<<>>
 
     constructor() {
         dataStream.subscribe((data: SocketData) => {
+            if (!this.bootstrapped) {
+                console.warn("ContentManager received a WS update but has not bootstrapped yet! Ignoring update.")
+                return
+            }
+
             if (data.type == SocketMessageType.UPDATE)
                 this.handleUpdate(data)
         })
 
-        this.itemIndex = writable(this._items)
-        this.itemDetails = writable(this._details)
-        this.serverProfiles = writable(this._profiles)
-        this.knownMovies = writable(this._movies)
-        this.itemFfmpegInstances = writable(this._ffmpeg)
-
-        this.itemIndex.subscribe((items) => {
-            console.log("itemIndex change:", items)
-            this._items = items
-            this.hydrateDetails(items)
+        socketStream.subscribe((data: SocketStreamPacket) => {
+            if (data.type == SocketPacketType.OPEN && !this.bootstrapped)
+                this.bootstrap()
         })
 
-        this.itemDetails.subscribe((items) => {
-            console.log("itemDetails change:", items)
+        this.serverProfiles = writable(this._profiles)
+        this.knownMovies = writable(this._movies)
+    }
+
+    // bootstrap initializes this instance of the content manager
+    // by performing requests to Thea over the websocket
+    // to gather the initial state (which can then be
+    // updated via websocket updates from this point forth).
+    bootstrap() {
+        itemIndex.subscribe(items => {
+            if (items === undefined) return
+            this._items = items
+            this.hydrateDetails()
+        });
+
+        itemDetails.subscribe((items) => {
+            if (items === undefined) return
+
+            console.debug("itemDetails change:", items)
             this._details = items
         })
 
-        this.serverProfiles.subscribe((profiles) => {
-            console.log("serverProfiles change:", profiles)
-            this._profiles = profiles
+        itemFfmpegInstances.subscribe((instances) => {
+            if (instances === undefined) return
+
+            console.debug("ffmpegInstances change:", instances)
+            this._ffmpeg = instances
         })
 
-        this.itemFfmpegInstances.subscribe((instances) => {
-            console.log("ffmpegInstances change:", instances)
-            this._ffmpeg = instances
+        this.serverProfiles.subscribe((profiles) => {
+            if (profiles === undefined) return
+
+            console.debug("serverProfiles change:", profiles)
+            this._profiles = profiles
         })
 
         this.requestMovies()
         this.requestQueueIndex()
         this.requestTranscoderProfiles()
+        this.bootstrapped = true
     }
 
     // requestMovies will query the database for a list of known
@@ -234,7 +261,7 @@ export class ContentManager {
         if (true) { return }
         const handleReply = (response: SocketData): boolean => {
             if (response.type == SocketMessageType.RESPONSE) {
-                this.itemIndex.set(response.arguments.payload.items)
+                itemIndex.set(response.arguments.payload.items)
             } else {
                 console.warn("[QueueManager] Invalid reply while fetching queue index.", response)
             }
@@ -250,17 +277,18 @@ export class ContentManager {
 
     // hydrateDetails is a method that is called automatically
     // when the itemIndex writable store is updated. This method
-    // will scan the itemDetails store for missing, or out of date
+    // will scan the effective index for missing, or out of date
     // information.
-    hydrateDetails(newData: QueueItem[]) {
+    hydrateDetails() {
         // Find any items that we're missing details for
-        const missingItems = newData.filter((item) => !this._details.has(item.id))
+        const index = this.queueOrderManager.getCurrentQueueIndex()
+        const missingItems = index.filter((item) => !this._details.has(item.id))
         missingItems.forEach((item) => this.requestDetails(item.id))
 
         // Find invalid details (details that no longer have a coresponding entry in the index)
         const invalidDetails = []
         this._details.forEach((item, key) => {
-            if (newData.findIndex((i) => item.id == i.id) < 0) {
+            if (index.findIndex((i) => item.id == i.id) < 0) {
                 // Item no longer exists in new details, this entry must be removed
                 invalidDetails.push(key)
             }
@@ -268,7 +296,7 @@ export class ContentManager {
 
         // Remove invalid details from the _details
         invalidDetails.forEach((key) => this._details.delete(key))
-        this.itemDetails.set(this._details)
+        itemDetails.set(this._details)
     }
 
     // requestIndex will query the server for the index of items (the queue)
@@ -277,7 +305,7 @@ export class ContentManager {
     requestQueueIndex() {
         const handleReply = (response: SocketData): boolean => {
             if (response.type == SocketMessageType.RESPONSE) {
-                this.itemIndex.set(response.arguments.payload)
+                this.queueOrderManager.replaceQueueList(response.arguments.payload)
             } else {
                 console.warn("[QueueManager] Invalid reply while fetching queue index.", response)
             }
@@ -297,10 +325,10 @@ export class ContentManager {
         const handleReply = (response: SocketData): boolean => {
             if (response.type == SocketMessageType.RESPONSE) {
                 this._details.set(itemId, response.arguments.payload)
-                this.itemDetails.set(this._details)
+                itemDetails.set(this._details)
 
                 this._ffmpeg.set(itemId, response.arguments.instances)
-                this.itemFfmpegInstances.set(this._ffmpeg)
+                itemFfmpegInstances.set(this._ffmpeg)
             } else {
                 console.warn("[QueueManager] Invalid reply while fetching queue details.", response)
             }
@@ -346,7 +374,6 @@ export class ContentManager {
         const update = data.arguments.context
         if (update.UpdateType == 0) {
             const itemUpdate = update.Payload as ItemUpdate
-
             const idx = this._items.findIndex(item => item.id == itemUpdate.item_id)
             if (itemUpdate.item_position < 0 || !itemUpdate.item) {
                 // Item has been removed from queue! Find the item
@@ -359,22 +386,21 @@ export class ContentManager {
                     return
                 }
 
-                this._items.splice(idx, 1)
-                this.itemIndex.set(this._items)
+                this.queueOrderManager.removeItem(itemUpdate.item_id)
             } else if (idx != itemUpdate.item_position) {
                 // The position for this item has changed.. likely due to a item promotion.
-                // Update the order of the queue - to do this we should
-                // simply re-query the server for an up-to-date queue index.
-                this.requestQueueIndex()
+                // Update the order of the queue                
+                if (!this.queueOrderManager.moveItem(itemUpdate.item_id, itemUpdate.item_position)) {
+                    this.requestQueueIndex()
+                }
             } else {
                 if (idx < 0) {
                     // New item
-                    this._items.push(itemUpdate.item)
-                    this.itemIndex.set(this._items)
+                    this.queueOrderManager.insertItem(itemUpdate.item)
                 } else {
                     // An existing item has had an in-place update.
                     this._details.set(itemUpdate.item_id, itemUpdate.item)
-                    this.itemDetails.set(this._details)
+                    itemDetails.set(this._details)
                 }
 
             }
@@ -397,7 +423,9 @@ export class ContentManager {
             }
 
             this._ffmpeg.set(ffmpegUpdate.item_id, ffmpegUpdate.ffmpeg_instances)
-            this.itemFfmpegInstances.set(this._ffmpeg)
+            itemFfmpegInstances.set(this._ffmpeg)
         }
     }
 }
+
+export const contentManager = new ContentManager();

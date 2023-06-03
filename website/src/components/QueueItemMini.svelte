@@ -2,9 +2,12 @@
     import { QueueStatus } from "../queue";
     import type { QueueDetails } from "../queue";
     import { createEventDispatcher } from "svelte";
+    import { itemDetails } from "../stores/queue";
     const dispatch = createEventDispatcher();
 
-    export let queueDetails: QueueDetails;
+    export let queueItemID: number;
+
+    $: queueDetails = $itemDetails.get(queueItemID);
     $: getStatusClass = () => {
         switch (queueDetails?.status) {
             case QueueStatus.PENDING:

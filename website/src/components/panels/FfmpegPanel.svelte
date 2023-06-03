@@ -1,27 +1,29 @@
 <script lang="ts">
-    import { CommanderTaskStatus, QueueStatus } from "../../queue";
-    import type { CommanderTask, QueueDetails } from "../../queue";
-    import spinnerHtml from "../../assets/html/hourglass.html";
+    import { CommanderTaskStatus } from "../../queue";
+    import type { CommanderTask as FfmpegInstance } from "../../queue";
     import workingHtml from "../../assets/html/dual-ring.html";
     import troubleSvg from "../../assets/err.svg";
     import checkSvg from "../../assets/check-mark.svg";
+    import cancelSvg from "../../assets/cancel.svg";
     import scheduledSvg from "../../assets/pending.svg";
-    import TroublePanel from "./TroublePanel.svelte";
-    import { SocketMessageType } from "../../store";
-    import type { SocketData } from "../../store";
+    import { SocketMessageType } from "../../stores/socket";
+    import type { SocketData } from "../../stores/socket";
     import { commander } from "../../commander";
-    export let details: QueueDetails;
+    import { itemFfmpegInstances } from "../../stores/queue";
+    import { selectedQueueItem } from "../../stores/item";
 
-    function resolveTrouble(instance: CommanderTask, resolution: any) {
+    $: ffmpegInstances = $itemFfmpegInstances.get($selectedQueueItem) || [];
+
+    function resolveTrouble(instance: FfmpegInstance, resolution: any) {
         commander.sendMessage(
             {
                 type: SocketMessageType.COMMAND,
                 title: "TROUBLE_RESOLVE",
-                arguments: { id: details.id, instanceTag: instance.ProfileTag, ...resolution },
+                arguments: { id: $selectedQueueItem, instanceId: instance.id, ...resolution },
             },
             (reply: SocketData): boolean => {
                 if (reply.type == SocketMessageType.ERR_RESPONSE) {
-                    alert(`Failed to promote item: ${reply.title}: ${reply.arguments.error}`);
+                    alert(`Failed to resolve ffmpeg instance trouble: ${reply.title}: ${reply.arguments.error}`);
                 } else {
                     console.log("Resolution success!");
                 }
@@ -31,7 +33,7 @@
         );
     }
 
-    const retryHandler = (instance: CommanderTask) => {
+    const retryHandler = (instance: FfmpegInstance) => {
         resolveTrouble(instance, {
             action: "retry",
         });
@@ -43,39 +45,39 @@
     //     });
     // };
 
-    const pauseHandler = (instance: CommanderTask) => {
+    const pauseHandler = (instance: FfmpegInstance) => {
         resolveTrouble(instance, {
             action: "pause",
         });
     };
 
-    const cancelHandler = (instance: CommanderTask) => {
+    const cancelHandler = (instance: FfmpegInstance) => {
         resolveTrouble(instance, {
             action: "cancel",
         });
     };
 
-    const troubleResolvers: [string, (instance: CommanderTask) => void][] = [
+    const troubleResolvers: [string, (instance: FfmpegInstance) => void][] = [
         ["Retry", retryHandler],
         // ["Specify Profile", specifyProfileHandler],
         ["Pause", pauseHandler],
         ["Cancel", cancelHandler],
     ];
 
-    $: ffmpegInstances = details.ffmpeg_instances;
-
     const wrapSpinner = (spinner: string) => `<div class="spinner-wrap">${spinner}</div>`;
-    $: getStageIcon = function (instance: CommanderTask): string {
-        switch (instance.Status) {
-            case CommanderTaskStatus.PENDING:
-                return scheduledSvg;
+    $: getStageIcon = function (instance: FfmpegInstance): string {
+        switch (instance.status) {
             case CommanderTaskStatus.WAITING:
                 return scheduledSvg;
             case CommanderTaskStatus.WORKING:
                 return wrapSpinner(workingHtml);
+            case CommanderTaskStatus.SUSPENDED:
+                return scheduledSvg;
             case CommanderTaskStatus.TROUBLED:
                 return troubleSvg;
-            case CommanderTaskStatus.FINISHED:
+            case CommanderTaskStatus.CANCELLED:
+                return cancelSvg;
+            case CommanderTaskStatus.COMPLETE:
                 return checkSvg;
             default:
                 return "?";
@@ -88,17 +90,17 @@
     // This class is used to adjust the color and connecting lines
     // to better reflect the situation (e.g. red with no line
     // after the icon to indicate an error)
-    $: getCheckClass = function (instance: CommanderTask): string {
-        switch (instance.Status) {
-            case CommanderTaskStatus.PENDING:
-                return "queued";
+    $: getCheckClass = function (instance: FfmpegInstance): string {
+        switch (instance.status) {
             case CommanderTaskStatus.WAITING:
                 return "pending";
             case CommanderTaskStatus.WORKING:
                 return "working";
             case CommanderTaskStatus.TROUBLED:
                 return "trouble";
-            case CommanderTaskStatus.FINISHED:
+            case CommanderTaskStatus.CANCELLED:
+                return "cancelled";
+            case CommanderTaskStatus.COMPLETE:
                 return "complete";
             default:
                 return "unknown";
@@ -107,16 +109,18 @@
 
     $: commanderStatusToText = function (status: CommanderTaskStatus): string {
         switch (status) {
-            case CommanderTaskStatus.PENDING:
-                return "Queued";
             case CommanderTaskStatus.WAITING:
                 return "Waiting for Resources";
             case CommanderTaskStatus.WORKING:
                 return "Transcoding";
+            case CommanderTaskStatus.SUSPENDED:
+                return "Transcode Paused";
             case CommanderTaskStatus.TROUBLED:
                 return "Troubled";
-            case CommanderTaskStatus.FINISHED:
+            case CommanderTaskStatus.COMPLETE:
                 return "Transcode Complete";
+            case CommanderTaskStatus.CANCELLED:
+                return "Transcode Cancelled";
             default:
                 return "Unknown Status";
         }
@@ -124,8 +128,8 @@
 </script>
 
 {#if ffmpegInstances.length == 0}
-    <h2>No Instances</h2>
-    <p>No FFmpeg transcoder profiles matched this item.</p>
+    <h2>Hang Tight</h2>
+    <p>We're nearly ready to go! Thea is allocating instances to this item... Shouldn't be long.</p>
 {:else}
     <ul class="instances">
         {#each ffmpegInstances as instance}
@@ -137,19 +141,19 @@
                 </div>
                 <div class="info">
                     <div class="header">
-                        <h2>{instance.ProfileTag}</h2>
-                        <span>{commanderStatusToText(instance.Status)}</span>
+                        <h2>{instance.id}</h2>
+                        <span>{commanderStatusToText(instance.status)}</span>
                     </div>
-                    <div class="body" class:trouble={instance.Trouble}>
-                        {#if instance.Trouble}
-                            <h2 class="title">{instance.Trouble.message}</h2>
+                    <div class="body" class:trouble={instance.trouble}>
+                        {#if instance.trouble}
+                            <h2 class="title">{instance.trouble.message}</h2>
                             <div class="controls">
                                 {#each troubleResolvers as [display, handler] (display)}
                                     <span class="button" on:click={() => handler(instance)}>{display}</span>
                                 {/each}
                             </div>
                         {:else}
-                            <p>Info here...</p>
+                            <p>{instance.progress}</p>
                         {/if}
                     </div>
                 </div>

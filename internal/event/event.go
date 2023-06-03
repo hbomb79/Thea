@@ -115,13 +115,21 @@ func (handler *eventHandler) Dispatch(event TheaEvent, payload TheaPayload) {
 }
 
 func (handler *eventHandler) validatePayload(event TheaEvent, payload TheaPayload) error {
-	payloadType := reflect.TypeOf(payload).Name()
+	log.Emit(logger.DEBUG, "Validating payload %#v for event %v\n", payload, event)
+
+	var payloadTypeName string
+	if t := reflect.TypeOf(payload); t != nil {
+		payloadTypeName = t.Name()
+	} else {
+		payloadTypeName = "Nil"
+	}
+
 	switch event {
 	case QUEUE_UPDATE_EVENT:
 		fallthrough
 	case THEA_SHUTDOWN_EVENT:
 		if payload != nil {
-			return fmt.Errorf("event does not accept any payload, found %v", payloadType)
+			return fmt.Errorf("event does not accept any payload, found %v", payloadTypeName)
 		}
 
 		return nil
@@ -130,7 +138,7 @@ func (handler *eventHandler) validatePayload(event TheaEvent, payload TheaPayloa
 	case ITEM_FFMPEG_UPDATE_EVENT:
 		_, ok := payload.(int)
 		if !ok {
-			return fmt.Errorf("ITEM events require int representing QueueItem ID, found %v", payloadType)
+			return fmt.Errorf("ITEM events require int representing QueueItem ID, found %v", payloadTypeName)
 		}
 
 		return nil

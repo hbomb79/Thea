@@ -3,8 +3,8 @@
     import CreateIcon from "../../assets/create-icon.svg";
     import ServerProfileTile from "./profile/ServerProfileTile.svelte";
     import { commander } from "../../commander";
-    import { SocketMessageType } from "../../store";
-    import type { SocketData } from "../../store";
+    import { SocketMessageType } from "../../stores/socket";
+    import type { SocketData } from "../../stores/socket";
     import { createEventDispatcher, getContext } from "svelte";
     import ReorderableList from "../ReorderableList.svelte";
     import Dialog from "../modals/Dialog.svelte";
@@ -12,9 +12,8 @@
     const dispatch = createEventDispatcher();
 
     export let profiles: TranscodeProfile[] = [];
-    export let details: Map<number, QueueDetails> = null;
 
-    const { open } = getContext("simple-modal");
+    const { open } = getContext<any>("simple-modal");
 
     const removeProfile = (profileTag: string) => {
         console.log("Removing profile:", profileTag);

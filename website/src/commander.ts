@@ -2,7 +2,7 @@
  * Commander is a exported object that allows components to send
  * and wait on replies from the websocket
  */
-import { sendMessage as socketSend, SocketData, SocketMessageType, SocketPacketType, socketStream, SocketStreamPacket } from './store'
+import { sendMessage as socketSend, SocketData, SocketMessageType, SocketPacketType, socketStream, SocketStreamPacket } from './stores/socket'
 import { writable } from 'svelte/store'
 import type { MatchKey, MatchType } from './queue'
 

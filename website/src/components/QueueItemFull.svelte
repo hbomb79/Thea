@@ -1,5 +1,4 @@
 <script lang="ts">
-    import type { QueueDetails } from "../queue";
     import { QueueStatus } from "../queue";
 
     import wavesSvg from "../assets/waves.svg";
@@ -12,32 +11,49 @@
     import StageIcon from "./StageIcon.svelte";
     import QueueStagePanel from "./panels/QueueStagePanel.svelte";
     import { commander } from "../commander";
-    import { SocketMessageType } from "../store";
-    import type { SocketData } from "../store";
+    import { SocketMessageType } from "../stores/socket";
+    import type { SocketData } from "../stores/socket";
     import { fade } from "svelte/transition";
     import { getContext } from "svelte";
     import ConfirmationPopup from "./modals/ConfirmationPopup.svelte";
+    import { writable } from "svelte/store";
+    import { selectedQueueItem } from "../stores/item";
+    import { itemDetails } from "../stores/queue";
 
-    const { open } = getContext("simple-modal");
+    const { open } = getContext<any>("simple-modal");
 
-    export let details: QueueDetails = null;
-    const stages = [
-        ["Importer", "import", null],
-        ["Title Parser", "title", TitlePanel],
-        ["OMDB Queryer", "omdb", OmdbPanel],
-        ["FFmpeg Transcoder", "ffmpeg", FfmpegPanel],
-        ["Database Committer", "db", DatabasePanel],
+    interface Stage {
+        label: string;
+        tag: string;
+        component: any;
+    }
+
+    /**
+     * Component is responsible for rendering the full details of an in-progress
+     * Thea item. Selected item is pulled from global 'selectedQueueItem' state, which
+     * the Dashboard component mutates when the user item selection changes.
+     *
+     * The details of the selected item is pulled from the details store from within
+     * the ContentManager
+     */
+
+    $: details = $itemDetails.get($selectedQueueItem);
+
+    const openedDetailPanels = writable<Map<string, boolean>>(new Map());
+    const detailPanels: Stage[] = [
+        { label: "Importer", tag: "import", component: null },
+        { label: "Title", tag: "title", component: TitlePanel },
+        { label: "OMDB", tag: "omdb", component: OmdbPanel },
+        { label: "FFmpeg", tag: "ffmpeg", component: FfmpegPanel },
+        { label: "DB", tag: "db", component: DatabasePanel },
     ];
 
-    const openStages: boolean[] = new Array(stages.length);
-
-    $: detailsChanged(details);
-
-    // Called automatically by Svelte when the details provided to
-    // this component change.
-    const detailsChanged = (newDetails: QueueDetails) => {
-        console.log(newDetails);
-    };
+    function toggleDetailPanel(stage: string) {
+        openedDetailPanels.update((m) => {
+            const current = m.get(stage);
+            return m.set(stage, !current);
+        });
+    }
 
     function sendCommand(
         command: string,
@@ -146,19 +162,19 @@
             <h2 class="tile-title">Pipeline</h2>
             <div class="item pipeline">
                 {#key details.id}
-                    <OverviewPanel {details} />
+                    <OverviewPanel />
                 {/key}
             </div>
 
             <h2 class="tile-title">Stage Details</h2>
-            {#each stages as [display, tag, component], k (tag)}
+            {#each detailPanels as { tag, label, component }, k (tag)}
                 <div
                     class={`item stage ${tag}`}
-                    class:content-open={openStages[k]}
+                    class:content-open={$openedDetailPanels.get(tag)}
                     in:fade={{ duration: 150, delay: 50 + k * 50 }}
                 >
-                    <div class="header" on:click={() => (openStages[k] = !openStages[k])}>
-                        <h2>{display}</h2>
+                    <div class="header" on:click={() => toggleDetailPanel(tag)}>
+                        <h2>{label}</h2>
                         {#key details.id}
                             <div class="check" in:fade={{ duration: 300, delay: 100 + k * 50 }}>
                                 <StageIcon {details} stageIndex={k} />
@@ -166,7 +182,7 @@
                         {/key}
                     </div>
 
-                    {#if openStages[k]}
+                    {#if $openedDetailPanels.get(tag)}
                         <div
                             class="content"
                             class:troubled={details.stage == k &&

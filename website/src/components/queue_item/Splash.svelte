@@ -4,12 +4,16 @@
     import type { QueueDetails } from "queue";
     import { QueueStatus } from "queue";
 
+    import Modal from "components/modal/Modal.svelte";
     import QueueItemControls from "components/queue_item/QueueItemControls.svelte";
 
     import wavesSvg from "assets/waves.svg";
 
     export let details: QueueDetails;
     export let queueControlCallback: (ev: CustomEvent) => void;
+
+    let showInfoModal: boolean = false;
+    $: if (details) console.log(itemStatusHelpText());
 
     // Only shuffle wave components if new details has a diff ID or status
     let currentItemID = details?.id;
@@ -22,13 +26,13 @@
 
         if (details.id != currentItemID || normalizedStatus != currentItemStatus) {
             shuffleWaveComponents();
+
             currentItemID = details.id;
             currentItemStatus = normalizedStatus;
         }
     }
 
     let waveComponent: HTMLElement;
-
     function shuffleWaveComponents() {
         if (waveComponent === undefined) return;
 
@@ -42,6 +46,76 @@
             item.setAttribute("transform", `translate(-${random}, 0)`);
         }
     }
+
+    $: itemNameText = () => {
+        return details.omdb_info?.Title || details.title_info?.Title || details.name || "UNNAMED";
+    };
+
+    $: itemStatusHelpText = () => {
+        switch (details.status) {
+            case QueueStatus.PENDING:
+                return `Pending indicates that Thea has not started to work on this item in it's current stage.
+
+                This is typically because Thea is waiting for CPU threads to become available while in the FFmpeg stage, 
+                and the item transitioning to the 'Working' status may take some time depending on the progress of currently running transcodes.`;
+            case QueueStatus.PROCESSING:
+                return `Processing indicates that Thea is working on this item and hasn't encountered any issues.`;
+            case QueueStatus.COMPLETED:
+                return `Thea has completed this item and all it's associated FFmpeg instances.
+                
+                If new profiles are added that match this item, then Thea will NOT start any instances automatically as it usually would.
+                Instead, you'll need to manually start a new FFmpeg transcoding task by navigating to the completed items via the main viewer.`;
+            case QueueStatus.NEEDS_RESOLVING:
+                return `All progress on this item has stopped because of one or multiple errors. This error can occur
+                at many of the pipeline stages, and user input is required to remedy the problem.
+                
+                A common reason for this status is that no exact match could be found in OMDB, or all the FFmpeg instances
+                for this item have encountered an error.
+                
+                Without remediation, this item will remain in this status indefinitely.`;
+            case QueueStatus.CANCELLING:
+                return `Thea is cancelling this item. Before this item transitions to 'Cancelled', Thea will need to wait for
+                any uninteruptable tasks to complete (typically this is network related during the OMDB stage).
+                
+                If the item is in the FFmpeg stage, then the active instances (if any) will need to be stopped and any
+                partial transcode outputs cleaned up from the server filesystem.`;
+            case QueueStatus.CANCELLED:
+                return `Thea has successfully cancelled this item and cleaned up any remaining artifacts. This item
+                is now ignored by Thea and will not be present in the queue when Thea is next started.`;
+            case QueueStatus.PAUSED:
+                return `This item is paused and Thea will effectively 'ignore' it.
+
+                If the item is in the FFmpeg stage, then all active ffmpeg processes
+                will be suspended and no new processes will be spawned.`;
+            case QueueStatus.NEEDS_ATTENTION:
+                return `This item has encountered one or multiple errors during FFmpeg transcoding,
+                however at least one of the processes is still working.
+                
+                If the working processes complete (meaning only the troubled instance remain), then
+                the item will be transitioned to the 'Needs Resolving' status.`;
+        }
+    };
+
+    $: itemStatusText = () => {
+        switch (details.status) {
+            case QueueStatus.PENDING:
+                return "Waiting to Start";
+            case QueueStatus.PROCESSING:
+                return "Working";
+            case QueueStatus.COMPLETED:
+                return "Finished";
+            case QueueStatus.NEEDS_RESOLVING:
+                return "Needs Resolving";
+            case QueueStatus.CANCELLING:
+                return "Cancelling";
+            case QueueStatus.CANCELLED:
+                return "Cancelled";
+            case QueueStatus.PAUSED:
+                return "Paused";
+            case QueueStatus.NEEDS_ATTENTION:
+                return "Needs Attention";
+        }
+    };
 </script>
 
 {#if details}
@@ -53,15 +127,29 @@
         <div class="waves" bind:this={waveComponent}>{@html wavesSvg}</div>
         <div class="content">
             <h2 class="title">
-                {details.omdb_info?.Title || details.title_info?.Title || details.name || "UNNAMED"}
+                {itemNameText()}
                 <span class="id">#{details.id}</span>
             </h2>
-            <p class="sub">Item Status</p>
+            <p class="sub">
+                {itemStatusText()}
+                <a on:click={() => (showInfoModal = true)}>?</a>
+            </p>
 
             <QueueItemControls on:queue-control={queueControlCallback} />
         </div>
     </div>
 {/if}
+
+<Modal bind:showModal={showInfoModal}>
+    <h2 slot="header">Meaning of <em>{itemStatusText()}</em></h2>
+
+    <p>
+        {@html itemStatusHelpText()
+            .replaceAll(/ {2,}/g, "") // Strip multiple spaces
+            .replaceAll(/\n\n/g, "<br/><br/>") // Convert two newlines in to breaks
+            .replaceAll(/\n{1}/g, " ")}
+    </p>
+</Modal>
 
 <style lang="scss">
     @import "../../styles/waves.scss";

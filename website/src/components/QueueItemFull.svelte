@@ -145,7 +145,12 @@
 
 {#if details}
     <div class="queue-item">
-        <div class="splash" in:fade={{ duration: 150, delay: 50 }}>
+        <div
+            class="splash"
+            class:trouble={details.status == QueueStatus.NEEDS_ATTENTION ||
+                details.status == QueueStatus.NEEDS_RESOLVING}
+            in:fade={{ duration: 150, delay: 50 }}
+        >
             <div class="waves">{@html wavesSvg}</div>
             <div class="content">
                 <h2 class="title">
@@ -203,51 +208,7 @@
         flex: 1;
         text-align: left;
 
-        .splash {
-            height: 250px;
-            position: sticky;
-            top: 0;
-            overflow: hidden;
-            background: linear-gradient(28deg, #6ca8ff, #ef8dff);
-            box-shadow: 0 -5px 9px 0px #0000003d;
-            z-index: 100;
-
-            .waves {
-                position: absolute;
-                bottom: -350px;
-                width: 1850px;
-                z-index: 1;
-                opacity: 0.4;
-            }
-
-            .content {
-                position: absolute;
-                width: 100%;
-                height: 100%;
-                z-index: 2;
-
-                .title {
-                    padding: 0 3rem;
-                    color: white;
-                    font-size: 2rem;
-                    margin-bottom: 0;
-
-                    .id {
-                        font-size: 1rem;
-                        font-weight: 400;
-                        color: #ffffff7a;
-                        margin-left: -2px;
-                        font-style: italic;
-                    }
-                }
-
-                .sub {
-                    padding: 0 3rem;
-                    color: #bfd9ff;
-                    margin-top: 0;
-                }
-            }
-        }
+        @import "../styles/waves.scss";
 
         .main {
             padding: 1rem 2rem;

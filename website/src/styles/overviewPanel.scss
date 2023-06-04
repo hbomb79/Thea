@@ -3,10 +3,6 @@
     justify-content: space-around;
     position: relative;
 
-    .active:not(:hover) :global(svg), .active:not(:hover) .caption {
-        /* animation: blinker 1s linear infinite; */
-    }
-
     .stage {
         display: flex;
         flex-direction: column-reverse;
@@ -57,6 +53,7 @@
 
         &:hover {
             background: #f1effc;
+
             :global(svg) {
                 fill: black;
             }
@@ -88,13 +85,14 @@
             box-shadow: 0px 0px 6px -5px black;
             border-radius: 4px;
         }
-        
+
         &:hover:after {
             opacity: 1;
         }
     }
 
     @import "../styles/stageIcon.scss";
+
     .check-wrapper {
         align-self: center;
         width: 40px;

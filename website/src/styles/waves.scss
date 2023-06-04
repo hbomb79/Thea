@@ -58,7 +58,7 @@ $troubleWaveFillColors: #ff3e3e, #d74a4a, #ffb3b3;
                 $color: list.nth($okWaveFillColors, $index);
 
                 :global(path:nth-child(#{$index})) {
-                    transition: fill 0.4s ease-in-out;
+                    transition: fill 0.4s ease-in-out, transform $index * 0.4s ease-out;
                     fill: $color !important;
                 }
             }

@@ -22,6 +22,7 @@
     import QueueItemControls, { Action } from "components/queue_item/QueueItemControls.svelte";
 
     import wavesSvg from "assets/waves.svg";
+    import Splash from "./Splash.svelte";
 
     const { open } = getContext<any>("simple-modal");
 
@@ -148,24 +149,7 @@
 
 {#if details}
     <div class="queue-item">
-        <div
-            class="splash"
-            class:trouble={details.status == QueueStatus.NEEDS_ATTENTION ||
-                details.status == QueueStatus.NEEDS_RESOLVING}
-            in:fade={{ duration: 150, delay: 50 }}
-        >
-            <div class="waves">{@html wavesSvg}</div>
-            <div class="content">
-                <h2 class="title">
-                    {details.omdb_info?.Title || details.title_info?.Title || details.name || "UNNAMED"}
-                    <span class="id">#{details.id}</span>
-                </h2>
-                <p class="sub">Item Status</p>
-
-                <QueueItemControls on:queue-control={handleItemAction} />
-            </div>
-        </div>
-
+        <Splash {details} queueControlCallback={handleItemAction} />
         <div class="main">
             <h2 class="tile-title">Pipeline</h2>
             <div class="item pipeline">
@@ -210,9 +194,6 @@
     .queue-item {
         flex: 1;
         text-align: left;
-
-        @import "../../styles/waves.scss";
-
         .main {
             padding: 1rem 2rem;
             max-width: 1100px;

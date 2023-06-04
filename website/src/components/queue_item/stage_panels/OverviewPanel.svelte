@@ -1,15 +1,14 @@
 <script lang="ts">
-    import importIcon from "../../assets/import-stage.svg";
-    import titleIcon from "../../assets/title-stage.svg";
-    import omdbIcon from "../../assets/omdb-stage.svg";
-    import ffmpegIcon from "../../assets/ffmpeg-stage.svg";
-    import dbIcon from "../../assets/db-stage.svg";
-    import StageIcon from "../StageIcon.svelte";
+    import importIcon from "assets/import-stage.svg";
+    import titleIcon from "assets/title-stage.svg";
+    import omdbIcon from "assets/omdb-stage.svg";
+    import ffmpegIcon from "assets/ffmpeg-stage.svg";
+    import dbIcon from "assets/db-stage.svg";
+    import StageIcon from "components/StageIcon.svelte";
     import { createEventDispatcher, onMount } from "svelte";
-    import type { QueueDetails } from "../../queue";
     import { fade } from "svelte/transition";
-    import { itemDetails } from "../../stores/queue";
-    import { selectedQueueItem } from "../../stores/item";
+    import { itemDetails } from "stores/queue";
+    import { selectedQueueItem } from "stores/item";
 
     // details is the QueueDetails we're showing in this component,
     // passed in from the parent component
@@ -124,6 +123,6 @@
 </div>
 
 <style lang="scss">
-    @use "../../styles/global.scss";
-    @use "../../styles/overviewPanel.scss";
+    @use "../../../styles/global.scss";
+    @use "../../../styles/overviewPanel.scss";
 </style>

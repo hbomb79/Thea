@@ -1,12 +1,13 @@
 <script lang="ts">
     import { createEventDispatcher, getContext } from "svelte";
-    import type { TranscodeProfile, TranscodeTarget } from "../../../queue";
-    import TargetProps from "../../modals/TargetProps.svelte";
+    import type { TranscodeProfile } from "queue";
+
+    import TargetProps from "components/modals/TargetProps.svelte";
 
     export let profile: TranscodeProfile = null;
     const dispatch = createEventDispatcher();
 
-    const { open } = getContext("simple-modal");
+    const { open } = getContext<any>("simple-modal");
 
     const modifiedProps = (com: Object): number => {
         let count = 0;

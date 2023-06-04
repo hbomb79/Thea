@@ -8,9 +8,9 @@
 </script>
 
 <script lang="ts">
-    import pauseSvg from "../assets/pause.svg";
-    import advanceSvg from "../assets/advance.svg";
-    import cancelSvg from "../assets/cancel.svg";
+    import pauseSvg from "assets/pause.svg";
+    import advanceSvg from "assets/advance.svg";
+    import cancelSvg from "assets/cancel.svg";
     import { createEventDispatcher } from "svelte";
 
     const dispatch = createEventDispatcher();

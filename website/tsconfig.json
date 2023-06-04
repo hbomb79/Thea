@@ -9,5 +9,8 @@
     "node_modules/*",
     "__sapper__/*",
     "public/*"
-  ]
+  ],
+  "compilerOptions": {
+    "baseUrl": "./src"
+  }
 }

@@ -1,14 +1,14 @@
 <script lang="ts">
-    import { commander } from "../../commander";
-    import { SocketMessageType } from "../../stores/socket";
+    import { commander } from "commander";
+    import { SocketMessageType } from "stores/socket";
 
-    import type { SocketData } from "../../stores/socket";
-    import { QueueTroubleType } from "../../queue";
-    import type { QueueDetails } from "../../queue";
+    import type { SocketData } from "stores/socket";
+    import { QueueTroubleType } from "queue";
+    import type { QueueDetails } from "queue";
 
-    import OmdbTroublePanel from "./trouble_panels/OmdbTroublePanel.svelte";
-    import TitleTroublePanel from "./trouble_panels/TitleTroublePanel.svelte";
-    import FormatTroublePanel from "./trouble_panels/FormatTroublePanel.svelte";
+    import OmdbTroublePanel from "components/queue_item/trouble_panels/OmdbTroublePanel.svelte";
+    import TitleTroublePanel from "components/queue_item/trouble_panels/TitleTroublePanel.svelte";
+    import FormatTroublePanel from "components/queue_item/trouble_panels/FormatTroublePanel.svelte";
 
     interface EmbeddedPanel {
         selectResolver(arg0: string): void;
@@ -179,8 +179,8 @@
 </div>
 
 <style lang="scss">
-    @use "../../styles/global.scss";
-    @use "../../styles/tile.scss";
+    @use "../../../styles/global.scss";
+    @use "../../../styles/tile.scss";
 
     .modal.trouble {
         margin: 0;
@@ -191,7 +191,7 @@
         main {
             padding: 1rem 2rem;
 
-            @import "../../styles/trouble.scss";
+            @import "../../../styles/trouble.scss";
         }
     }
 </style>

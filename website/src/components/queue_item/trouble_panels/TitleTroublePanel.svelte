@@ -1,7 +1,7 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
-    import type { QueueDetails } from "../../../queue";
-    import DynamicForm from "../../DynamicForm.svelte";
+    import type { QueueDetails } from "queue";
+    import DynamicForm from "components/DynamicForm.svelte";
 
     export let queueDetails: QueueDetails;
 

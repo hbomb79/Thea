@@ -1,16 +1,16 @@
 <script lang="ts">
-    import { CommanderTaskStatus } from "../../queue";
-    import type { CommanderTask as FfmpegInstance } from "../../queue";
-    import workingHtml from "../../assets/html/dual-ring.html";
-    import troubleSvg from "../../assets/err.svg";
-    import checkSvg from "../../assets/check-mark.svg";
-    import cancelSvg from "../../assets/cancel.svg";
-    import scheduledSvg from "../../assets/pending.svg";
-    import { SocketMessageType } from "../../stores/socket";
-    import type { SocketData } from "../../stores/socket";
-    import { commander } from "../../commander";
-    import { itemFfmpegInstances } from "../../stores/queue";
-    import { selectedQueueItem } from "../../stores/item";
+    import { CommanderTaskStatus } from "queue";
+    import type { CommanderTask as FfmpegInstance } from "queue";
+    import workingHtml from "assets/html/dual-ring.html";
+    import troubleSvg from "assets/err.svg";
+    import checkSvg from "assets/check-mark.svg";
+    import cancelSvg from "assets/cancel.svg";
+    import scheduledSvg from "assets/pending.svg";
+    import { SocketMessageType } from "stores/socket";
+    import type { SocketData } from "stores/socket";
+    import { commander } from "commander";
+    import { itemFfmpegInstances } from "stores/queue";
+    import { selectedQueueItem } from "stores/item";
 
     $: ffmpegInstances = $itemFfmpegInstances.get($selectedQueueItem) || [];
 
@@ -164,7 +164,7 @@
 {/if}
 
 <style lang="scss">
-    @use "../../styles/stageIcon.scss";
+    @use "../../../styles/stageIcon.scss";
 
     .instances {
         padding: 0;

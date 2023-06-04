@@ -9,6 +9,7 @@ import replace from '@rollup/plugin-replace';
 import css from 'rollup-plugin-css-only';
 import svg from 'rollup-plugin-svg-import';
 import html from 'rollup-plugin-html';
+import includePaths from 'rollup-plugin-includepaths';
 
 const production = !process.env.ROLLUP_WATCH;
 
@@ -50,6 +51,12 @@ export default {
 				host: process.env.WS_HOST || "localhost",
 				port: process.env.WS_POST || "8080",
 			}),
+		}),
+		includePaths({
+			include: {},
+			paths: ['src/'],
+			external: [],
+			extensions: ['.ts', '.svelte', '.svg', '.html']
 		}),
 		svelte({
 			preprocess: sveltePreprocess({ sourceMap: !production }),

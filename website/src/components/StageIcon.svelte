@@ -1,13 +1,15 @@
 <script lang="ts">
-    import type { QueueDetails } from "../queue";
-    import { QueueStatus } from "../queue";
-    import spinnerHtml from "../assets/html/hourglass.html";
-    import workingHtml from "../assets/html/dual-ring.html";
-    import troubleSvg from "../assets/err.svg";
-    import checkSvg from "../assets/check-mark.svg";
-    import scheduledSvg from "../assets/pending.svg";
-    import { fade } from "svelte/transition";
     import { onMount } from "svelte";
+    import { fade } from "svelte/transition";
+
+    import type { QueueDetails } from "queue";
+    import { QueueStatus } from "queue";
+
+    import spinnerHtml from "assets/html/hourglass.html";
+    import workingHtml from "assets/html/dual-ring.html";
+    import troubleSvg from "assets/err.svg";
+    import checkSvg from "assets/check-mark.svg";
+    import scheduledSvg from "assets/pending.svg";
 
     export let details: QueueDetails;
     export let stageIndex: number;

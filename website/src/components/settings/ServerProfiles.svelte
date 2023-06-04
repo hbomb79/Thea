@@ -1,13 +1,18 @@
 <script lang="ts">
-    import type { TranscodeProfile, QueueDetails } from "../../queue";
-    import CreateIcon from "../../assets/create-icon.svg";
-    import ServerProfileTile from "./profile/ServerProfileTile.svelte";
-    import { commander } from "../../commander";
-    import { SocketMessageType } from "../../stores/socket";
-    import type { SocketData } from "../../stores/socket";
     import { createEventDispatcher, getContext } from "svelte";
-    import ReorderableList from "../ReorderableList.svelte";
-    import Dialog from "../modals/Dialog.svelte";
+
+    import type { TranscodeProfile } from "queue";
+    import type { SocketData } from "stores/socket";
+
+    import { SocketMessageType } from "stores/socket";
+
+    import { commander } from "commander";
+
+    import Dialog from "components/modals/Dialog.svelte";
+    import ReorderableList from "components/ReorderableList.svelte";
+    import ServerProfileTile from "components/settings/profile/ServerProfileTile.svelte";
+
+    import CreateIcon from "assets/create-icon.svg";
 
     const dispatch = createEventDispatcher();
 

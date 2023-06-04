@@ -1,24 +1,27 @@
 <script lang="ts">
-    import { QueueStatus } from "../queue";
-
-    import wavesSvg from "../assets/waves.svg";
-    import OverviewPanel from "./panels/OverviewPanel.svelte";
-    import TitlePanel from "./panels/TitlePanel.svelte";
-    import OmdbPanel from "./panels/OmdbPanel.svelte";
-    import FfmpegPanel from "./panels/FfmpegPanel.svelte";
-    import DatabasePanel from "./panels/DatabasePanel.svelte";
-    import QueueItemControls, { Action } from "./QueueItemControls.svelte";
-    import StageIcon from "./StageIcon.svelte";
-    import QueueStagePanel from "./panels/QueueStagePanel.svelte";
-    import { commander } from "../commander";
-    import { SocketMessageType } from "../stores/socket";
-    import type { SocketData } from "../stores/socket";
     import { fade } from "svelte/transition";
     import { getContext } from "svelte";
-    import ConfirmationPopup from "./modals/ConfirmationPopup.svelte";
+
+    import { QueueStatus } from "queue";
+
     import { writable } from "svelte/store";
-    import { selectedQueueItem } from "../stores/item";
-    import { itemDetails } from "../stores/queue";
+    import { selectedQueueItem } from "stores/item";
+    import { itemDetails } from "stores/queue";
+    import { commander } from "commander";
+    import { SocketMessageType } from "stores/socket";
+    import type { SocketData } from "stores/socket";
+
+    import StageIcon from "components/StageIcon.svelte";
+    import ConfirmationPopup from "components/modals/ConfirmationPopup.svelte";
+    import QueueStagePanel from "components/queue_item/QueueStagePanel.svelte";
+    import FfmpegPanel from "components/queue_item/stage_panels/FfmpegPanel.svelte";
+    import DatabasePanel from "components/queue_item/stage_panels/DatabasePanel.svelte";
+    import OverviewPanel from "components/queue_item/stage_panels/OverviewPanel.svelte";
+    import TitlePanel from "components/queue_item/stage_panels/TitlePanel.svelte";
+    import OmdbPanel from "components/queue_item/stage_panels/OmdbPanel.svelte";
+    import QueueItemControls, { Action } from "components/queue_item/QueueItemControls.svelte";
+
+    import wavesSvg from "assets/waves.svg";
 
     const { open } = getContext<any>("simple-modal");
 
@@ -208,7 +211,7 @@
         flex: 1;
         text-align: left;
 
-        @import "../styles/waves.scss";
+        @import "../../styles/waves.scss";
 
         .main {
             padding: 1rem 2rem;
@@ -221,7 +224,7 @@
                 font-weight: 500;
             }
 
-            @import "../styles/queueItem.scss";
+            @import "../../styles/queueItem.scss";
             .item {
                 background: #f3f5fe;
                 border-radius: 5px;

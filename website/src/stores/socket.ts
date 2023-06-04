@@ -60,6 +60,8 @@ export const socketStream = writable({
 // connection to the go-backend server. We export a sendMessage function
 // that allows components to send messages directly via the websocket
 // rather than through a Commander instance.
+
+//@ts-ignore: SERVER_CONFIG is replaced as compile time with an object containing the host and port. See rollup config.
 const config = SERVER_CONFIG
 const socket = new WebSocket(`ws://${config.host}:${config.port}/api/thea/v0/ws`)
 export function sendMessage(message: string) {

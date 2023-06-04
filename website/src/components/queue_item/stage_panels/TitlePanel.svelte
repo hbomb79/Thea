@@ -1,8 +1,7 @@
 <script lang="ts">
-    import type { QueueDetails } from "../../queue";
-    import { selectedQueueItem } from "../../stores/item";
-    import { itemDetails } from "../../stores/queue";
-    import StageIcon from "../StageIcon.svelte";
+    import type { QueueDetails } from "queue";
+    import { selectedQueueItem } from "stores/item";
+    import { itemDetails } from "stores/queue";
 
     export let details: QueueDetails;
     $: details = $itemDetails.get($selectedQueueItem);

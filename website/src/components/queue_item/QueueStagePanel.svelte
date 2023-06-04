@@ -1,10 +1,10 @@
 <script lang="ts">
-    import type { QueueDetails } from "../../queue";
-    import { QueueStatus, QueueStage } from "../../queue";
-    import TroublePanel from "./TroublePanel.svelte";
+    import type { QueueDetails } from "queue";
+    import { QueueStatus, QueueStage } from "queue";
 
-    import pendingHtml from "../../assets/html/ellipsis.html";
-    import rippleHtml from "../../assets/html/ripple.html";
+    import TroublePanel from "components/queue_item/stage_panels/TroublePanel.svelte";
+
+    import rippleHtml from "assets/html/ripple.html";
 
     export let queueDetails: QueueDetails;
     export let stagePanel = null;

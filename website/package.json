@@ -32,6 +32,7 @@
     "esm": "^3.2.25",
     "progressbar.js": "^1.1.0",
     "rollup-plugin-html": "^0.2.1",
+    "rollup-plugin-includepaths": "^0.2.4",
     "rollup-plugin-svg-import": "^1.5.1",
     "sirv-cli": "^1.0.0",
     "svelte-dragdrop-list": "github:Gjum/svelte-dragdrop-list",

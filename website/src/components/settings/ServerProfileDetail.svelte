@@ -1,7 +1,7 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
 
-    import type { TranscodeProfile } from "../queue";
+    import type { TranscodeProfile } from "queue";
 
     export let profiles: TranscodeProfile[] = [];
     export let profileTag: string = null;

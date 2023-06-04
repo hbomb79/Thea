@@ -1,16 +1,19 @@
 <script lang="ts">
-    import healthSvg from "../assets/health.svg";
-    import { contentManager } from "../queue";
-    import QueueItemMini from "./QueueItemMini.svelte";
-    import QueueItemFull from "./QueueItemFull.svelte";
-    import QueueList from "./QueueList.svelte";
-    import { selectedQueueItem } from "../stores/item";
-    import ServerSettings from "./ServerSettings.svelte";
     import { fade } from "svelte/transition";
     import Modal from "svelte-simple-modal";
+
     import { writable } from "svelte/store";
-    import { itemIndex, queueState } from "../stores/queue";
-    import { QueueState } from "../queueOrderManager";
+    import { itemIndex, queueState } from "stores/queue";
+    import { selectedQueueItem } from "stores/item";
+    import { contentManager } from "queue";
+    import { QueueState } from "queueOrderManager";
+
+    import QueueItemMini from "components/QueueItemMini.svelte";
+    import QueueItemFull from "components/queue_item/QueueItemFull.svelte";
+    import QueueList from "components/queue_list/QueueList.svelte";
+    import ServerSettings from "components/settings/ServerSettings.svelte";
+
+    import healthSvg from "assets/health.svg";
 
     type DashboardPage = "Home" | "Queue" | "Settings";
 

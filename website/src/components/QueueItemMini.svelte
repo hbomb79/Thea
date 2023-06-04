@@ -1,8 +1,9 @@
 <script lang="ts">
-    import { QueueStatus } from "../queue";
-    import type { QueueDetails } from "../queue";
     import { createEventDispatcher } from "svelte";
-    import { itemDetails } from "../stores/queue";
+    import { QueueStatus } from "queue";
+
+    import { itemDetails } from "stores/queue";
+
     const dispatch = createEventDispatcher();
 
     export let queueItemID: number;

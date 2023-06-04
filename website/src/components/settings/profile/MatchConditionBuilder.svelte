@@ -1,10 +1,11 @@
 <script lang="ts">
-    import { commander, profileMatchValidTypes } from "../../../commander";
+    import type { ProfileMatchCriterion, TranscodeProfile } from "queue";
+    import type { SocketData } from "stores/socket";
 
-    import { MatchKey, MatchType, ModifierType } from "../../../queue";
-    import type { ProfileMatchCriterion, TranscodeProfile } from "../../../queue";
-    import type { SocketData } from "../../../stores/socket";
-    import { SocketMessageType } from "../../../stores/socket";
+    import { SocketMessageType } from "stores/socket";
+    import { MatchKey, MatchType, ModifierType } from "queue";
+
+    import { commander, profileMatchValidTypes } from "commander";
 
     export let profile: TranscodeProfile;
     export let matchComponents: ProfileMatchCriterion[] = [];

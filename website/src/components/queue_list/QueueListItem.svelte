@@ -1,8 +1,10 @@
 <script lang="ts">
-    import { QueueStatus } from "../queue";
     import { createEventDispatcher } from "svelte";
-    import { selectedQueueItem } from "../stores/item";
-    import { itemDetails } from "../stores/queue";
+
+    import { QueueStatus } from "queue";
+
+    import { selectedQueueItem } from "stores/item";
+    import { itemDetails } from "stores/queue";
 
     const dispatch = createEventDispatcher();
 
@@ -46,7 +48,7 @@
 {/if}
 
 <style lang="scss">
-    @use "../styles/global.scss";
+    @use "../../styles/global.scss";
     .item {
         padding: 1rem;
         color: #9696a5;

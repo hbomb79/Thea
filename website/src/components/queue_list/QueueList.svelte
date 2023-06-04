@@ -1,10 +1,10 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
 
-    import QueueListItem from "./QueueListItem.svelte";
-    import ReorderableList from "./ReorderableList.svelte";
-    import { selectedQueueItem } from "../stores/item";
-    import { itemIndex } from "../stores/queue";
+    import QueueListItem from "components/queue_list/QueueListItem.svelte";
+    import ReorderableList from "components/ReorderableList.svelte";
+    import { selectedQueueItem } from "stores/item";
+    import { itemIndex } from "stores/queue";
 
     const dispatch = createEventDispatcher();
 

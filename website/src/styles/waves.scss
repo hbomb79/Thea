@@ -35,8 +35,6 @@ $troubleWaveFillColors: #ff3e3e, #d74a4a, #ffb3b3;
             opacity: 1;
         }
 
-        // background: linear-gradient(127deg, list.nth($troubleGradientColors, 1), list.nth($troubleGradientColors, 2));
-
         .waves :global(svg) {
             @for $index from 1 through length($troubleWaveFillColors) {
                 $color: list.nth($troubleWaveFillColors, $index);

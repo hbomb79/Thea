@@ -16,15 +16,17 @@
 </script>
 
 <script lang="ts">
-    import ServerProfiles from "./tiles/ServerProfiles.svelte";
-    import ServerCache from "./tiles/ServerCache.svelte";
-    import type { QueueDetails, TranscodeProfile, QueueItem } from "../queue";
-    import ServerProfileDetail from "./ServerProfileDetail.svelte";
     import { fade } from "svelte/transition";
 
+    import type { TranscodeProfile } from "queue";
+
+    import ServerProfileDetail from "components/settings/ServerProfileDetail.svelte";
+    import ServerProfiles from "components/settings/ServerProfiles.svelte";
+    import ServerCache from "components/settings/ServerCache.svelte";
+
     export let profiles: TranscodeProfile[] = [];
-    export let index: QueueItem[] = [];
-    export let details: Map<number, QueueDetails> = new Map();
+    // export let index: QueueItem[] = [];
+    // export let details: Map<number, QueueDetails> = new Map();
 
     let state: SettingsState = SettingsState.MAIN;
     let selectedProfile: string = null;
@@ -50,7 +52,6 @@
             <div class="content trans">
                 <ServerProfiles
                     {profiles}
-                    {details}
                     on:select={(ev) => {
                         selectProfile(ev.detail);
                     }}

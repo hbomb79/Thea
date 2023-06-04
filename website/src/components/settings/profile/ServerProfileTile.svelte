@@ -1,13 +1,17 @@
 <script lang="ts">
-    import type { TranscodeProfile, TranscodeTarget } from "../../../queue";
-    import CancelIcon from "../../../assets/cancel.svg";
     import { createEventDispatcher, getContext } from "svelte";
-    import ProfileTargetTile from "./ProfileTargetTile.svelte";
-    import { commander } from "../../../commander";
-    import { SocketMessageType } from "../../../stores/socket";
-    import type { SocketData } from "../../../stores/socket";
-    import ConfirmationPopup from "../../modals/ConfirmationPopup.svelte";
-    import MatchConditionBuilder from "./MatchConditionBuilder.svelte";
+
+    import type { TranscodeProfile } from "queue";
+    import type { SocketData } from "stores/socket";
+
+    import { commander } from "commander";
+    import { SocketMessageType } from "stores/socket";
+
+    import ConfirmationPopup from "components/modals/ConfirmationPopup.svelte";
+    import ProfileTargetTile from "components/settings/profile/ProfileTargetTile.svelte";
+    import MatchConditionBuilder from "components/settings/profile/MatchConditionBuilder.svelte";
+
+    import CancelIcon from "assets/cancel.svg";
 
     const { open } = getContext<any>("simple-modal");
 

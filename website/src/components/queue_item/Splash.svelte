@@ -4,10 +4,11 @@
     import type { QueueDetails } from "queue";
     import { QueueStatus } from "queue";
 
-    import Modal from "components/modal/Modal.svelte";
+    import InfoModal from "components/modal/InfoModal.svelte";
     import QueueItemControls from "components/queue_item/QueueItemControls.svelte";
 
     import wavesSvg from "assets/waves.svg";
+    import questionMarkSvg from "assets/question-mark.svg";
 
     export let details: QueueDetails;
     export let queueControlCallback: (ev: CustomEvent) => void;
@@ -132,7 +133,7 @@
             </h2>
             <p class="sub">
                 {itemStatusText()}
-                <a on:click={() => (showInfoModal = true)}>?</a>
+                <button class="status-help" on:click={() => (showInfoModal = true)}>{@html questionMarkSvg}</button>
             </p>
 
             <QueueItemControls on:queue-control={queueControlCallback} />
@@ -140,8 +141,8 @@
     </div>
 {/if}
 
-<Modal bind:showModal={showInfoModal}>
-    <h2 slot="header">Meaning of <em>{itemStatusText()}</em></h2>
+<InfoModal bind:showModal={showInfoModal}>
+    <span slot="header">Meaning of <em>{itemStatusText()}</em></span>
 
     <p>
         {@html itemStatusHelpText()
@@ -149,7 +150,7 @@
             .replaceAll(/\n\n/g, "<br/><br/>") // Convert two newlines in to breaks
             .replaceAll(/\n{1}/g, " ")}
     </p>
-</Modal>
+</InfoModal>
 
 <style lang="scss">
     @import "../../styles/waves.scss";

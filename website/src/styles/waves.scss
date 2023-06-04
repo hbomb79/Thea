@@ -44,6 +44,28 @@ $troubleWaveFillColors: #ff3e3e, #d74a4a, #ffb3b3;
                 }
             }
         }
+
+        .content {
+            .title {
+                color: #cd1a1a;
+
+                .id {
+                    color: rgb(189 37 37 / 48%);
+                }
+            }
+
+            .sub {
+                color: #b53e49;
+
+                .status-help {
+                    fill: rgb(189 37 37 / 48%);
+
+                    &:hover {
+                        fill: rgb(189 37 37 / 100%);
+                    }
+                }
+            }
+        }
     }
 
     .waves {
@@ -74,6 +96,7 @@ $troubleWaveFillColors: #ff3e3e, #d74a4a, #ffb3b3;
         .title {
             padding: 0 3rem;
             color: white;
+            transition: color 0.4s ease-in-out;
             font-size: 2rem;
             margin-bottom: 0;
 
@@ -81,6 +104,7 @@ $troubleWaveFillColors: #ff3e3e, #d74a4a, #ffb3b3;
                 font-size: 1rem;
                 font-weight: 400;
                 color: #ffffff7a;
+                transition: color 0.4s ease-in-out;
                 margin-left: -2px;
                 font-style: italic;
             }
@@ -89,7 +113,26 @@ $troubleWaveFillColors: #ff3e3e, #d74a4a, #ffb3b3;
         .sub {
             padding: 0 3rem;
             color: #bfd9ff;
+            transition: color 0.4s ease-in-out;
             margin-top: 0;
+
+            .status-help {
+                transition: fill 0.2s ease-out;
+                fill: #bfd9ff;
+                display: inline-block;
+                overflow: hidden;
+                height: 1.1rem;
+                width: 0.8rem;
+                margin: 0;
+                padding: 0;
+                border: none;
+                background: none;
+                cursor: pointer;
+
+                &:hover {
+                    fill: #6e99da;
+                }
+            }
         }
     }
 }

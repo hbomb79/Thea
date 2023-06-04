@@ -12,10 +12,17 @@
     import advanceSvg from "assets/advance.svg";
     import cancelSvg from "assets/cancel.svg";
     import { createEventDispatcher } from "svelte";
+    import { selectedQueueItem } from "stores/item";
+    import { itemDetails } from "stores/queue";
+    import { QueueStatus } from "queue";
 
     const dispatch = createEventDispatcher();
 
     let currentAction: Action = Action.NONE;
+
+    $: currentItemStatus = $itemDetails.get($selectedQueueItem).status;
+    $: currentItemTroubled =
+        currentItemStatus == QueueStatus.NEEDS_ATTENTION || currentItemStatus == QueueStatus.NEEDS_RESOLVING;
 
     // The controls of this element, used to generate
     // HTML using Svelte 'each'. The item and span
@@ -76,7 +83,7 @@
     };
 </script>
 
-<div class="controls" on:mouseleave={resetSelection}>
+<div class="controls" class:troubled={currentItemTroubled} on:mouseleave={resetSelection}>
     {#each controls as { label, action, icon, itemElement, spanElement }}
         <span
             class="control {label.toLowerCase()}"
@@ -91,6 +98,9 @@
 </div>
 
 <style lang="scss">
+    $okColor: #9385cb;
+    $troubleColor: #b53e49;
+
     .controls {
         position: absolute;
         right: 1rem;
@@ -126,7 +136,7 @@
                 transition: all 250ms ease-in-out;
                 transition-property: opacity;
                 font-size: 14px;
-                color: #9385cb;
+                color: $okColor;
 
                 position: absolute;
                 right: 8px;
@@ -136,7 +146,7 @@
                 width: 0.8rem;
                 height: 0.8rem;
                 padding: 4px;
-                fill: #9385cb;
+                fill: $okColor;
                 display: inline-block;
             }
 
@@ -146,6 +156,16 @@
 
             &:hover {
                 background: #00000014;
+            }
+        }
+
+        &.troubled {
+            span.control span {
+                color: $troubleColor !important;
+            }
+
+            :global(svg) {
+                fill: $troubleColor !important;
             }
         }
     }

@@ -1,7 +1,8 @@
 $okGradientColors: #6ca8ff, #ef8dff;
 $troubleGradientColors: #ff6bc3, #ff5757;
 
-$okWaveFillColors: #bfd9ff, #c1d3fe, #c5ccfb, #cbc5f7, #d2bef1, #d9b6ea;
+// $okWaveFillColors: #bfd9ff, #c1d3fe, #c5ccfb, #cbc5f7, #d2bef1, #d9b6ea;
+$okWaveFillColors: #9366fa, #9691e9, #c79efd, #cbc5f7, #d2bef1, #d9b6ea;
 $troubleWaveFillColors: #ff3e3e, #d74a4a, #ffb3b3;
 
 @use "sass:list";

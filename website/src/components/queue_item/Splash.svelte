@@ -11,7 +11,21 @@
     export let details: QueueDetails;
     export let queueControlCallback: (ev: CustomEvent) => void;
 
-    $: if (details) shuffleWaveComponents();
+    // Only shuffle wave components if new details has a diff ID or status
+    let currentItemID = details?.id;
+    let currentItemStatus = details?.status;
+    $: {
+        //TODO: Stop treating NEEDS_RESOLVING and NEEDS_ATTENTION as the same
+        // coloring at.. some point
+        const normalizedStatus =
+            details.status == QueueStatus.NEEDS_RESOLVING ? QueueStatus.NEEDS_ATTENTION : details.status;
+
+        if (details.id != currentItemID || normalizedStatus != currentItemStatus) {
+            shuffleWaveComponents();
+            currentItemID = details.id;
+            currentItemStatus = normalizedStatus;
+        }
+    }
 
     let waveComponent: HTMLElement;
 

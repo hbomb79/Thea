@@ -138,9 +138,9 @@ func (instance *ffmpegInstance) startAndMonitorFfmpeg(config FormatterConfig, pr
 	log.Emit(logger.DEBUG, "FFmpeg instance %v has completed with error=%v\n", instance, ffmpegErr)
 	if ffmpegErr != nil {
 		instance.raiseTrouble(item, ffmpegErr)
-		// Clear lastKnownProgress, and notify commander of trouble
 		proxyReportChannel <- nil
 	} else {
+		log.Emit(logger.SUCCESS, "FFmpeg instance %v marked as COMPLETED", instance)
 		instance.status = COMPLETE
 	}
 
@@ -150,9 +150,9 @@ func (instance *ffmpegInstance) startAndMonitorFfmpeg(config FormatterConfig, pr
 }
 
 func (instance *ffmpegInstance) Cancel() {
-	log.Emit(logger.DEBUG, "Cancelling instance %v...\n", instance)
+	log.Emit(logger.STOP, "Cancelling instance %v...\n", instance)
 	if instance.command == nil {
-		log.Emit(logger.WARNING, "Cannot cancel instance %v as no command is initialized yet\n", instance)
+		log.Emit(logger.DEBUG, "Cannot cancel instance %v as no command is initialized yet\n", instance)
 		return
 	}
 
@@ -224,6 +224,10 @@ func (instance *ffmpegInstance) createProxyProgressChannel(source ProgressChanne
 			}
 
 			instance.lastKnownProgress = progress
+			if progress != nil {
+				// Progress updated, instance is working!
+				instance.status = WORKING
+			}
 
 			select {
 			case forwardChan <- progress:

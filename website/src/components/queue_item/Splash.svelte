@@ -14,7 +14,6 @@
     export let queueControlCallback: (ev: CustomEvent) => void;
 
     let showInfoModal: boolean = false;
-    $: if (details) console.log(itemStatusHelpText());
 
     // Only shuffle wave components if new details has a diff ID or status
     let currentItemID = details?.id;

@@ -17,21 +17,32 @@ $troubleWaveFillColors: #ff3e3e, #d74a4a, #ffb3b3;
     z-index: 100;
 
     &::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(127deg, list.nth($troubleGradientColors, 1), list.nth($troubleGradientColors, 2));
+        // content: "";
+        // position: absolute;
+        // top: 0;
+        // left: 0;
+        // width: 100%;
+        // height: 100%;
+        // background: linear-gradient(127deg, list.nth($troubleGradientColors, 1), list.nth($troubleGradientColors, 2));
 
-        opacity: 0;
-        transition: opacity 0.4s ease-in-out;
-        z-index: -1;
+        // opacity: 0;
+        // transition: opacity 0.4s ease-in-out;
+        // z-index: -1;
     }
 
     &.trouble {
         &::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(127deg, list.nth($troubleGradientColors, 1), list.nth($troubleGradientColors, 2));
+
+            opacity: 0;
+            transition: opacity 0.4s ease-in-out;
+            z-index: -1;
             opacity: 1;
         }
 

@@ -115,7 +115,7 @@ func (handler *eventHandler) Dispatch(event TheaEvent, payload TheaPayload) {
 }
 
 func (handler *eventHandler) validatePayload(event TheaEvent, payload TheaPayload) error {
-	log.Emit(logger.DEBUG, "Validating payload %#v for event %v\n", payload, event)
+	log.Emit(logger.VERBOSE, "Validating payload %#v for event %v\n", payload, event)
 
 	var payloadTypeName string
 	if t := reflect.TypeOf(payload); t != nil {

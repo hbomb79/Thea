@@ -119,7 +119,7 @@ func (cmd *cmd) calculateOutputPath(config FormatterConfig) string {
 		itemOutputPath = fmt.Sprintf("%s.%s", cmd.item.TitleInfo.OutputPath(), outputFormat)
 		itemOutputPath = filepath.Join(config.OutputPath, itemOutputPath)
 	} else {
-		itemOutputPath = cmd.profile.Output()
+		itemOutputPath = fmt.Sprintf("%s.%s", cmd.profile.Output(), outputFormat)
 	}
 
 	itemOutputPath = composeCommandArguments(itemOutputPath, cmd.item)

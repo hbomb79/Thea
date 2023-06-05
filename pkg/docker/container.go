@@ -163,7 +163,8 @@ func (c *dockerContainer) Close(ctx context.Context, cli client.APIClient, timeo
 
 	if c.canStop() {
 		c.setStatus(CLOSING)
-		if err := cli.ContainerStop(ctx, c.containerID, &timeout); err != nil {
+		var timeoutSeconds int = int(timeout.Seconds())
+		if err := cli.ContainerStop(ctx, c.containerID, dCont.StopOptions{Timeout: &timeoutSeconds}); err != nil {
 			return fmt.Errorf("failed to stop container %s: %v", c, err.Error())
 		}
 

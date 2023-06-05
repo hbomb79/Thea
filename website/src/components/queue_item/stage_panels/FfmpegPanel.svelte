@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { CommanderTaskStatus } from "queue";
+    import { CommanderTaskStatus, FfmpegProgress } from "queue";
     import type { CommanderTask as FfmpegInstance } from "queue";
     import workingHtml from "assets/html/dual-ring.html";
     import troubleSvg from "assets/err.svg";
@@ -34,27 +34,15 @@
     }
 
     const retryHandler = (instance: FfmpegInstance) => {
-        resolveTrouble(instance, {
-            action: "retry",
-        });
+        resolveTrouble(instance, { action: "retry" });
     };
 
-    // const specifyProfileHandler = (instance: CommanderTask) => {
-    //     resolveTrouble(instance, {
-    //         profileTag: "unknown",
-    //     });
-    // };
-
     const pauseHandler = (instance: FfmpegInstance) => {
-        resolveTrouble(instance, {
-            action: "pause",
-        });
+        resolveTrouble(instance, { action: "pause" });
     };
 
     const cancelHandler = (instance: FfmpegInstance) => {
-        resolveTrouble(instance, {
-            action: "cancel",
-        });
+        resolveTrouble(instance, { action: "cancel" });
     };
 
     const troubleResolvers: [string, (instance: FfmpegInstance) => void][] = [
@@ -84,12 +72,6 @@
         }
     };
 
-    // getCheckClass is a dynamic binding that is used to
-    // get the HTML 'class' that must be applied to each
-    // 'check' icon inbetween each pipeline stage in the Overview.
-    // This class is used to adjust the color and connecting lines
-    // to better reflect the situation (e.g. red with no line
-    // after the icon to indicate an error)
     $: getCheckClass = function (instance: FfmpegInstance): string {
         switch (instance.status) {
             case CommanderTaskStatus.WAITING:
@@ -125,11 +107,19 @@
                 return "Unknown Status";
         }
     };
+
+    const dummyProgress: FfmpegProgress = {
+        Progress: 40.008,
+        Speed: "300Kb/s",
+        Elapsed: "908",
+        Frames: "100",
+        Bitrate: "300",
+    };
 </script>
 
 {#if ffmpegInstances.length == 0}
-    <h2>Hang Tight</h2>
-    <p>We're nearly ready to go! Thea is allocating instances to this item... Shouldn't be long.</p>
+    <h2>Warming Up...</h2>
+    <p>Thea is allocating some resources to this item. Won't be long...</p>
 {:else}
     <ul class="instances">
         {#each ffmpegInstances as instance}
@@ -149,11 +139,23 @@
                             <h2 class="title">{instance.trouble.message}</h2>
                             <div class="controls">
                                 {#each troubleResolvers as [display, handler] (display)}
+                                    <!-- svelte-ignore a11y-click-events-have-key-events -->
                                     <span class="button" on:click={() => handler(instance)}>{display}</span>
                                 {/each}
                             </div>
-                        {:else}
-                            <p>{instance.progress}</p>
+                        {:else if instance.status == CommanderTaskStatus.WORKING && instance.progress}
+                            <div class="ffmpeg-prog">
+                                <div class="meta">
+                                    <span class="elapsed">Elapsed {instance.progress.Elapsed}</span>
+                                    <span class="speed">{instance.progress.Speed}</span>
+                                </div>
+                                <div class="percentage">
+                                    <div class="fill-bg" style="width: {instance.progress.Progress}%" />
+                                    <span>{Math.floor(instance.progress.Progress)}%</span>
+                                </div>
+                            </div>
+                        {:else if instance.status == CommanderTaskStatus.COMPLETE}
+                            <p>Item Completed</p>
                         {/if}
                     </div>
                 </div>
@@ -192,6 +194,37 @@
                     display: flex;
                     justify-content: space-between;
                     flex: 1 auto;
+
+                    .ffmpeg-prog {
+                        display: flex;
+                        flex-direction: column;
+                        width: 100%;
+
+                        .percentage {
+                            width: 100%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            position: relative;
+                            background: #bbbbbb30;
+
+                            span {
+                                font-size: 0.9rem;
+                                color: #565287;
+                                z-index: 100;
+                            }
+
+                            .fill-bg {
+                                width: 0%;
+                                position: absolute;
+                                left: 0;
+                                bottom: 0;
+                                height: 100%;
+                                transition: width 3s ease-in-out;
+                                background-color: #aca8dd;
+                            }
+                        }
+                    }
 
                     .controls {
                         flex: 0 0 auto;

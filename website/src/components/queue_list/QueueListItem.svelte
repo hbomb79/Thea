@@ -28,6 +28,7 @@
 </script>
 
 {#if details}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
     <div class="item" on:click={() => dispatch("selected", details.id)} class:active={$selectedQueueItem == details.id}>
         <span class={`status ${getStatusClass()}`} />
 
@@ -54,7 +55,7 @@
         color: #9696a5;
         cursor: pointer;
         text-align: left;
-        border-radius: 7px;
+        border-radius: 5px;
         background: #e9eaef54;
         margin: 6px 1rem;
         border: solid 1px #8c91b938;
@@ -75,8 +76,10 @@
 
         &.active {
             background: white;
-            box-shadow: 0px 0px 7px -5px black;
+            box-shadow: 0px 0px 5px -3px rgba(0, 0, 0, 0.2);
+            font-weight: 700;
             color: #8e82bf;
+            border-color: #8e82bf57;
         }
 
         .title {
@@ -90,7 +93,7 @@
             width: 12px;
             display: inline-block;
             border-radius: 100%;
-            margin-right: 8px;
+            margin-right: 12px;
             flex: none;
 
             &.pending {

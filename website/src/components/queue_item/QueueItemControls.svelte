@@ -85,6 +85,7 @@
 
 <div class="controls" class:troubled={currentItemTroubled} on:mouseleave={resetSelection}>
     {#each controls as { label, action, icon, itemElement, spanElement }}
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
         <span
             class="control {label.toLowerCase()}"
             on:click|preventDefault={() => onClick(action)}

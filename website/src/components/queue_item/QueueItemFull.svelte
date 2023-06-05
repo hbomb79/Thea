@@ -1,6 +1,5 @@
 <script lang="ts">
     import { fade } from "svelte/transition";
-    import { getContext } from "svelte";
 
     import { QueueStatus } from "queue";
 
@@ -12,19 +11,16 @@
     import type { SocketData } from "stores/socket";
 
     import StageIcon from "components/StageIcon.svelte";
-    import ConfirmationPopup from "components/modals/ConfirmationPopup.svelte";
     import QueueStagePanel from "components/queue_item/QueueStagePanel.svelte";
     import FfmpegPanel from "components/queue_item/stage_panels/FfmpegPanel.svelte";
     import DatabasePanel from "components/queue_item/stage_panels/DatabasePanel.svelte";
     import OverviewPanel from "components/queue_item/stage_panels/OverviewPanel.svelte";
     import TitlePanel from "components/queue_item/stage_panels/TitlePanel.svelte";
     import OmdbPanel from "components/queue_item/stage_panels/OmdbPanel.svelte";
-    import QueueItemControls, { Action } from "components/queue_item/QueueItemControls.svelte";
+    import { Action } from "components/queue_item/QueueItemControls.svelte";
 
-    import wavesSvg from "assets/waves.svg";
     import Splash from "./Splash.svelte";
-
-    const { open } = getContext<any>("simple-modal");
+    import InfoModal from "components/modal/InfoModal.svelte";
 
     interface Stage {
         label: string;
@@ -42,6 +38,9 @@
      */
 
     $: details = $itemDetails.get($selectedQueueItem);
+
+    let cancelConfirmModal: InfoModal;
+    let showCancelConfirmModal = false;
 
     const openedDetailPanels = writable<Map<string, boolean>>(new Map());
     const detailPanels: Stage[] = [
@@ -107,7 +106,8 @@
     }
 
     function cancelItem() {
-        console.log("CANCELLING ITEM");
+        if (cancelConfirmModal) cancelConfirmModal.close();
+
         sendCommand(
             "CANCEL_ITEM",
             (successData) => {
@@ -130,15 +130,7 @@
                 pauseItem();
                 break;
             case Action.CANCEL:
-                open(
-                    ConfirmationPopup,
-                    {
-                        title: "Cancel Item",
-                        body: "Are you sure you wish to cancel this item?<br/><br/><b>All progress will be lost and the item will be removed from the queue.</b><br/><br/><i>This action cannot be reversed, however if you later wish to process this item, remove it from the server cache (go to Settings > Cache > Edit Cache).</i>",
-                        onOkay: cancelItem,
-                    },
-                    { closeButton: false }
-                );
+                showCancelConfirmModal = true;
                 break;
             case Action.NONE:
             default:
@@ -165,6 +157,7 @@
                     class:content-open={$openedDetailPanels.get(tag)}
                     in:fade={{ duration: 150, delay: 50 + k * 50 }}
                 >
+                    <!-- svelte-ignore a11y-click-events-have-key-events -->
                     <div class="header" on:click={() => toggleDetailPanel(tag)}>
                         <h2>{label}</h2>
                         {#key details.id}
@@ -189,6 +182,18 @@
         </div>
     </div>
 {/if}
+
+<InfoModal bind:this={cancelConfirmModal} bind:showModal={showCancelConfirmModal}>
+    <span slot="header">Confirm Cancellation of Item <em>#{details.id}</em></span>
+
+    <p>Upon cancellation, Thea will terminate any on-going transcodes and cleanup partially transcoded files.</p>
+    <p>
+        If you later decide you wish to process this item, you'll need to remove it from the list of 'Ignored Files' in
+        Thea settings.
+    </p>
+
+    <button on:click={cancelItem}>Cancel Item</button>
+</InfoModal>
 
 <style lang="scss">
     .queue-item {

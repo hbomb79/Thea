@@ -204,38 +204,37 @@ func (service *queueService) ExportItem(item *queue.Item) error {
 
 	if item.TitleInfo.Episodic {
 		if item.TitleInfo.Episode == -1 || item.TitleInfo.Season == -1 {
-			return fmt.Errorf("failed to ExportItem(%d) -> Item declared itself as Episodic, however season/episode information is invalid", item.ItemID)
+			log.Emit(logger.WARNING, "Item %v declared itself as episodic, however season/episode information is invalid", item.ItemID)
+		} else {
+			exportItem.EpisodeNumber = &item.TitleInfo.Episode
+			exportItem.SeasonNumber = &item.TitleInfo.Season
+			exportItem.Series = &export.Series{Name: item.TitleInfo.Title}
 		}
-
-		exportItem.EpisodeNumber = &item.TitleInfo.Episode
-		exportItem.SeasonNumber = &item.TitleInfo.Season
-		exportItem.Series = &export.Series{Name: item.TitleInfo.Title}
 	}
 
 	// Extract all genres and find pre-existing ones in the DB - for ones we could NOT find,
-	// create them manually and omit the gorm model ID so that the genre is created a s new row
+	// create them manually and omit the gorm model ID so that the genre is created as a new row
 	db := database.DB.GetInstance()
-	var exportGenres []*export.Genre
-	isGenreNew := func(genre string) bool {
-		for _, v := range exportGenres {
-			if v.Name == genre {
-				return false
-			}
-		}
+	var genresToExport []*export.Genre
+	db.Where("name in ?", item.OmdbInfo.Genre).Find(&genresToExport)
 
-		return true
+	existingGenres := make(map[string]*export.Genre, len(genresToExport))
+	for _, v := range genresToExport {
+		existingGenres[v.Name] = v
 	}
 
-	db.Where("name in ?", item.OmdbInfo.Genre).Find(&exportGenres)
+	// Add missing genres to the above result
 	for _, v := range item.OmdbInfo.Genre {
-		// Add missing genres to the above result
-		if isGenreNew(v) {
-			exportGenres = append(exportGenres, &export.Genre{
+		if _, existing := existingGenres[v]; !existing {
+			genresToExport = append(genresToExport, &export.Genre{
 				Name: v,
 			})
 		}
 	}
-	exportItem.Genres = exportGenres
+
+	// Set the genres of this item to a mix of existing matching genres from the DB,
+	// and new genres we wish to create.
+	exportItem.Genres = genresToExport
 
 	exports := service.thea.ffmpeg().GetInstancesForItem(item.ItemID)
 	for _, v := range exports {

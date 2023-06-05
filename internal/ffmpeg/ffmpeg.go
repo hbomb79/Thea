@@ -28,6 +28,7 @@ type FfmpegCmd interface {
 	Continue()
 
 	GetProcessID() int
+	GetOutputPath() string
 }
 
 type cmd struct {
@@ -110,6 +111,8 @@ func (cmd *cmd) GetProcessID() int {
 
 	return cmd.command.Process.Pid
 }
+
+func (cmd *cmd) GetOutputPath() string { return cmd.outputPath }
 
 func (cmd *cmd) calculateOutputPath(config FormatterConfig) string {
 	outputFormat := config.TargetFormat

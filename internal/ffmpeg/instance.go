@@ -246,7 +246,7 @@ func (instance *ffmpegInstance) Status() InstanceStatus { return instance.status
 func (instance *ffmpegInstance) Id() uuid.UUID          { return instance.id }
 func (instance *ffmpegInstance) ItemID() int            { return instance.itemID }
 func (instance *ffmpegInstance) Profile() string        { return instance.profileLabel }
-func (instance *ffmpegInstance) OutputPath() string     { return "" }
+func (instance *ffmpegInstance) OutputPath() string     { return instance.command.GetOutputPath() }
 func (instance *ffmpegInstance) Trouble() queue.Trouble { return instance.trouble }
 
 func (instance *ffmpegInstance) MarshalJSON() ([]byte, error) {

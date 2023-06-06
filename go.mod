@@ -60,4 +60,4 @@ require (
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )
 
-replace github.com/floostack/transcoder => /home/haz/go/src/transcoder
+replace github.com/floostack/transcoder => github.com/hbomb79/transcoder v1.1.2-0.20230606091455-01e3816a02ae

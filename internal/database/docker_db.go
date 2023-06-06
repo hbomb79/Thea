@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -22,7 +23,12 @@ type DatabaseConfig struct {
 
 func InitialiseDockerDatabase(config DatabaseConfig, errChannel chan error) (docker.DockerContainer, error) {
 	// Setup container cofiguration
-	dbDataPath := "/home/haz/thea_db_data"
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		panic(fmt.Sprintf("Cannot initialize docker db volume mount as cannot find user home dir: %s", err.Error()))
+	}
+
+	dbDataPath := filepath.Join(homeDir, "thea_db.dat")
 	if err := os.MkdirAll(dbDataPath, os.ModeDir); err != nil {
 		return nil, err
 	}

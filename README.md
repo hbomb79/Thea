@@ -101,6 +101,21 @@ Once cloned, `cd` in to it. We're now ready to build and run the server and clie
 
 **Client** Run `npm run dev` from inside of `website/` -> This will launch a web server on `0.0.0.0:5000`. The HOST and PORT can be overriden using the `WS_HOST` and `WS_POST` environment variables.
 
+#### Providing Dummy Data
+For testing, I find it most useful to just provide some 'dummy data' for Thea to chew on. Simply providing some plain text files named as if they were movies inside of the speicfic `import_path` will be enough to tricky Thea in to processing them... Of course you won't get very far, and Thea will throw a "Trouble" at you very quickly.
+
+**Some example names for your empty files**
+- WandaVision.S01E03.iNTERNAL.HDR.2160p.WEB.h265-KOGi.mkv (_This item will raise a trouble at the OMDB step as it finds multiple matches_)
+- Rick.and.morty.S05E01.2019.Mort.Dinner.Rick.Andre.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv (_This item will be correctly detected as an episode, and will be found in OMDB_)
+- Sample.S01E01.1080p.mkv (_This item will... suprisingly have a match in OMDB_)
+
+If you want to test the actual transcoding, I suggest grabbing a demo .mkv file from the internet, and plopping that in there. Provide it with a name such as "1917.2019.iNTERNAL.RERiP.HDR10Plus.2160p.UHD.BluRay.x265.JustWatch.mkv" (a.k.a a typical name from a torrent site) and watch Thea:
+ 1. Ingest the file
+ 1. Parse the relevant information out of the title
+ 1. Find a match in OMDB/IMDB
+ 1. ... Promptly grind to a halt because it has no Thea profiles to transcode the item... Uhh... _TODO?_
+
+
 #### Known Issues
 There are a _lot_ of rough edges here, so expect to run in to a lot of trouble. If you find something, feel free to log an issue with steps to reproduce and error logs at the very least.
 

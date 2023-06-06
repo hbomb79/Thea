@@ -97,9 +97,15 @@ Once those tools are complete, go ahead and `git clone` this repository (ideally
 
 Once cloned, `cd` in to it. We're now ready to build and run the server and client.
 
-**Server** Run `go run` in the project root -> Voila
+**Server**
+- Run `go build` in the project root. This will generate a `Thea` executable - _Alternatively to `go build`, one can use `go install` to install the executable to the `$HOME/go/bin` dir_
+- Execute `./Thea`
+  - If you need more logging, you can use the `THEA_LOG_LEVEL` env variable (options `verbose|debug|info|important|warning|error`, default `info`).
 
-**Client** Run `npm run dev` from inside of `website/` -> This will launch a web server on `0.0.0.0:5000`. The HOST and PORT can be overriden using the `WS_HOST` and `WS_POST` environment variables.
+**Client**
+Run `npm run dev` from inside of `website/`
+
+This will launch a web server on `0.0.0.0:5000`. The HOST and PORT can be overriden using the `WS_HOST` and `WS_POST` environment variables.
 
 #### Providing Dummy Data
 For testing, I find it most useful to just provide some 'dummy data' for Thea to chew on. Simply providing some plain text files named as if they were movies inside of the speicfic `import_path` will be enough to tricky Thea in to processing them... Of course you won't get very far, and Thea will throw a "Trouble" at you very quickly.

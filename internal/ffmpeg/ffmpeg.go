@@ -112,7 +112,14 @@ func (cmd *cmd) GetProcessID() int {
 	return cmd.command.Process.Pid
 }
 
-func (cmd *cmd) GetOutputPath() string { return cmd.outputPath }
+func (cmd *cmd) GetOutputPath() string {
+	if cmd.command == nil {
+		log.Emit(logger.ERROR, "Cannot get output path of command %s: no ffmpeg command is available\n", cmd)
+		return ""
+	}
+
+	return cmd.outputPath
+}
 
 func (cmd *cmd) calculateOutputPath(config FormatterConfig) string {
 	outputFormat := config.TargetFormat

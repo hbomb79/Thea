@@ -79,6 +79,7 @@ type ffmpegInstance struct {
 	command           FfmpegCmd
 	retryChan         chan bool
 	lastKnownProgress transcoder.Progress
+	commandOutputPath string
 }
 
 func (instance *ffmpegInstance) Start(config FormatterConfig, progressReportCallback ProgressChannel) {
@@ -135,6 +136,7 @@ func (instance *ffmpegInstance) startAndMonitorFfmpeg(config FormatterConfig, pr
 	// Start the command, providing a callback for progress notifications
 	proxyReportChannel := instance.createProxyProgressChannel(progressChan)
 	ffmpegErr := instance.command.Run(proxyReportChannel, config)
+	instance.commandOutputPath = instance.command.GetOutputPath()
 	log.Emit(logger.DEBUG, "FFmpeg instance %v has completed with error=%v\n", instance, ffmpegErr)
 	if ffmpegErr != nil {
 		instance.raiseTrouble(item, ffmpegErr)
@@ -246,7 +248,7 @@ func (instance *ffmpegInstance) Status() InstanceStatus { return instance.status
 func (instance *ffmpegInstance) Id() uuid.UUID          { return instance.id }
 func (instance *ffmpegInstance) ItemID() int            { return instance.itemID }
 func (instance *ffmpegInstance) Profile() string        { return instance.profileLabel }
-func (instance *ffmpegInstance) OutputPath() string     { return instance.command.GetOutputPath() }
+func (instance *ffmpegInstance) OutputPath() string     { return instance.commandOutputPath }
 func (instance *ffmpegInstance) Trouble() queue.Trouble { return instance.trouble }
 
 func (instance *ffmpegInstance) MarshalJSON() ([]byte, error) {

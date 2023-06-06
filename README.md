@@ -97,9 +97,9 @@ Once those tools are complete, go ahead and `git clone` this repository (ideally
 
 Once cloned, `cd` in to it. We're now ready to build and run the server and client.
 
-**Server** Run `go run` -> Voila
+**Server** Run `go run` in the project root -> Voila
 
-**Client** Run `npm run dev` -> This will launch a web server on `0.0.0.0:5000`. The HOST and PORT can be overriden using the `WS_HOST` and `WS_POST` environment variables.
+**Client** Run `npm run dev` from inside of `website/` -> This will launch a web server on `0.0.0.0:5000`. The HOST and PORT can be overriden using the `WS_HOST` and `WS_POST` environment variables.
 
 #### Known Issues
 There are a _lot_ of rough edges here, so expect to run in to a lot of trouble. If you find something, feel free to log an issue with steps to reproduce and error logs at the very least.

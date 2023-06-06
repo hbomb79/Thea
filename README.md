@@ -48,7 +48,7 @@ Thea configuration is looked for in `$HOME/.config/thea/config.yaml`, this file 
 Below is an reference .yaml file containing all the possible configuration options. For each configuration marked `# Optional`, the value provided is the default
 that Thea will use if a value is not expressly provided.
 
-For each configuratuin marked `# REQUIRED`, a value MUST be provided - else Thea will refuse to start.
+For each configuration marked `# REQUIRED`, a value MUST be provided - else Thea will refuse to start.
 
 Each option is documented below, along with it's environment variable override. You can change the config from it's default by either providing an alternative value in your config.yaml, or by setting the corresponding environment variable (env vars will override any values in the config.yaml)
 
@@ -72,6 +72,10 @@ concurrency:
   omdb_threads: 1 # Optional
   ffmpeg_threads: 1 # Optional
 
+# These define how Thea will connect to the database.
+# If the `enable_postgres` config below is TRUE (i.e. Thea is running a self-managed DB),
+# then these ALSO define the details used to CREATE the DB (and so the
+# username/password can basically be whatever you like).
 database:
   username: "foo" # REQUIRED
   password: "bar" # REQUIRED

@@ -18,15 +18,10 @@
 <script lang="ts">
     import { fade } from "svelte/transition";
 
-    import type { TranscodeProfile } from "queue";
-
     import ServerProfileDetail from "components/settings/ServerProfileDetail.svelte";
     import ServerProfiles from "components/settings/ServerProfiles.svelte";
     import ServerCache from "components/settings/ServerCache.svelte";
-
-    export let profiles: TranscodeProfile[] = [];
-    // export let index: QueueItem[] = [];
-    // export let details: Map<number, QueueDetails> = new Map();
+    import { ffmpegProfiles } from "stores/profiles";
 
     let state: SettingsState = SettingsState.MAIN;
     let selectedProfile: string = null;
@@ -51,7 +46,7 @@
             <h2 class="header">Profiles</h2>
             <div class="content trans">
                 <ServerProfiles
-                    {profiles}
+                    profiles={$ffmpegProfiles}
                     on:select={(ev) => {
                         selectProfile(ev.detail);
                     }}
@@ -74,7 +69,7 @@
 {:else if state == SettingsState.PROFILE}
     <div>
         <ServerProfileDetail
-            {profiles}
+            profiles={$ffmpegProfiles}
             profileTag={selectedProfile}
             on:deselect={() => changeState(SettingsState.MAIN)}
         />

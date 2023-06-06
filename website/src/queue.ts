@@ -2,6 +2,8 @@ import { Writable, writable } from "svelte/store"
 import { commander, dataStream } from "./commander"
 import { SocketData, SocketMessageType, SocketPacketType, SocketStreamPacket, socketStream } from "./stores/socket"
 
+import { ffmpegProfiles } from "stores/profiles";
+
 import { itemIndex, itemDetails, itemFfmpegInstances } from "./stores/queue"
 import { QueueOrderManager as QueueOrderManager } from "./queueOrderManager"
 
@@ -191,7 +193,6 @@ class ContentManager {
         this.requestQueueIndex.bind(this)
     )
 
-    serverProfiles: Writable<TranscodeProfile[]>
     knownMovies: Writable<Movie[]>
     // movieDetails: Writable<<>>
 
@@ -211,7 +212,6 @@ class ContentManager {
                 this.bootstrap()
         })
 
-        this.serverProfiles = writable(this._profiles)
         this.knownMovies = writable(this._movies)
     }
 
@@ -240,7 +240,7 @@ class ContentManager {
             this._ffmpeg = instances
         })
 
-        this.serverProfiles.subscribe((profiles) => {
+        ffmpegProfiles.subscribe((profiles) => {
             if (profiles === undefined) return
 
             console.debug("serverProfiles change:", profiles)
@@ -352,7 +352,7 @@ class ContentManager {
     requestTranscoderProfiles() {
         const handleReply = (response: SocketData): boolean => {
             if (response.type == SocketMessageType.RESPONSE) {
-                this.serverProfiles.set(response.arguments.payload)
+                ffmpegProfiles.set(response.arguments.payload)
             } else {
                 console.warn("[QueueManager] Invalid reply while fetching profile index.", response)
             }

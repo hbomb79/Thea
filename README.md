@@ -109,11 +109,15 @@ For testing, I find it most useful to just provide some 'dummy data' for Thea to
 - Rick.and.morty.S05E01.2019.Mort.Dinner.Rick.Andre.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv (_This item will be correctly detected as an episode, and will be found in OMDB_)
 - Sample.S01E01.1080p.mkv (_This item will... suprisingly have a match in OMDB_)
 
-If you want to test the actual transcoding, I suggest grabbing a demo .mkv file from the internet, and plopping that in there. Provide it with a name such as "1917.2019.iNTERNAL.RERiP.HDR10Plus.2160p.UHD.BluRay.x265.JustWatch.mkv" (a.k.a a typical name from a torrent site) and watch Thea:
+To get a feel for the UI, the above is all you really need to do... However if you want to test the actual transcoding then you need to create a profile, and provide a video file for Thea to transcode.
+
+To create a profile, open the web UI and go to the Settings page. From there, create a profile and name it whatever you like. You can leave the rest of the settings as they are (NOTE: it's possible that profile creation is very broken).
+
+Next, I suggest grabbing a demo .mkv file from the internet, and plopping that in there. Provide it with a name such as `"1917.2019.iNTERNAL.RERiP.HDR10Plus.2160p.UHD.BluRay.x265.JustWatch.mkv"` (a.k.a a typical name from a torrent site) and watch Thea:
  1. Ingest the file
  1. Parse the relevant information out of the title
  1. Find a match in OMDB/IMDB
- 1. ... Promptly grind to a halt because it has no Thea profiles to transcode the item... Uhh... _TODO?_
+ 1. Begin transcoding (and then fail if the content is not a REAL mkv)
 
 
 #### Known Issues

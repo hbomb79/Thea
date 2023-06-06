@@ -39,8 +39,8 @@ type ConcurrentConfig struct {
 // will initialise them automatically.
 type ServiceConfig struct {
 	EnablePostgres bool `yaml:"enable_postgres" env:"SERVICE_ENABLE_POSTGRES" env-default:"true"`
-	EnablePgAdmin  bool `yaml:"enable_pg_admin" env:"SERVICE_ENABLE_PGADMIN" env-default:"true"`
-	EnableFrontend bool `yaml:"enable_frontend" env:"SERVICE_ENABLE_UI" env-default:"true"`
+	EnablePgAdmin  bool `yaml:"enable_pg_admin" env:"SERVICE_ENABLE_PGADMIN" env-default:"false"`
+	EnableFrontend bool `yaml:"enable_frontend" env:"SERVICE_ENABLE_UI" env-default:"false"`
 }
 
 // Loads a configuration file formatted in YAML in to a

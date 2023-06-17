@@ -3,7 +3,7 @@
 
     import { statusStream } from "./commander";
     import { SocketPacketType } from "./stores/socket";
-    import Dashboard from "./components/Dashboard.svelte";
+    import MainApp from "./MainApp.svelte";
 </script>
 
 <main>
@@ -13,7 +13,7 @@
             {@html rippleHtml}
         </div>
     {:else if $statusStream == SocketPacketType.OPEN}
-        <Dashboard />
+        <MainApp />
     {:else}
         <div class="err modal">
             <h2>Failed to connect to server.</h2>

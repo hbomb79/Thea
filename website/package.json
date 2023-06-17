@@ -36,6 +36,7 @@
     "rollup-plugin-svg-import": "^1.5.1",
     "sirv-cli": "^1.0.0",
     "svelte-dragdrop-list": "github:Gjum/svelte-dragdrop-list",
+    "svelte-routing": "^1.10.0",
     "svelte-simple-modal": "^1.2.0"
   }
 }

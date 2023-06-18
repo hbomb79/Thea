@@ -5,7 +5,7 @@
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
-    "start": "sirv public --no-clear --host 0.0.0.0",
+    "start": "sirv public --no-clear --single --host 0.0.0.0",
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
   "devDependencies": {

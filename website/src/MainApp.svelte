@@ -3,9 +3,9 @@
 
     import { Router, Route, Link } from "svelte-routing";
 
-    import QueueItemFull from "components/queue_item/QueueItemFull.svelte";
     import ServerSettings from "components/settings/ServerSettings.svelte";
     import Home from "pages/Home.svelte";
+    import Queue from "pages/QueuePage.svelte";
 
     function miniItemClick(itemId: number) {
         selectedQueueItem.set(itemId);
@@ -28,7 +28,7 @@
 
         <main>
             <Route path="/" component={Home} />
-            <Route path="/queue" component={QueueItemFull} />
+            <Route path="/queue" component={Queue} />
             <Route path="/settings" component={ServerSettings} />
         </main>
 

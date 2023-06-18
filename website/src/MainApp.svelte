@@ -3,7 +3,7 @@
 
     import { Router, Route, Link } from "svelte-routing";
 
-    import ServerSettings from "components/settings/ServerSettings.svelte";
+    import ServerSettings from "pages/ServerSettings.svelte";
     import Home from "pages/Home.svelte";
     import Queue from "pages/QueuePage.svelte";
 

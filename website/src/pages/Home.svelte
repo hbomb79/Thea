@@ -98,11 +98,11 @@
     margin-bottom: 2rem;
 
     .content {
-        background: none;
+        background: none!important;
         display: flex;
         flex-direction: row;
         justify-content: space-between;
-        box-shadow: none;
+        box-shadow: none!important;
 
         .mini-tile {
             width: 40%;
@@ -131,6 +131,17 @@
                 text-align: center;
             }
         }
+    }
+}
+
+.tile.queue {
+    display: flex;
+    flex-direction: column;
+
+    .content{
+        background: none !important;
+        box-shadow: none !important;
+        padding: 0;
     }
 }
 </style>

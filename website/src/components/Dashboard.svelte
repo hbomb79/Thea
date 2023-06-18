@@ -11,7 +11,7 @@
     import QueueItemMini from "components/QueueItemMini.svelte";
     import QueueItemFull from "components/queue_item/QueueItemFull.svelte";
     import QueueList from "components/queue_list/QueueList.svelte";
-    import ServerSettings from "components/settings/ServerSettings.svelte";
+    import ServerSettings from "pages/ServerSettings.svelte";
 
     import healthSvg from "assets/health.svg";
 

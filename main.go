@@ -1,15 +1,16 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sync"
+	"syscall"
 
 	"github.com/hbomb79/Thea/internal"
 	"github.com/hbomb79/Thea/internal/api"
-	"github.com/hbomb79/Thea/internal/ffmpeg"
-	"github.com/hbomb79/Thea/internal/profile"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/hbomb79/Thea/pkg/socket"
 )
@@ -18,8 +19,12 @@ var mainLogger = logger.Get("Main")
 
 const VERSION = 0.7
 
+type Thea interface {
+	Start(ctx context.Context) error
+}
+
 type services struct {
-	thea        internal.Thea
+	thea        Thea
 	socketHub   *socket.SocketHub
 	wsGateway   *api.WsGateway
 	httpGateway *api.HttpGateway
@@ -32,7 +37,7 @@ func NewTpa(config internal.TheaConfig) *services {
 		socketHub:  socket.NewSocketHub(),
 	}
 
-	thea := internal.NewThea(config, services.handleTheaUpdate)
+	thea := internal.NewThea(config)
 	services.thea = thea
 	services.wsGateway = api.NewWsGateway(thea)
 	services.httpGateway = api.NewHttpGateway(thea)
@@ -40,19 +45,14 @@ func NewTpa(config internal.TheaConfig) *services {
 
 }
 
-func (serv *services) newClientConnection() map[string]interface{} {
-	return map[string]interface{}{
-		"ffmpegOptions":          serv.thea.GetKnownFfmpegOptions(),
-		"ffmpegMatchKeys":        ffmpeg.FFMPEG_COMMAND_SUBSTITUTIONS,
-		"profileAcceptableTypes": profile.MatchKeyAcceptableTypes(),
-	}
-}
-
 func (serv *services) Start() {
 	mainLogger.Emit(logger.INFO, " --- Starting Thea (version %v) ---\n", VERSION)
+	exitChannel := make(chan os.Signal, 1)
+	signal.Notify(exitChannel, os.Interrupt, syscall.SIGTERM)
+
+	ctx, ctxCancel := context.WithCancel(context.Background())
 
 	serv.setupRoutes()
-	serv.socketHub.WithConnectionCallback(serv.newClientConnection)
 
 	// Start websocket, router and Thea
 	wg := &sync.WaitGroup{}
@@ -71,7 +71,7 @@ func (serv *services) Start() {
 	}()
 	go func() {
 		defer wg.Done()
-		if err := serv.thea.Start(); err != nil {
+		if err := serv.thea.Start(ctx); err != nil {
 			mainLogger.Emit(logger.FATAL, "Failed to start Processor: %v", err.Error())
 		}
 
@@ -81,6 +81,8 @@ func (serv *services) Start() {
 	}()
 
 	// Wait for all processes to finish
+	<-exitChannel
+	ctxCancel()
 	wg.Wait()
 }
 
@@ -109,20 +111,20 @@ func (serv *services) setupRoutes() {
 	serv.socketHub.BindCommand("PROFILE_UPDATE_COMMAND", serv.wsGateway.WsProfileUpdateCommand)
 }
 
-func (serv *services) handleTheaUpdate(update *internal.Update) {
-	body := map[string]interface{}{"context": update}
-	if update.UpdateType == internal.PROFILE_UPDATE {
-		body["profiles"] = serv.thea.GetAllProfiles()
-		body["targetOpts"] = serv.thea.GetKnownFfmpegOptions()
-	}
+// func (serv *services) handleTheaUpdate(update *internal.Update) {
+// 	body := map[string]interface{}{"context": update}
+// 	if update.UpdateType == internal.PROFILE_UPDATE {
+// 		body["profiles"] = serv.thea.GetAllProfiles()
+// 		body["targetOpts"] = serv.thea.GetKnownFfmpegOptions()
+// 	}
 
-	mainLogger.Emit(logger.VERBOSE, "Emitting UPDATE message %#v\n", body)
-	serv.socketHub.Send(&socket.SocketMessage{
-		Title: "UPDATE",
-		Body:  body,
-		Type:  socket.Update,
-	})
-}
+// 	mainLogger.Emit(logger.VERBOSE, "Emitting UPDATE message %#v\n", body)
+// 	serv.socketHub.Send(&socket.SocketMessage{
+// 		Title: "UPDATE",
+// 		Body:  body,
+// 		Type:  socket.Update,
+// 	})
+// }
 
 // main() is the entry point to the program, from here will
 // we load the users Thea configuration from their home directory,

@@ -1,18 +1,18 @@
-package ffmpeg
+package transcode
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
 	"github.com/floostack/transcoder"
 	"github.com/google/uuid"
-	"github.com/hbomb79/Thea/internal/event"
-	"github.com/hbomb79/Thea/internal/profile"
+	"github.com/hbomb79/Thea/internal/activity"
 	"github.com/hbomb79/Thea/internal/queue"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
-var log = logger.Get("Commander")
+var log = logger.Get("Transcode")
 
 /*
  * FFmpeg Commander is a service that manages an items FFmpeg instances, from start to finish. This
@@ -34,50 +34,24 @@ var log = logger.Get("Commander")
  * does NOT cancel any associatted instances, however new profiles will cause a new instance to be created (in an IDLE state, as above).
  */
 
-// FormatterConfig is the 'misc' container of the configuration, encompassing configuration
-// not covered by either 'ConcurrentConfig' or 'DatabaseConfig'. Mainly configuration
-// paramters for the FFmpeg executable.
-type FormatterConfig struct {
-	ImportPath         string `yaml:"import_path" env:"FORMAT_IMPORT_PATH" env-required:"true"`
-	OutputPath         string `yaml:"default_output_dir" env:"FORMAT_DEFAULT_OUTPUT_DIR" env-required:"true"`
-	TargetFormat       string `yaml:"target_format" env:"FORMAT_TARGET_FORMAT" env-default:"mp4"`
-	ImportDirTickDelay int    `yaml:"import_polling_delay" env:"FORMAT_IMPORT_POLLING_DELAY" env-default:"3600"`
-	FfmpegBinaryPath   string `yaml:"ffmpeg_binary" env:"FORMAT_FFMPEG_BINARY_PATH" env-default:"/usr/bin/ffmpeg"`
-	FfprobeBinaryPath  string `yaml:"ffprobe_binary" env:"FORMAT_FFPROBE_BINARY_PATH" env-default:"/usr/bin/ffprobe"`
-}
-
 const (
 	EXTERNAL_UPDATE_CHANNEL_BUFFER = 10
 	AVAILABLE_THREADS              = 16
 	DEFAULT_THREADS_REQUIRED       = 1
 )
 
-type FfmpegCommander interface {
-	Start()
-	Stop()
-	CancelAllForItem(int)
-	GetInstancesForItem(int) []FfmpegInstance
-}
-
-type Provider interface {
-	GetItem(int) (*queue.Item, error)
-	GetAllItems() *[]*queue.Item
-	GetAllProfiles() []profile.Profile
-	GetProfileByTag(string) profile.Profile
-	EventHandler() event.EventHandler
-	NotifyItemUpdate(int)
-	NotifyFfmpegUpdate(int)
-	AdvanceItem(*queue.Item)
+type Thea interface {
+	EventHandler() activity.EventHandler
 }
 
 type commander struct {
-	provider           Provider
+	thea               Thea
 	itemInstances      map[int][]FfmpegInstance
 	updateChan         chan uuid.UUID
 	consumedThreads    uint32
-	config             FormatterConfig
+	config             TranscodeConfig
 	lastKnownProgress  map[uuid.UUID]transcoder.Progress
-	externalChangeChan event.HandlerChannel
+	externalChangeChan activity.HandlerChannel
 	exitChan           chan bool
 }
 
@@ -86,26 +60,26 @@ type FfmpegTask interface {
 	RequiredThreads() uint32
 }
 
-func NewFfmpegCommander(provider Provider, config FormatterConfig) FfmpegCommander {
+func NewFfmpegCommander(thea Thea, config TranscodeConfig) *commander {
 	return &commander{
-		provider:           provider,
+		thea:               thea,
 		itemInstances:      make(map[int][]FfmpegInstance),
 		lastKnownProgress:  make(map[uuid.UUID]transcoder.Progress),
 		updateChan:         make(chan uuid.UUID),
-		externalChangeChan: make(event.HandlerChannel, EXTERNAL_UPDATE_CHANNEL_BUFFER),
+		externalChangeChan: make(activity.HandlerChannel, EXTERNAL_UPDATE_CHANNEL_BUFFER),
 		exitChan:           make(chan bool),
 		config:             config,
 	}
 }
 
-func (com *commander) Start() {
+func (com *commander) Start(ctx context.Context) {
 	defer com.stop()
 
 	// Subscribe to event bus and forward incoming events to the queue changed channel
-	eventBus := com.provider.EventHandler()
-	eventBus.RegisterHandlerChannel(event.QUEUE_UPDATE_EVENT, com.externalChangeChan)
-	eventBus.RegisterHandlerChannel(event.ITEM_UPDATE_EVENT, com.externalChangeChan)
-	eventBus.RegisterHandlerChannel(event.PROFILE_UPDATE_EVENT, com.externalChangeChan)
+	eventBus := com.thea.EventHandler()
+	eventBus.RegisterHandlerChannel(activity.QUEUE_UPDATE_EVENT, com.externalChangeChan)
+	eventBus.RegisterHandlerChannel(activity.ITEM_UPDATE_EVENT, com.externalChangeChan)
+	eventBus.RegisterHandlerChannel(activity.PROFILE_UPDATE_EVENT, com.externalChangeChan)
 
 	// Debounce the queue change channel so that we don't do repeat-work for no reason.
 	debouncedQueueChangeChannel := debounceEventChannel(time.Second*2, time.Second*5, com.externalChangeChan)
@@ -367,7 +341,7 @@ func (com *commander) getInstance(instanceID uuid.UUID) FfmpegInstance {
 // If the input channel is receiving a steady-stream of messages (with an interval < min), then the max time window can
 // be used to force a message to be emitted on the output channel atleast once per 'max' time duration.
 // Source: https://gist.github.com/gigablah/80d7160f3577edc153c9
-func debounceEventChannel(min time.Duration, max time.Duration, source event.HandlerChannel) <-chan bool {
+func debounceEventChannel(min time.Duration, max time.Duration, source activity.HandlerChannel) <-chan bool {
 	output := make(chan bool)
 
 	go func() {

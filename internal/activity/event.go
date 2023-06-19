@@ -1,6 +1,6 @@
 // A collection of event names and common methods used to handle the events, typically
 // redirecting the handling to a service method or other method via the `Handler` interface.
-package event
+package activity
 
 import (
 	"fmt"

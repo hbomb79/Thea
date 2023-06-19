@@ -5,16 +5,15 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/hbomb79/Thea/internal"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/queue"
 )
 
 type HttpGateway struct {
-	thea internal.Thea
+	thea Thea
 }
 
-func NewHttpGateway(thea internal.Thea) *HttpGateway {
+func NewHttpGateway(thea Thea) *HttpGateway {
 	return &HttpGateway{thea: thea}
 }
 

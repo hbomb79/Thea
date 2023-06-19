@@ -12,17 +12,6 @@ import (
 
 var profileLogger = logger.Get("ProfileList")
 
-type ProfileFindCallback func(Profile) bool
-type ProfileManager interface {
-	Profiles() []Profile
-	InsertProfile(Profile) error
-	RemoveProfile(string) error
-	FindProfile(ProfileFindCallback) (int, Profile)
-	FindProfileByTag(string) (int, Profile)
-	MoveProfile(string, int) error
-	Save()
-}
-
 type safeList struct {
 	sync.Mutex
 	profiles []Profile
@@ -31,7 +20,7 @@ type safeList struct {
 
 // NewProfileList returns a new instance of profileList by address, with
 // the slide of Profile instances created ready for use.
-func NewProfileList(persistentPath string) ProfileManager {
+func NewProfileList(persistentPath string) *safeList {
 	list := &safeList{
 		profiles: make([]Profile, 0),
 		cache:    cache.New(persistentPath),
@@ -121,7 +110,7 @@ func (list *safeList) MoveProfile(tag string, desiredIndex int) error {
 // to the caller.
 // This method will take control of the mutex lock before searching for a profile
 // to avoid searching while data is being manipulated elsewherre
-func (list *safeList) FindProfile(cb ProfileFindCallback) (int, Profile) {
+func (list *safeList) FindProfile(cb func(Profile) bool) (int, Profile) {
 	list.Lock()
 	defer list.Unlock()
 

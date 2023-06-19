@@ -1,4 +1,4 @@
-package ffmpeg
+package transcode
 
 import (
 	"encoding/json"
@@ -27,7 +27,7 @@ const (
 type FfmpegInstance interface {
 	// Start begins the execution of this instance. FFmpeg progress updates will cause
 	// this instance to send it's ID on the channel provided.
-	Start(FormatterConfig, ProgressChannel)
+	Start(TranscodeConfig, ProgressChannel)
 
 	// Cancel stops the execution of the running FFmpeg task, cleaning up any partially
 	// transcoded footage before exiting.
@@ -69,7 +69,7 @@ type FfmpegInstance interface {
 }
 
 type ffmpegInstance struct {
-	provider          Provider
+	provider          Thea
 	trouble           queue.Trouble
 	status            InstanceStatus
 	message           string
@@ -82,7 +82,7 @@ type ffmpegInstance struct {
 	commandOutputPath string
 }
 
-func (instance *ffmpegInstance) Start(config FormatterConfig, progressReportCallback ProgressChannel) {
+func (instance *ffmpegInstance) Start(config TranscodeConfig, progressReportCallback ProgressChannel) {
 	defer close(progressReportCallback)
 
 	if instance.status != WAITING {
@@ -109,7 +109,7 @@ func (instance *ffmpegInstance) Start(config FormatterConfig, progressReportCall
 	}
 }
 
-func (instance *ffmpegInstance) startAndMonitorFfmpeg(config FormatterConfig, progressChan ProgressChannel) {
+func (instance *ffmpegInstance) startAndMonitorFfmpeg(config TranscodeConfig, progressChan ProgressChannel) {
 	if instance.status != WAITING {
 		return
 	}

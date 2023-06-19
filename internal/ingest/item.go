@@ -25,7 +25,7 @@ type IngestItem struct {
 }
 
 func (item *IngestItem) ingest() error {
-	return errors.New("Not yet implemented")
+	return errors.New("not yet implemented")
 }
 
 func (item *IngestItem) modtimeDiff() (*time.Duration, error) {

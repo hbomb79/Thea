@@ -1,4 +1,4 @@
-package ffmpeg
+package transcode
 
 import (
 	"context"
@@ -22,7 +22,7 @@ type FfmpegCmd interface {
 	// Run will attempt to construct and start an FFmpeg command
 	// on the host machine. Each FFmpeg update detected from the
 	// underlying command will be delivered to the callback.
-	Run(ProgressChannel, FormatterConfig) error
+	Run(ProgressChannel, TranscodeConfig) error
 
 	Suspend()
 	Continue()
@@ -40,7 +40,7 @@ type cmd struct {
 
 type ProgressChannel chan transcoder.Progress
 
-func (cmd *cmd) Run(progressReportChannel ProgressChannel, config FormatterConfig) error {
+func (cmd *cmd) Run(progressReportChannel ProgressChannel, config TranscodeConfig) error {
 	ffmpegCfg := &ffmpeg.Config{
 		ProgressEnabled: true,
 		FfmpegBinPath:   config.FfmpegBinaryPath,
@@ -121,7 +121,7 @@ func (cmd *cmd) GetOutputPath() string {
 	return cmd.outputPath
 }
 
-func (cmd *cmd) calculateOutputPath(config FormatterConfig) string {
+func (cmd *cmd) calculateOutputPath(config TranscodeConfig) string {
 	outputFormat := config.TargetFormat
 	var itemOutputPath string
 

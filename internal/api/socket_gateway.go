@@ -5,17 +5,16 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/hbomb79/Thea/internal"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/profile"
 	"github.com/hbomb79/Thea/pkg/socket"
 )
 
 type WsGateway struct {
-	thea internal.Thea
+	thea Thea
 }
 
-func NewWsGateway(thea internal.Thea) *WsGateway {
+func NewWsGateway(thea Thea) *WsGateway {
 	return &WsGateway{thea: thea}
 }
 

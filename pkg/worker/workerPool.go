@@ -47,7 +47,7 @@ func (pool *WorkerPool) PushWorker(workers ...Worker) {
 // and will send on their WakeupChannel to wake up sleeping workers
 func (pool *WorkerPool) WakeupWorkers() {
 	for _, w := range pool.workers {
-		if w.Status() == Sleeping {
+		if w.Status() == SLEEPING {
 			select {
 			case w.WakeupChan() <- 1:
 			default:

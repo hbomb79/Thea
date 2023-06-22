@@ -11,7 +11,7 @@ import (
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
-var log = logger.Get("Thea")
+var log = logger.Get("Core")
 
 // // ProfileManager is an interface which allows Thea to store
 // // and manipulate Transcode targets and workflows.
@@ -42,7 +42,7 @@ type IngestService interface {
 }
 
 type AsyncService interface {
-	Start(context.Context)
+	Run(context.Context)
 }
 
 // Thea represents the top-level object for the server, and is responsible
@@ -63,7 +63,7 @@ type theaImpl struct {
 
 const THEA_USER_DIR_SUFFIX = "/thea/"
 
-func NewThea(config TheaConfig) *theaImpl {
+func New(config TheaConfig) *theaImpl {
 	eventBus := activity.NewEventHandler()
 	thea := &theaImpl{
 		eventBus:         eventBus,
@@ -120,7 +120,7 @@ func (thea *theaImpl) spawnAsyncService(context context.Context, service AsyncSe
 
 	go func() {
 		defer thea.serviceWaitGroup.Done()
-		service.Start(context)
+		service.Run(context)
 	}()
 }
 

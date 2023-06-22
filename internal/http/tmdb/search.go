@@ -12,8 +12,10 @@ import (
 const tmdbBaseUrl = "https://api.themoviedb.org/3"
 const tmdbSearchMovieTemplate = "%s/search/movie?query=%s&apiKey=%s"
 const tmdbSearchSeriesTemplate = "%s/search/series?query=%s&apiKey=%s"
-const tmdbGetSeasonTemplate = "%s/tv/%s/season/%d"
-const tmdbGetEpisodeTemplate = "%s/tv/%s/season/%d/episode/%d"
+const tmdbGetMovieTemplate = "%s/movie/%s?apiKey=%s"
+const tmdbGetSeriesTemplate = "%s/tv/%s?apiKey=%s"
+const tmdbGetSeasonTemplate = "%s/tv/%s/season/%d?apiKey=%s"
+const tmdbGetEpisodeTemplate = "%s/tv/%s/season/%d/episode/%d?apiKey=%s"
 
 type Config struct {
 	apiKey string
@@ -42,11 +44,21 @@ func (entry *TmdbSearchResultEntry) toMediaStub() *media.SearchStub {
 	}
 }
 
+type TmdbMovie struct{}
+
+func (movie *TmdbMovie) toMediaMovie() *media.Movie { return nil }
+
 type TmdbEpisode struct{}
 
-func (ep *TmdbEpisode) toMediaEpisode() *media.Episode {
-	return &media.Episode{}
-}
+func (ep *TmdbEpisode) toMediaEpisode() *media.Episode { return nil }
+
+type TmdbSeason struct{}
+
+func (season *TmdbSeason) toMediaSeason() *media.Season { return nil }
+
+type TmdbSeries struct{}
+
+func (series *TmdbSeries) toMediaSeries() *media.Series { return nil }
 
 // tmdbSearcher is the primary search method for the Ingest and
 // Download service to find content on the TMDB API.
@@ -81,9 +93,7 @@ func (searcher *tmdbSearcher) SearchForEpisode(metadata *media.FileMediaMetadata
 	path := fmt.Sprintf(tmdbSearchSeriesTemplate, tmdbBaseUrl, metadata.Title, searcher.config.apiKey)
 	resp, err := http.Get(path)
 	if err != nil {
-		return nil, &UnknownRequestError{err.Error()}
-	} else if resp == nil {
-		return nil, &UnknownRequestError{"response is nil"}
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
 	}
 
 	defer resp.Body.Close()
@@ -118,28 +128,15 @@ func (searcher *tmdbSearcher) SearchForEpisode(metadata *media.FileMediaMetadata
 // A search returns zero results
 // A search returns multiple results and the searcher cannot decide which is correct
 func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) (*media.Movie, error) {
-	return &media.Movie{}, nil
-}
+	if metadata.Episodic {
+		return nil, &IllegalRequestError{"metadata provided claims media is episodic, but request is searching for a movie"}
+	}
 
-func (searcher *tmdbSearcher) GetMovie(movieId string) (*media.Movie, error) {
-	return &media.Movie{}, nil
-}
-
-// GetSeries will query TMDB API for the series with the provided string ID. This ID
-// must be a valid TMDB ID, or else an error will be returned.
-func (searcher *tmdbSearcher) GetSeries(seriesId string) (*media.Series, error) {
-	return &media.Series{}, nil
-}
-
-// GetEpisode queries TMDB using the seriesID combined with the season and episode number. It is expected
-// that the seriesID provided is a valid TMDB ID, else the request will fail.
-func (searcher *tmdbSearcher) GetEpisode(seriesId string, seasonNumber int, episodeNumber int) (*media.Episode, error) {
-	// Search for the series
-	resp, err := http.Get(fmt.Sprintf(tmdbGetEpisodeTemplate, tmdbBaseUrl, seriesId, seasonNumber, episodeNumber))
+	// Search for the movie stub
+	path := fmt.Sprintf(tmdbSearchMovieTemplate, tmdbBaseUrl, metadata.Title, searcher.config.apiKey)
+	resp, err := http.Get(path)
 	if err != nil {
-		return nil, &UnknownRequestError{err.Error()}
-	} else if resp == nil {
-		return nil, &UnknownRequestError{"response is nil"}
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
 	}
 
 	defer resp.Body.Close()
@@ -148,33 +145,135 @@ func (searcher *tmdbSearcher) GetEpisode(seriesId string, seasonNumber int, epis
 		return nil, &UnknownRequestError{err.Error()}
 	}
 
-	var result TmdbEpisode
+	var result TmdbSearchResult
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, &UnknownRequestError{"response JSON could not be unmarhsaled"}
 	}
 
-	// Get the episode
+	if result.TotalResults == 0 {
+		return nil, &NoResultError{}
+	} else if result.TotalResults > 1 {
+		stubs := make([]*media.SearchStub, len(result.Results))
+		for i, r := range result.Results {
+			stubs[i] = r.toMediaStub()
+		}
+		return nil, &MultipleResultError{&stubs}
+	}
+
+	// Get the movie detaila
+	movie := result.Results[0]
+	return searcher.GetMovie(movie.Id)
+
+}
+
+func (searcher *tmdbSearcher) GetMovie(movieId string) (*media.Movie, error) {
+	// Get movie
+	resp, err := http.Get(fmt.Sprintf(tmdbGetMovieTemplate, tmdbBaseUrl, movieId, searcher.config.apiKey))
+	if err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
+	}
+
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
+	}
+
+	var result TmdbMovie
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
+	}
+
+	return result.toMediaMovie(), nil
+}
+
+// GetSeries will query TMDB API for the series with the provided string ID. This ID
+// must be a valid TMDB ID, or else an error will be returned.
+func (searcher *tmdbSearcher) GetSeries(seriesId string) (*media.Series, error) {
+	// Get series
+	resp, err := http.Get(fmt.Sprintf(tmdbGetSeriesTemplate, tmdbBaseUrl, seriesId, searcher.config.apiKey))
+	if err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
+	}
+
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
+	}
+
+	var result TmdbSeries
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
+	}
+
+	return result.toMediaSeries(), nil
+
+}
+
+// GetEpisode queries TMDB using the seriesID combined with the season and episode number. It is expected
+// that the seriesID provided is a valid TMDB ID, else the request will fail.
+func (searcher *tmdbSearcher) GetEpisode(seriesId string, seasonNumber int, episodeNumber int) (*media.Episode, error) {
+	// Get episode
+	resp, err := http.Get(fmt.Sprintf(tmdbGetEpisodeTemplate, tmdbBaseUrl, seriesId, seasonNumber, episodeNumber, searcher.config.apiKey))
+	if err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
+	}
+
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
+	}
+
+	var result TmdbEpisode
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
+	}
+
 	return result.toMediaEpisode(), nil
 }
 
 // GetSeason will query TMDB API for the season with the provided string ID. This ID
 // must be a valid TMDB ID, or else an error will be returned.
-func (searcher *tmdbSearcher) GetSeason(string, int) (*media.Season, error) {
-	return &media.Season{}, nil
+func (searcher *tmdbSearcher) GetSeason(seriesId string, seasonNumber int) (*media.Season, error) {
+	resp, err := http.Get(fmt.Sprintf(tmdbGetSeasonTemplate, tmdbBaseUrl, seriesId, seasonNumber, searcher.config.apiKey))
+	if err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
+	}
+
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
+	}
+
+	var season TmdbSeason
+	if err := json.Unmarshal(respBody, &season); err != nil {
+		return nil, &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
+	}
+
+	return season.toMediaSeason(), nil
 }
 
+// NoResultError is used when a TMDB search has returned no results.
 type NoResultError struct{}
 
 func (err *NoResultError) Error() string {
 	return "no results returned from TMDB"
 }
 
+// MutlipleResultError is returned when a search command has returned multiple
+// results. The results are contained within the error so the user
+// can use the IDs embedded in the search stubs to retrieve their desired result.
 type MultipleResultError struct{ results *[]*media.SearchStub }
 
 func (err *MultipleResultError) Error() string {
 	return "too many results returned from TMDB"
 }
 
+// UnknownRequestError is to represent an unexpected error that has occurred
+// when communicating with TMDB
 type UnknownRequestError struct{ reason string }
 
 func (err *UnknownRequestError) Error() string {

@@ -1,4 +1,4 @@
-package cache
+package file
 
 import (
 	"encoding/json"

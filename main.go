@@ -37,7 +37,7 @@ func NewTpa(config internal.TheaConfig) *services {
 		socketHub:  socket.NewSocketHub(),
 	}
 
-	thea := internal.NewThea(config)
+	thea := internal.New(config)
 	services.thea = thea
 	services.wsGateway = api.NewWsGateway(thea)
 	services.httpGateway = api.NewHttpGateway(thea)

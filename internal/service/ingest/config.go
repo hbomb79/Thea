@@ -2,9 +2,9 @@ package ingest
 
 import "time"
 
-// IngestConfig contains configuration options that allow
+// Config contains configuration options that allow
 // customization of how Thea detects files to auto-ingest.
-type IngestConfig struct {
+type Config struct {
 	// The IngestService uses a directory watcher, but a
 	// 'force' sync can be performed on a regular interval
 	// to protect against the watcher failing.
@@ -32,6 +32,6 @@ type IngestConfig struct {
 	IngestionParallelism int
 }
 
-func (config *IngestConfig) RequiredModTimeAgeDuration() time.Duration {
+func (config *Config) RequiredModTimeAgeDuration() time.Duration {
 	return time.Duration(config.RequiredModTimeAgeSeconds) * time.Second
 }

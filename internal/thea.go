@@ -5,33 +5,25 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/hbomb79/Thea/internal/activity"
 	"github.com/hbomb79/Thea/internal/database"
-	"github.com/hbomb79/Thea/internal/download"
-	"github.com/hbomb79/Thea/internal/ingest"
-	"github.com/hbomb79/Thea/internal/profile"
-	"github.com/hbomb79/Thea/internal/transcode"
+	"github.com/hbomb79/Thea/internal/service/activity"
+	"github.com/hbomb79/Thea/internal/service/ingest"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 var log = logger.Get("Thea")
 
-// ProfileManager is an interface which allows Thea to store
-// and manipulate Transcode targets and workflows.
-type ProfileManager interface {
-	Profiles() []profile.Profile
-	InsertProfile(profile.Profile) error
-	RemoveProfile(string) error
-	FindProfile(func(profile.Profile) bool) (int, profile.Profile)
-	FindProfileByTag(string) (int, profile.Profile)
-	MoveProfile(string, int) error
-	Save()
-}
-
-// MediaManager is an interface which is used by Thea to store, read
-// and modify media that has been ingested.
-type MediaManager interface {
-}
+// // ProfileManager is an interface which allows Thea to store
+// // and manipulate Transcode targets and workflows.
+// type ProfileManager interface {
+// 	Profiles() []profile.Profile
+// 	InsertProfile(profile.Profile) error
+// 	RemoveProfile(string) error
+// 	FindProfile(func(profile.Profile) bool) (int, profile.Profile)
+// 	FindProfileByTag(string) (int, profile.Profile)
+// 	MoveProfile(string, int) error
+// 	Save()
+// }
 
 type ActivityService interface {
 	AsyncService
@@ -61,8 +53,7 @@ type theaImpl struct {
 	serviceWaitGroup *sync.WaitGroup
 	config           TheaConfig
 
-	profileManager ProfileManager
-	mediaManager   MediaManager
+	// profileManager ProfileManager
 
 	activityService  ActivityService
 	downloadService  DownloadService
@@ -80,15 +71,15 @@ func NewThea(config TheaConfig) *theaImpl {
 		config:           config,
 	}
 
-	if serv, err := ingest.New(ingest.IngestConfig{}); err == nil {
+	if serv, err := ingest.New(ingest.Config{}); err == nil {
 		thea.ingestService = serv
 	} else {
 		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))
 	}
 
-	thea.activityService = activity.New()
-	thea.downloadService = download.New()
-	thea.transcodeService = transcode.NewFfmpegCommander(thea, config.Format)
+	// thea.activityService = activity.New()
+	// thea.downloadService = download.New()
+	// thea.transcodeService = transcode.NewFfmpegCommander(thea, config.Format)
 
 	return thea
 }
@@ -113,12 +104,12 @@ func (thea *theaImpl) Start(ctx context.Context) error {
 }
 
 func (thea *theaImpl) EventHandler() activity.EventHandler { return thea.eventBus }
-func (thea *theaImpl) Profiles() ProfileManager            { return thea.profileManager }
-func (thea *theaImpl) Media() MediaManager                 { return thea.mediaManager }
-func (thea *theaImpl) ActivityService() ActivityService    { return thea.activityService }
-func (thea *theaImpl) DownloadService() DownloadService    { return thea.downloadService }
-func (thea *theaImpl) IngestService() IngestService        { return thea.ingestService }
-func (thea *theaImpl) TranscodeService() TranscodeService  { return thea.transcodeService }
+
+// func (thea *theaImpl) Profiles() ProfileManager            { return thea.profileManager }
+func (thea *theaImpl) ActivityService() ActivityService   { return thea.activityService }
+func (thea *theaImpl) DownloadService() DownloadService   { return thea.downloadService }
+func (thea *theaImpl) IngestService() IngestService       { return thea.ingestService }
+func (thea *theaImpl) TranscodeService() TranscodeService { return thea.transcodeService }
 
 // ** PRIVATE IMPL ** //
 

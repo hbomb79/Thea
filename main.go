@@ -17,7 +17,7 @@ import (
 
 var mainLogger = logger.Get("Main")
 
-const VERSION = 0.7
+const VERSION = 0.8
 
 type Thea interface {
 	Start(ctx context.Context) error

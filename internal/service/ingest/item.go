@@ -21,7 +21,7 @@ type IngestItem struct {
 	id      uuid.UUID
 	path    string
 	state   IngestItemState
-	trouble *IngestTrouble
+	trouble *IngestItemTrouble
 }
 
 func (item *IngestItem) ingest() error {

@@ -7,14 +7,12 @@ var workerLogger = logger.Get("Worker")
 type WorkerWakeupChan chan int
 type WorkerStatus int
 
-type WorkerTaskMeta interface {
-	// ExecuteTask is the function containing the task that this
-	// worker should execute. It is called repeatedly until 'false'
-	// is returned (indicating the worker should Sleep as there is
-	// no more work to do), OR an error is returned (indicating
-	// the worker should close)
-	ExecuteTask(Worker) (bool, error)
-}
+// WorkerTask is the function containing the task that this
+// worker should execute. It is called repeatedly until 'false'
+// is returned (indicating the worker should Sleep as there is
+// no more work to do), OR an error is returned (indicating
+// the worker should close)
+type WorkerTask func(Worker) (bool, error)
 
 const (
 	SLEEPING WorkerStatus = iota
@@ -34,12 +32,12 @@ type Worker interface {
 
 type taskWorker struct {
 	label         string
-	task          WorkerTaskMeta
+	task          WorkerTask
 	wakeupChan    WorkerWakeupChan
 	currentStatus WorkerStatus
 }
 
-func NewWorker(label string, task WorkerTaskMeta) *taskWorker {
+func NewWorker(label string, task WorkerTask) *taskWorker {
 	return &taskWorker{
 		label,
 		task,
@@ -59,7 +57,7 @@ func (worker *taskWorker) Start() {
 			break
 		}
 
-		shouldSleep, err := worker.task.ExecuteTask(worker)
+		shouldSleep, err := worker.task(worker)
 		if err != nil {
 			workerLogger.Emit(logger.ERROR, "Worker labelled %v has reported an error(%T): %v\n", worker.label, err, err.Error())
 			break

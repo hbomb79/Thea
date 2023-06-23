@@ -117,7 +117,7 @@ func New(config Config) (*IngestService, error) {
 
 	for i := 0; i < config.IngestionParallelism; i++ {
 		label := fmt.Sprintf("ingest-worker-%d", i)
-		worker := worker.NewWorker(label, service)
+		worker := worker.NewWorker(label, service.PerformItemIngest)
 
 		service.workerPool.PushWorker(worker)
 	}
@@ -152,12 +152,12 @@ func (service *IngestService) Run(ctx context.Context) {
 	}
 }
 
-// ExecuteTask is the worker function for the IngestService, which is called
+// PerformItemIngest is the worker function for the IngestService, which is called
 // by the services WorkerPool.
 // This function will claim the first IDLE item it finds and attempt to ingest it.
 // If the ingestion fails with an IngestTrouble, then it will be set on
 // the item and it's state set to TROUBLED.
-func (service *IngestService) ExecuteTask(w worker.Worker) (bool, error) {
+func (service *IngestService) PerformItemIngest(w worker.Worker) (bool, error) {
 	item := service.claimIdleItem()
 	if item == nil {
 		return false, nil

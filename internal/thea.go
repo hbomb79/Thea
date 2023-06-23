@@ -111,8 +111,6 @@ func (thea *theaImpl) DownloadService() DownloadService   { return thea.download
 func (thea *theaImpl) IngestService() IngestService       { return thea.ingestService }
 func (thea *theaImpl) TranscodeService() TranscodeService { return thea.transcodeService }
 
-// ** PRIVATE IMPL ** //
-
 // spawnAsyncService will run the provided function/service as it's own
 // go-routine, ensuring that the Thea service waitgroup is updated correctly
 func (thea *theaImpl) spawnAsyncService(context context.Context, service AsyncService) {

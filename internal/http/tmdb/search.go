@@ -9,13 +9,15 @@ import (
 	"github.com/hbomb79/Thea/internal/media"
 )
 
-const tmdbBaseUrl = "https://api.themoviedb.org/3"
-const tmdbSearchMovieTemplate = "%s/search/movie?query=%s&apiKey=%s"
-const tmdbSearchSeriesTemplate = "%s/search/series?query=%s&apiKey=%s"
-const tmdbGetMovieTemplate = "%s/movie/%s?apiKey=%s"
-const tmdbGetSeriesTemplate = "%s/tv/%s?apiKey=%s"
-const tmdbGetSeasonTemplate = "%s/tv/%s/season/%d?apiKey=%s"
-const tmdbGetEpisodeTemplate = "%s/tv/%s/season/%d/episode/%d?apiKey=%s"
+const (
+	tmdbBaseUrl              = "https://api.themoviedb.org/3"
+	tmdbSearchMovieTemplate  = "%s/search/movie?query=%s&apiKey=%s"
+	tmdbSearchSeriesTemplate = "%s/search/series?query=%s&apiKey=%s"
+	tmdbGetMovieTemplate     = "%s/movie/%s?apiKey=%s"
+	tmdbGetSeriesTemplate    = "%s/tv/%s?apiKey=%s"
+	tmdbGetSeasonTemplate    = "%s/tv/%s/season/%d?apiKey=%s"
+	tmdbGetEpisodeTemplate   = "%s/tv/%s/season/%d/episode/%d?apiKey=%s"
+)
 
 type Config struct {
 	apiKey string

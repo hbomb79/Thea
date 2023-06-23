@@ -18,7 +18,7 @@ import (
 )
 
 type Scraper interface {
-	ScrapeFileForMediaInfo(path string) *media.FileMediaMetadata
+	ScrapeFileForMediaInfo(path string) (*media.FileMediaMetadata, error)
 }
 
 type MediaSearcher interface {

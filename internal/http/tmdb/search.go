@@ -10,13 +10,16 @@ import (
 )
 
 const (
-	tmdbBaseUrl              = "https://api.themoviedb.org/3"
+	tmdbBaseUrl = "https://api.themoviedb.org/3"
+
 	tmdbSearchMovieTemplate  = "%s/search/movie?query=%s&apiKey=%s"
 	tmdbSearchSeriesTemplate = "%s/search/series?query=%s&apiKey=%s"
-	tmdbGetMovieTemplate     = "%s/movie/%s?apiKey=%s"
-	tmdbGetSeriesTemplate    = "%s/tv/%s?apiKey=%s"
-	tmdbGetSeasonTemplate    = "%s/tv/%s/season/%d?apiKey=%s"
-	tmdbGetEpisodeTemplate   = "%s/tv/%s/season/%d/episode/%d?apiKey=%s"
+
+	tmdbGetMovieTemplate = "%s/movie/%s?apiKey=%s"
+
+	tmdbGetSeriesTemplate  = "%s/tv/%s?apiKey=%s"
+	tmdbGetSeasonTemplate  = "%s/tv/%s/season/%d?apiKey=%s"
+	tmdbGetEpisodeTemplate = "%s/tv/%s/season/%d/episode/%d?apiKey=%s"
 )
 
 type Config struct {
@@ -93,34 +96,23 @@ func (searcher *tmdbSearcher) SearchForEpisode(metadata *media.FileMediaMetadata
 
 	// Search for the series
 	path := fmt.Sprintf(tmdbSearchSeriesTemplate, tmdbBaseUrl, metadata.Title, searcher.config.apiKey)
-	resp, err := http.Get(path)
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
+	var searchResult TmdbSearchResult
+	if err := httpGetJsonResponse(path, &searchResult); err != nil {
+		return nil, err
 	}
 
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &UnknownRequestError{err.Error()}
-	}
-
-	var result TmdbSearchResult
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, &UnknownRequestError{"response JSON could not be unmarhsaled"}
-	}
-
-	if result.TotalResults == 0 {
+	if searchResult.TotalResults == 0 {
 		return nil, &NoResultError{}
-	} else if result.TotalResults > 1 {
-		stubs := make([]*media.SearchStub, len(result.Results))
-		for i, r := range result.Results {
+	} else if searchResult.TotalResults > 1 {
+		stubs := make([]*media.SearchStub, len(searchResult.Results))
+		for i, r := range searchResult.Results {
 			stubs[i] = r.toMediaStub()
 		}
 		return nil, &MultipleResultError{&stubs}
 	}
 
 	// Get the episode
-	series := result.Results[0]
+	series := searchResult.Results[0]
 	return searcher.GetEpisode(series.Id, metadata.SeasonNumber, metadata.EpisodeNumber)
 }
 
@@ -136,123 +128,68 @@ func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) 
 
 	// Search for the movie stub
 	path := fmt.Sprintf(tmdbSearchMovieTemplate, tmdbBaseUrl, metadata.Title, searcher.config.apiKey)
-	resp, err := http.Get(path)
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
+	var searchResult TmdbSearchResult
+	if err := httpGetJsonResponse(path, &searchResult); err != nil {
+		return nil, err
 	}
 
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &UnknownRequestError{err.Error()}
-	}
-
-	var result TmdbSearchResult
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, &UnknownRequestError{"response JSON could not be unmarhsaled"}
-	}
-
-	if result.TotalResults == 0 {
+	if searchResult.TotalResults == 0 {
 		return nil, &NoResultError{}
-	} else if result.TotalResults > 1 {
-		stubs := make([]*media.SearchStub, len(result.Results))
-		for i, r := range result.Results {
+	} else if searchResult.TotalResults > 1 {
+		stubs := make([]*media.SearchStub, len(searchResult.Results))
+		for i, r := range searchResult.Results {
 			stubs[i] = r.toMediaStub()
 		}
 		return nil, &MultipleResultError{&stubs}
 	}
 
 	// Get the movie detaila
-	movie := result.Results[0]
+	movie := searchResult.Results[0]
 	return searcher.GetMovie(movie.Id)
 
 }
 
 func (searcher *tmdbSearcher) GetMovie(movieId string) (*media.Movie, error) {
-	// Get movie
-	resp, err := http.Get(fmt.Sprintf(tmdbGetMovieTemplate, tmdbBaseUrl, movieId, searcher.config.apiKey))
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
+	path := fmt.Sprintf(tmdbGetMovieTemplate, tmdbBaseUrl, movieId, searcher.config.apiKey)
+	var movie TmdbMovie
+	if err := httpGetJsonResponse(path, &movie); err != nil {
+		return nil, err
 	}
 
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
-	}
-
-	var result TmdbMovie
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
-	}
-
-	return result.toMediaMovie(), nil
+	return movie.toMediaMovie(), nil
 }
 
 // GetSeries will query TMDB API for the series with the provided string ID. This ID
 // must be a valid TMDB ID, or else an error will be returned.
 func (searcher *tmdbSearcher) GetSeries(seriesId string) (*media.Series, error) {
-	// Get series
-	resp, err := http.Get(fmt.Sprintf(tmdbGetSeriesTemplate, tmdbBaseUrl, seriesId, searcher.config.apiKey))
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
+	path := fmt.Sprintf(tmdbGetSeriesTemplate, tmdbBaseUrl, seriesId, searcher.config.apiKey)
+	var series TmdbSeries
+	if err := httpGetJsonResponse(path, &series); err != nil {
+		return nil, err
 	}
 
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
-	}
-
-	var result TmdbSeries
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
-	}
-
-	return result.toMediaSeries(), nil
-
+	return series.toMediaSeries(), nil
 }
 
 // GetEpisode queries TMDB using the seriesID combined with the season and episode number. It is expected
 // that the seriesID provided is a valid TMDB ID, else the request will fail.
 func (searcher *tmdbSearcher) GetEpisode(seriesId string, seasonNumber int, episodeNumber int) (*media.Episode, error) {
-	// Get episode
-	resp, err := http.Get(fmt.Sprintf(tmdbGetEpisodeTemplate, tmdbBaseUrl, seriesId, seasonNumber, episodeNumber, searcher.config.apiKey))
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
+	path := fmt.Sprintf(tmdbGetEpisodeTemplate, tmdbBaseUrl, seriesId, seasonNumber, episodeNumber, searcher.config.apiKey)
+	var episode TmdbEpisode
+	if err := httpGetJsonResponse(path, &episode); err != nil {
+		return nil, err
 	}
 
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
-	}
-
-	var result TmdbEpisode
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
-	}
-
-	return result.toMediaEpisode(), nil
+	return episode.toMediaEpisode(), nil
 }
 
 // GetSeason will query TMDB API for the season with the provided string ID. This ID
 // must be a valid TMDB ID, or else an error will be returned.
 func (searcher *tmdbSearcher) GetSeason(seriesId string, seasonNumber int) (*media.Season, error) {
-	resp, err := http.Get(fmt.Sprintf(tmdbGetSeasonTemplate, tmdbBaseUrl, seriesId, seasonNumber, searcher.config.apiKey))
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to perform GET to TMDB: %s", err.Error())}
-	}
-
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
-	}
-
+	path := fmt.Sprintf(tmdbGetSeasonTemplate, tmdbBaseUrl, seriesId, seasonNumber, searcher.config.apiKey)
 	var season TmdbSeason
-	if err := json.Unmarshal(respBody, &season); err != nil {
-		return nil, &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
+	if err := httpGetJsonResponse(path, &season); err != nil {
+		return nil, err
 	}
 
 	return season.toMediaSeason(), nil
@@ -289,4 +226,23 @@ type IllegalRequestError struct{ reason string }
 
 func (err *IllegalRequestError) Error() string {
 	return fmt.Sprintf("illegal search request because %s", err.reason)
+}
+
+func httpGetJsonResponse(urlPath string, targetInterface interface{}) error {
+	resp, err := http.Get(urlPath)
+	if err != nil {
+		return &UnknownRequestError{fmt.Sprintf("failed to perform GET(%s) to TMDB: %s", urlPath, err.Error())}
+	}
+
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
+	}
+
+	if err := json.Unmarshal(respBody, targetInterface); err != nil {
+		return &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
+	}
+
+	return nil
 }

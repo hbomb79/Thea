@@ -6,14 +6,14 @@ import (
 )
 
 type TranscodeWorkflow struct {
-	targets    []*ffmpeg.FfmpegTarget
+	targets    []*ffmpeg.Target
 	conditions []any
 }
 
-func (workflow *TranscodeWorkflow) IsMediaEligible(*media.MediaContainer) bool {
+func (workflow *TranscodeWorkflow) IsMediaEligible(*media.Container) bool {
 	return false
 }
 
-func (workflow *TranscodeWorkflow) Targets() *[]*ffmpeg.FfmpegTarget {
+func (workflow *TranscodeWorkflow) Targets() *[]*ffmpeg.Target {
 	return &workflow.targets
 }

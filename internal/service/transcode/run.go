@@ -13,7 +13,7 @@ import (
 var log = logger.Get("TranscodeServ")
 
 type MediaStore interface {
-	GetMedia(uuid.UUID) *media.MediaContainer
+	GetMedia(uuid.UUID) *media.Container
 }
 
 type FfmpegStore interface {
@@ -72,7 +72,7 @@ func (service *TranscodeService) startNewTasks(ctx context.Context) {
 
 		service.consumedThreads += task.Target().RequiredThreads()
 		go func(taskToStart *TranscodeTask) {
-			updateHandler := func(progress *ffmpeg.FfmpegProgress) {
+			updateHandler := func(progress *ffmpeg.Progress) {
 				service.taskChange <- taskToStart.id
 			}
 
@@ -137,7 +137,7 @@ func (service *TranscodeService) NewTask(mediaId uuid.UUID, targetId uuid.UUID) 
 	return nil
 }
 
-func (service *TranscodeService) spawnFfmpegTarget(m *media.MediaContainer, target *ffmpeg.FfmpegTarget) error {
+func (service *TranscodeService) spawnFfmpegTarget(m *media.Container, target *ffmpeg.Target) error {
 	service.queueChange <- true
 	return nil
 }

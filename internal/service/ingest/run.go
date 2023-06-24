@@ -111,7 +111,7 @@ func New(config Config) (*IngestService, error) {
 		Mutex:            &sync.Mutex{},
 		Scraper:          &media.MetadataScraper{},
 		Searcher:         tmdb.NewSearcher(tmdb.Config{}),
-		MediaStore:       &media.MediaStore{},
+		MediaStore:       &media.Store{},
 		config:           config,
 		items:            make([]*IngestItem, 0),
 		importHoldTimers: make(map[uuid.UUID]*time.Timer),

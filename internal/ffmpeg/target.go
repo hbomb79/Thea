@@ -5,10 +5,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type FfmpegTarget struct{ id uuid.UUID }
+type Target struct{ id uuid.UUID }
 
-func (target *FfmpegTarget) Id() *uuid.UUID { return &target.id }
+func (target *Target) Id() *uuid.UUID { return &target.id }
 
-func (target *FfmpegTarget) TranscodeOptions() *ffmpeg.Options { return nil }
+func (target *Target) TranscodeOptions() *ffmpeg.Options { return nil }
 
-func (target *FfmpegTarget) RequiredThreads() int { return 2 }
+func (target *Target) RequiredThreads() int { return 2 }

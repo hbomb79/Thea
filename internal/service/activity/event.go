@@ -15,37 +15,37 @@ var log = logger.Log.GetLogger("Event")
 // of Theas' architecture.
 // Each silo/service of Thea's architecture listens for a specific event, which indicates
 // an item is ready for processing by that service
-type TheaEvent string
+type Event string
 
-type TheaPayload any
+type Payload any
 
 const (
 	// Server is shutting down
-	THEA_SHUTDOWN_EVENT  TheaEvent = "thea:shutdown"
-	PROFILE_UPDATE_EVENT TheaEvent = "thea:profile:update"
+	THEA_SHUTDOWN_EVENT  Event = "thea:shutdown"
+	PROFILE_UPDATE_EVENT Event = "thea:profile:update"
 
 	// A QueueItem has been updated, this includes any changes to it's state, trouble changes, or including trouble updates.
-	ITEM_UPDATE_EVENT        TheaEvent = "item:update"
-	ITEM_FFMPEG_UPDATE_EVENT TheaEvent = "item:ffmpeg:update"
-	QUEUE_UPDATE_EVENT       TheaEvent = "queue:update"
+	ITEM_UPDATE_EVENT        Event = "item:update"
+	ITEM_FFMPEG_UPDATE_EVENT Event = "item:ffmpeg:update"
+	QUEUE_UPDATE_EVENT       Event = "queue:update"
 )
 
-type HandlerMethod func(TheaEvent, TheaPayload)
+type HandlerMethod func(Event, Payload)
 
 type HandlerChannel chan HandlerEvent
 type HandlerEvent struct {
-	Event   TheaEvent
-	Payload TheaPayload
+	Event   Event
+	Payload Payload
 }
 
 type EventDispatcher interface {
-	Dispatch(TheaEvent, TheaPayload)
+	Dispatch(Event, Payload)
 }
 
 type EventHandler interface {
-	RegisterAsyncHandlerFunction(TheaEvent, HandlerMethod)
-	RegisterHandlerFunction(TheaEvent, HandlerMethod)
-	RegisterHandlerChannel(TheaEvent, HandlerChannel)
+	RegisterAsyncHandlerFunction(Event, HandlerMethod)
+	RegisterHandlerFunction(Event, HandlerMethod)
+	RegisterHandlerChannel(Event, HandlerChannel)
 }
 
 type EventCoordinator interface {
@@ -54,8 +54,8 @@ type EventCoordinator interface {
 }
 
 type eventHandler struct {
-	fnHandlers   map[TheaEvent][]handlerMethod
-	chanHandlers map[TheaEvent][]HandlerChannel
+	fnHandlers   map[Event][]handlerMethod
+	chanHandlers map[Event][]HandlerChannel
 }
 
 type handlerMethod struct {
@@ -65,36 +65,36 @@ type handlerMethod struct {
 
 func NewEventHandler() EventCoordinator {
 	return &eventHandler{
-		fnHandlers:   make(map[TheaEvent][]handlerMethod),
-		chanHandlers: make(map[TheaEvent][]HandlerChannel),
+		fnHandlers:   make(map[Event][]handlerMethod),
+		chanHandlers: make(map[Event][]HandlerChannel),
 	}
 }
 
-func (handler *eventHandler) RegisterHandlerChannel(event TheaEvent, handle HandlerChannel) {
+func (handler *eventHandler) RegisterHandlerChannel(event Event, handle HandlerChannel) {
 	handler.chanHandlers[event] = append(handler.chanHandlers[event], handle)
 }
 
 // RegisterHandler takes an event type and a handler method which will be stored
 // and called with the payload for the event whenever it is provided to the 'Handle' method.
-func (handler *eventHandler) RegisterHandlerFunction(event TheaEvent, handle HandlerMethod) {
+func (handler *eventHandler) RegisterHandlerFunction(event Event, handle HandlerMethod) {
 	handler.registerHandlerMethod(event, handlerMethod{handle, false})
 }
 
 // RegisterAsyncHandlerFunction accepts a TheaEvent and a HandlerMethod which will be stored and
 // called inside of a goroutine when the event is handled.
-func (handler *eventHandler) RegisterAsyncHandlerFunction(event TheaEvent, handle HandlerMethod) {
+func (handler *eventHandler) RegisterAsyncHandlerFunction(event Event, handle HandlerMethod) {
 	handler.registerHandlerMethod(event, handlerMethod{handle, true})
 }
 
 // registerHandlerMethod is the internal implementation for both RegisterHandlerFunction and
 // RegisterAsyncHandlerFunction.
-func (handler *eventHandler) registerHandlerMethod(event TheaEvent, handle handlerMethod) {
+func (handler *eventHandler) registerHandlerMethod(event Event, handle handlerMethod) {
 	handler.fnHandlers[event] = append(handler.fnHandlers[event], handle)
 }
 
 // Handle takes an event type and a payload and dispatches the payload to the handler specified
 // for the event type provided.
-func (handler *eventHandler) Dispatch(event TheaEvent, payload TheaPayload) {
+func (handler *eventHandler) Dispatch(event Event, payload Payload) {
 	if err := handler.validatePayload(event, payload); err != nil {
 		log.Emit(logger.FATAL, "Dispatch for event %v FAILED validation: %v", event, err)
 		return
@@ -121,7 +121,7 @@ func (handler *eventHandler) Dispatch(event TheaEvent, payload TheaPayload) {
 // validatePayload ensures that the payload provided is valid for the event specified. An error
 // will be returned if the payload is not valid, and the event should not be sent to the registered
 // handlers in this case.
-func (handler *eventHandler) validatePayload(event TheaEvent, payload TheaPayload) error {
+func (handler *eventHandler) validatePayload(event Event, payload Payload) error {
 	log.Emit(logger.VERBOSE, "Validating payload %#v for event %v\n", payload, event)
 
 	var payloadTypeName string

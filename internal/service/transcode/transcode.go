@@ -12,7 +12,7 @@ import (
 )
 
 type Command interface {
-	Run(context.Context, transcoder.Options, func(*ffmpeg.FfmpegProgress)) error
+	Run(context.Context, transcoder.Options, func(*ffmpeg.Progress)) error
 }
 
 type TranscodeTaskStatus int
@@ -33,16 +33,16 @@ const (
 type TranscodeTask struct {
 	id         uuid.UUID
 	config     *ffmpeg.Config
-	media      *media.MediaContainer
-	target     *ffmpeg.FfmpegTarget
+	media      *media.Container
+	target     *ffmpeg.Target
 	outputPath string
 
 	command      Command
 	status       TranscodeTaskStatus
-	lastProgress *ffmpeg.FfmpegProgress
+	lastProgress *ffmpeg.Progress
 }
 
-func NewTranscodeTask(outputDir string, m *media.MediaContainer, t *ffmpeg.FfmpegTarget) *TranscodeTask {
+func NewTranscodeTask(outputDir string, m *media.Container, t *ffmpeg.Target) *TranscodeTask {
 	out := fmt.Sprintf("%s/%s.%s", outputDir, "", "")
 
 	return &TranscodeTask{
@@ -56,7 +56,7 @@ func NewTranscodeTask(outputDir string, m *media.MediaContainer, t *ffmpeg.Ffmpe
 	}
 }
 
-func (task *TranscodeTask) Run(ctx context.Context, updateHandler func(*ffmpeg.FfmpegProgress)) error {
+func (task *TranscodeTask) Run(ctx context.Context, updateHandler func(*ffmpeg.Progress)) error {
 	if task.command != nil {
 		return errors.New("cannot start transcode task because a command is already set (conflict)")
 	}
@@ -84,9 +84,9 @@ func (task *TranscodeTask) Cancel() bool {
 // LastKnownProgress is an accessor function to the latest ffmpeg progress
 // from the underlying ffmpeg command.
 // If no last progress is available, nil will be returned.
-func (task *TranscodeTask) LastProgress() *ffmpeg.FfmpegProgress { return task.lastProgress }
-func (task *TranscodeTask) Id() uuid.UUID                        { return task.id }
-func (task *TranscodeTask) Media() *media.MediaContainer         { return task.media }
-func (task *TranscodeTask) Target() *ffmpeg.FfmpegTarget         { return task.target }
-func (task *TranscodeTask) Status() TranscodeTaskStatus          { return task.status }
-func (task *TranscodeTask) Trouble() any                         { return nil }
+func (task *TranscodeTask) LastProgress() *ffmpeg.Progress { return task.lastProgress }
+func (task *TranscodeTask) Id() uuid.UUID                  { return task.id }
+func (task *TranscodeTask) Media() *media.Container        { return task.media }
+func (task *TranscodeTask) Target() *ffmpeg.Target         { return task.target }
+func (task *TranscodeTask) Status() TranscodeTaskStatus    { return task.status }
+func (task *TranscodeTask) Trouble() any                   { return nil }

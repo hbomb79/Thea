@@ -23,7 +23,7 @@ type Config struct {
 	FfprobeBinPath string
 }
 
-type FfmpegProgress struct {
+type Progress struct {
 	FramesProcessed string
 	CurrentTime     string
 	CurrentBitrate  string
@@ -31,18 +31,18 @@ type FfmpegProgress struct {
 	Speed           string
 }
 
-type TranscodeCommand struct {
+type TranscodeCmd struct {
 	inputPath       string
 	outputPath      string
 	transcodeConfig *Config
 	runningCommand  *exec.Cmd
 }
 
-func NewCmd(input string, output string, config *Config) *TranscodeCommand {
-	return &TranscodeCommand{input, output, config, nil}
+func NewCmd(input string, output string, config *Config) *TranscodeCmd {
+	return &TranscodeCmd{input, output, config, nil}
 }
 
-func (cmd *TranscodeCommand) Run(ctx context.Context, ffmpegConfig transcoder.Options, updateHandler func(*FfmpegProgress)) error {
+func (cmd *TranscodeCmd) Run(ctx context.Context, ffmpegConfig transcoder.Options, updateHandler func(*Progress)) error {
 	transcoder := ffmpeg.
 		New(&ffmpeg.Config{
 			ProgressEnabled: true,
@@ -69,7 +69,7 @@ func (cmd *TranscodeCommand) Run(ctx context.Context, ffmpegConfig transcoder.Op
 			return nil
 		}
 
-		updateHandler(&FfmpegProgress{
+		updateHandler(&Progress{
 			FramesProcessed: prog.GetFramesProcessed(),
 			CurrentTime:     prog.GetCurrentTime(),
 			CurrentBitrate:  prog.GetCurrentBitrate(),
@@ -79,7 +79,7 @@ func (cmd *TranscodeCommand) Run(ctx context.Context, ffmpegConfig transcoder.Op
 	}
 }
 
-func (cmd *TranscodeCommand) Suspend() {
+func (cmd *TranscodeCmd) Suspend() {
 	if cmd.runningCommand == nil {
 		log.Emit(logger.ERROR, "Cannot suspend FFmpeg instance %v because command is not intialised\n", cmd)
 		return
@@ -89,7 +89,7 @@ func (cmd *TranscodeCommand) Suspend() {
 	log.Emit(logger.SUCCESS, "Suspended transcode %v\n", cmd)
 }
 
-func (cmd *TranscodeCommand) Continue() {
+func (cmd *TranscodeCmd) Continue() {
 	if cmd.runningCommand == nil {
 		log.Emit(logger.ERROR, "Cannot continue FFmpeg instance %v because command is not intialised\n", cmd)
 		return
@@ -99,19 +99,19 @@ func (cmd *TranscodeCommand) Continue() {
 	log.Emit(logger.SUCCESS, "Resumed transcode %v\n", cmd)
 }
 
-func (cmd *TranscodeCommand) RunningCommand() *exec.Cmd {
+func (cmd *TranscodeCmd) RunningCommand() *exec.Cmd {
 	return cmd.runningCommand
 }
 
-func (cmd *TranscodeCommand) InputPath() string {
+func (cmd *TranscodeCmd) InputPath() string {
 	return cmd.inputPath
 }
 
-func (cmd *TranscodeCommand) OutputPath() string {
+func (cmd *TranscodeCmd) OutputPath() string {
 	return cmd.outputPath
 }
 
-func (cmd *TranscodeCommand) String() string {
+func (cmd *TranscodeCmd) String() string {
 	var pid int = -1
 	if cmd.runningCommand != nil {
 		pid = cmd.runningCommand.Process.Pid

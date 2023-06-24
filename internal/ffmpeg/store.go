@@ -1,4 +1,4 @@
 package ffmpeg
 
-type FfmpegStore struct {
+type Store struct {
 }

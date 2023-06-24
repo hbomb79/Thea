@@ -80,10 +80,14 @@ func (handler *eventHandler) RegisterHandlerFunction(event TheaEvent, handle Han
 	handler.registerHandlerMethod(event, handlerMethod{handle, false})
 }
 
+// RegisterAsyncHandlerFunction accepts a TheaEvent and a HandlerMethod which will be stored and
+// called inside of a goroutine when the event is handled.
 func (handler *eventHandler) RegisterAsyncHandlerFunction(event TheaEvent, handle HandlerMethod) {
 	handler.registerHandlerMethod(event, handlerMethod{handle, true})
 }
 
+// registerHandlerMethod is the internal implementation for both RegisterHandlerFunction and
+// RegisterAsyncHandlerFunction.
 func (handler *eventHandler) registerHandlerMethod(event TheaEvent, handle handlerMethod) {
 	handler.fnHandlers[event] = append(handler.fnHandlers[event], handle)
 }
@@ -114,6 +118,9 @@ func (handler *eventHandler) Dispatch(event TheaEvent, payload TheaPayload) {
 	}
 }
 
+// validatePayload ensures that the payload provided is valid for the event specified. An error
+// will be returned if the payload is not valid, and the event should not be sent to the registered
+// handlers in this case.
 func (handler *eventHandler) validatePayload(event TheaEvent, payload TheaPayload) error {
 	log.Emit(logger.VERBOSE, "Validating payload %#v for event %v\n", payload, event)
 

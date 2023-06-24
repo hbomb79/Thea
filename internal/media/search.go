@@ -37,10 +37,14 @@ const (
 // SearchResult is a struct which can contain EITHER
 // a movie or an episode struct pointer.
 // This is indicated using the 'Type' enum
-type SearchContainer struct {
+type MediaContainer struct {
 	Type    ContainerType
 	Movie   *Movie
 	Episode *Episode
+}
+
+func (cont *MediaContainer) Source() string {
+	return ""
 }
 
 // SearchStub represents the minimal information required to represent

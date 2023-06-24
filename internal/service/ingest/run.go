@@ -13,9 +13,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/http/tmdb"
 	"github.com/hbomb79/Thea/internal/media"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/hbomb79/Thea/pkg/worker"
 	"github.com/rjeczalik/notify"
 )
+
+var log = logger.Get("IngestServ")
 
 type Scraper interface {
 	ScrapeFileForMediaInfo(path string) (*media.FileMediaMetadata, error)
@@ -198,8 +201,8 @@ func (service *IngestService) DiscoverNewFiles() {
 
 	newItems, err := recursivelyWalkFileSystem(service.config.IngestPath, sourcePathsLookup)
 	if err != nil {
-		// Ah! TODO
-		panic(err.Error())
+		log.Emit(logger.FATAL, "file system polling failed: %s", err.Error())
+		return
 	}
 
 	minModtimeAge := service.config.RequiredModTimeAgeDuration()

@@ -2,12 +2,11 @@ package media
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
 	"regexp"
 	"strconv"
 
-	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/hbomb79/Thea/internal/ffmpeg"
 )
 
 type FileMediaMetadata struct {
@@ -94,11 +93,9 @@ func (scraper *MetadataScraper) extractTitleInformation(title string, output *Fi
 // extractFfprobeInformation will read the media metadata using ffprobe. If successful,
 // the frame width/height and the runtime of the media will be populated in the output
 func (scraper *MetadataScraper) extractFfprobeInformation(path string, output *FileMediaMetadata) error {
-	cfg := ffmpeg.Config{}
-	transcoder := ffmpeg.New(&cfg).Input(path)
-	metadata, err := transcoder.GetMetadata()
+	metadata, err := ffmpeg.ProbeFile(path)
 	if err != nil {
-		return fmt.Errorf("failed to extract file metadata information using ffprobe: %s", err.Error())
+		return err
 	}
 
 	//TODO Consider revising how we select the stream

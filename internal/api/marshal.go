@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/liip/sheriff"
 )
@@ -42,18 +41,6 @@ func JsonMessage(w http.ResponseWriter, e string, status int) {
 
 	w.WriteHeader(status)
 	w.Write(marshalled)
-}
-
-// trimTrailingSlashesMiddleware is a middleware function
-// used to trim any trailing slashes from the incoming HTTP
-// request. This allows the route (/api/test) to match
-// the URL "/api/test/" and "/api/test" with the same
-// mux handler.
-func trimTrailingSlashesMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.URL.Path = strings.TrimSuffix(r.URL.Path, "/")
-		next.ServeHTTP(w, r)
-	})
 }
 
 // sheriffApiMarshal is a method that will marshal

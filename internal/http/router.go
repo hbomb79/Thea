@@ -1,4 +1,4 @@
-package api
+package http
 
 import (
 	"context"
@@ -13,6 +13,18 @@ import (
 )
 
 var log = logger.Get("HTTP")
+
+// trimTrailingSlashesMiddleware is a middleware function
+// used to trim any trailing slashes from the incoming HTTP
+// request. This allows the route (/api/test) to match
+// the URL "/api/test/" and "/api/test" with the same
+// mux handler.
+func trimTrailingSlashesMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = strings.TrimSuffix(r.URL.Path, "/")
+		next.ServeHTTP(w, r)
+	})
+}
 
 type RouterOptions struct {
 	ApiRoot string

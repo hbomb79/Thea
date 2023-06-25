@@ -11,8 +11,8 @@ import (
 
 	"github.com/hbomb79/Thea/internal"
 	"github.com/hbomb79/Thea/internal/api"
+	socket "github.com/hbomb79/Thea/internal/http/websocket"
 	"github.com/hbomb79/Thea/pkg/logger"
-	"github.com/hbomb79/Thea/pkg/socket"
 )
 
 var mainLogger = logger.Get("Main")

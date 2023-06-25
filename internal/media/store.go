@@ -1,9 +1,222 @@
 package media
 
-type Store struct{}
+import (
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type Store struct {
+	db *gorm.DB
+}
+
+// SaveMovie upserts the provided Movie model to the database. Existing models
+// to update are found using the 'TmdbId' as this is expected to be a stable
+// identifier.
+//
+// NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
+func (store *Store) SaveMovie(movie *Movie) error {
+	return saveMovie(store.db, movie)
+}
+
+// SaveSeries upserts the provided Series model to the database. Existing models
+// to update are found using the 'TmdbId' as this is expected to be a stable
+// identifier.
+//
+// NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
+func (store *Store) SaveSeries(series *Series) error {
+	return saveSeries(store.db, series)
+}
+
+// SaveSeason upserts the provided Season model to the database. Existing models
+// to update are found using the 'TmdbId' as this is expected to be a stable
+// identifier.
+//
+// NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
+func (store *Store) SaveSeason(season *Season) error {
+	return saveSeason(store.db, season)
+}
+
+// saveEpisode transactionally upserts the episode and it's season
+// and series. Existing models are found using the models 'TmdbId'
+// as this is expected to be a stable identifier.
+//
+// NOTE: the ID of the media(s) may be UPDATED to match existing DB entry (if any)
+func (store *Store) SaveEpisode(episode *Episode, season *Season, series *Series) error {
+	// Store old PKs so we can rollback on transaction failure
+	episodeId := episode.Id
+	seasonId := season.Id
+	seriesId := series.Id
+
+	if err := store.db.Transaction(func(tx *gorm.DB) error {
+		if err := saveSeries(tx, series); err != nil {
+			return err
+		}
+
+		if err := saveSeason(tx, season); err != nil {
+			return err
+		}
+
+		if err := saveEpisode(tx, episode); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		episode.Id = episodeId
+		season.Id = seasonId
+		series.Id = seriesId
+
+		return err
+	}
+
+	return nil
+}
+
+// GetMedia is a convinience method for requesting either a Movie
+// or an Episode. The ID provided is used to lookup both, and whichever
+// query is successful is used to populate a media Container.
+func (store *Store) GetMedia(mediaId uuid.UUID) *Container {
+	if movie, err := store.GetMovie(mediaId); err != nil {
+		if episode, err := store.GetEpisode(mediaId); err != nil {
+			return nil
+		} else {
+			return &Container{
+				Type:    EPISODE,
+				Episode: episode,
+				Movie:   nil,
+			}
+		}
+	} else {
+		return &Container{
+			Type:    MOVIE,
+			Movie:   movie,
+			Episode: nil,
+		}
+	}
+}
+
+// GetMovie will search the database for a Movie row matching the
+// PK ID provided. No result will cause 'nil' to be returned, failure
+// for any other reason will see 'nil' returned.
+func (store *Store) GetMovie(movieId uuid.UUID) (*Movie, error) {
+	var result Movie
+	err := store.db.Where(&Movie{Common: Common{Id: movieId}}).First(&result).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// GetEpisode will search the database for a Episode row matching the
+// PK ID provided. No result will cause 'nil' to be returned, failure
+// for any other reason will see 'nil' returned.
+func (store *Store) GetEpisode(episodeId uuid.UUID) (*Episode, error) {
+	var result Episode
+	err := store.db.Where(&Episode{Common: Common{Id: episodeId}}).First(&result).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// GetSeason will search the database for a Season row matching the
+// PK ID provided. No result will cause 'nil' to be returned, failure
+// for any other reason will see 'nil' returned.
+func (store *Store) GetSeason(seasonId uuid.UUID) (*Season, error) {
+	var result Season
+	err := store.db.Where(&Season{Id: seasonId}).First(&result).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// GetSeries will search the database for a Series row matching the
+// PK ID provided. No result will cause 'nil' to be returned, failure
+// for any other reason will see 'nil' returned.
+func (store *Store) GetSeries(seriesId uuid.UUID) (*Series, error) {
+	var result Series
+	err := store.db.Where(&Series{Id: seriesId}).First(&result).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
 
 // GetAllSourcePaths returns all the source paths related
 // to media that is currently known to Thea by polling the database.
 func (store *Store) GetAllSourcePaths() []string {
 	return make([]string, 0)
+}
+
+func saveMovie(db *gorm.DB, movie *Movie) error {
+	movieId := movie.Id
+
+	var existingMovie *Movie
+	db.Where(&Movie{Common: Common{TmdbId: movie.TmdbId}}).First(&existingMovie)
+	if existingMovie != nil {
+		movie.Id = existingMovie.Id
+	}
+
+	err := db.Debug().Save(movie).Error
+	if err != nil {
+		movie.Id = movieId
+	}
+
+	return err
+}
+
+func saveEpisode(db *gorm.DB, episode *Episode) error {
+	episodeId := episode.Id
+
+	var existingEpisode *Episode
+	db.Where(&Episode{Common: Common{TmdbId: episode.TmdbId}}).First(&existingEpisode)
+	if existingEpisode != nil {
+		episode.Id = existingEpisode.Id
+	}
+
+	err := db.Debug().Save(episode).Error
+	if err != nil {
+		episode.Id = episodeId
+	}
+
+	return err
+}
+
+func saveSeries(db *gorm.DB, series *Series) error {
+	seriesId := series.Id
+
+	var existingSeries *Series
+	db.Where(&Series{TmdbId: series.TmdbId}).First(&existingSeries)
+	if existingSeries != nil {
+		series.Id = existingSeries.Id
+	}
+
+	err := db.Debug().Save(series).Error
+	if err != nil {
+		series.Id = seriesId
+	}
+
+	return nil
+}
+
+func saveSeason(db *gorm.DB, season *Season) error {
+	seasonId := season.Id
+
+	var existingSeason *Season
+	db.Where(&Season{TmdbId: season.TmdbId}).First(&existingSeason)
+	if existingSeason != nil {
+		season.Id = existingSeason.Id
+	}
+
+	err := db.Debug().Save(season).Error
+	if err != nil {
+		season.Id = seasonId
+	}
+
+	return nil
 }

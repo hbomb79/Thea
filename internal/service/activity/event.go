@@ -19,10 +19,11 @@ type Event string
 
 type Payload any
 
+// TODO remove these constants and allow each service to register their events instead
 const (
-	// Server is shutting down
-	THEA_SHUTDOWN_EVENT  Event = "thea:shutdown"
 	PROFILE_UPDATE_EVENT Event = "thea:profile:update"
+
+	INGEST_MEDIA_COMPLETE Event = "ingest:media:complete"
 
 	// A QueueItem has been updated, this includes any changes to it's state, trouble changes, or including trouble updates.
 	ITEM_UPDATE_EVENT        Event = "item:update"
@@ -70,18 +71,28 @@ func NewEventHandler() EventCoordinator {
 	}
 }
 
+// RegisterHandlerChannel takes an event type and a channel and will send Event messages on
+// the channel any time a Dispatch for the provided event occurs.
+// This method can be used multiple times for different events on the same channel.
+//
+// If the channel is BLOCKED when the event bus attempts to send the message on the handler channel,
+// then the thread dispatching the event will also be BLOCKED. It is recomended to buffer the handler channels
+// appropiately to avoid dispatcher-side blocking.
 func (handler *eventHandler) RegisterHandlerChannel(event Event, handle HandlerChannel) {
 	handler.chanHandlers[event] = append(handler.chanHandlers[event], handle)
 }
 
 // RegisterHandler takes an event type and a handler method which will be stored
 // and called with the payload for the event whenever it is provided to the 'Handle' method.
+// The handle provided should be guaranteed to return quickly, else other threads calling
+// Dispatch on this event bus will be blocked.
 func (handler *eventHandler) RegisterHandlerFunction(event Event, handle HandlerMethod) {
 	handler.registerHandlerMethod(event, handlerMethod{handle, false})
 }
 
 // RegisterAsyncHandlerFunction accepts a TheaEvent and a HandlerMethod which will be stored and
 // called inside of a goroutine when the event is handled.
+// The speed at which this handle runs is not important to the event bus, unlike RegisterHandlerFunction.
 func (handler *eventHandler) RegisterAsyncHandlerFunction(event Event, handle HandlerMethod) {
 	handler.registerHandlerMethod(event, handlerMethod{handle, true})
 }
@@ -94,6 +105,8 @@ func (handler *eventHandler) registerHandlerMethod(event Event, handle handlerMe
 
 // Handle takes an event type and a payload and dispatches the payload to the handler specified
 // for the event type provided.
+// Note that this method WILL block if a synchronous handler function is blocking, or if channel
+// handlers are blocked.
 func (handler *eventHandler) Dispatch(event Event, payload Payload) {
 	if err := handler.validatePayload(event, payload); err != nil {
 		log.Emit(logger.FATAL, "Dispatch for event %v FAILED validation: %v", event, err)
@@ -134,7 +147,7 @@ func (handler *eventHandler) validatePayload(event Event, payload Payload) error
 	switch event {
 	case QUEUE_UPDATE_EVENT:
 		fallthrough
-	case THEA_SHUTDOWN_EVENT:
+	case INGEST_MEDIA_COMPLETE:
 		if payload != nil {
 			return fmt.Errorf("event does not accept any payload, found %v", payloadTypeName)
 		}

@@ -1,6 +1,9 @@
 package media
 
-import "gorm.io/gorm"
+import (
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
 
 // Season represents the information Thea stores about a season
 // of episodes itself. A season is related to many episodes (however
@@ -43,9 +46,12 @@ type Container struct {
 	Episode *Episode
 }
 
-func (cont *Container) Source() string {
-	return ""
-}
+func (cont *Container) Id() uuid.UUID          { return uuid.New() }
+func (cont *Container) Resolution() (int, int) { return 0, 0 }
+func (cont *Container) Title() string          { return "" }
+func (cont *Container) EpisodeNumber() int     { return -1 }
+func (cont *Container) SeasonNumber() int      { return -1 }
+func (cont *Container) Source() string         { return "" }
 
 // SearchStub represents the minimal information required to represent
 // a partials search result entry from a media searcher. This information

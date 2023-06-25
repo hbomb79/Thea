@@ -42,8 +42,8 @@ type TranscodeTask struct {
 	lastProgress *ffmpeg.Progress
 }
 
-func NewTranscodeTask(outputDir string, m *media.Container, t *ffmpeg.Target) *TranscodeTask {
-	out := fmt.Sprintf("%s/%s.%s", outputDir, "", "")
+func NewTranscodeTask(outputPath string, m *media.Container, t *ffmpeg.Target) *TranscodeTask {
+	out := fmt.Sprintf("%s/%s.%s", outputPath, t.Label(), t.Ext())
 
 	return &TranscodeTask{
 		id:           uuid.New(),
@@ -67,18 +67,28 @@ func (task *TranscodeTask) Run(ctx context.Context, updateHandler func(*ffmpeg.P
 		task.lastProgress = nil
 	}()
 
+	task.status = WORKING
 	err := task.command.Run(ctx, task.target.TranscodeOptions(), updateHandler)
 	if err != nil {
+		task.status = TROUBLED
 		return fmt.Errorf("transcode task failed due to command error: %s", err.Error())
 	}
 
+	if ctx.Err() != nil {
+		// Task was stopped because the context was cancelled
+		task.Cancel()
+		return nil
+	}
+
+	task.status = COMPLETE
 	return nil
 }
 
-// Cancel will interrupt any running transcode, returning true if it had to do so. False will
-// be returned when the cancel request was a no-op (e.g., task was IDLE)
-func (task *TranscodeTask) Cancel() bool {
-	return false
+// Cancel will interrupt any running transcode, cleaning up any partially transcoded output
+// if applicable.
+func (task *TranscodeTask) Cancel() {
+	task.status = CANCELLED
+	// TODO cleanup
 }
 
 // LastKnownProgress is an accessor function to the latest ffmpeg progress

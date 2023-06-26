@@ -273,8 +273,8 @@ func (service *IngestService) Item(itemID uuid.UUID) *IngestItem {
 
 // AllItems returns a pointer to the array containing all
 // the IngestItems being processed by this service.
-func (service *IngestService) AllItems() *[]*IngestItem {
-	return &service.items
+func (service *IngestService) AllItems() []*IngestItem {
+	return service.items
 }
 
 // evaluateItemHold accepts the ID of an item that is on IMPORT_HOLD,

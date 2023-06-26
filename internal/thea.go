@@ -15,18 +15,6 @@ import (
 
 var log = logger.Get("Core")
 
-// // ProfileManager is an interface which allows Thea to store
-// // and manipulate Transcode targets and workflows.
-// type ProfileManager interface {
-// 	Profiles() []profile.Profile
-// 	InsertProfile(profile.Profile) error
-// 	RemoveProfile(string) error
-// 	FindProfile(func(profile.Profile) bool) (int, profile.Profile)
-// 	FindProfileByTag(string) (int, profile.Profile)
-// 	MoveProfile(string, int) error
-// 	Save()
-// }
-
 type ActivityService interface {
 	AsyncService
 }
@@ -43,7 +31,7 @@ type IngestService interface {
 	AsyncService
 	RemoveItem(uuid.UUID) error
 	Item(uuid.UUID) *ingest.IngestItem
-	AllItems() *[]*ingest.IngestItem
+	AllItems() []*ingest.IngestItem
 }
 
 type RestGateway interface {

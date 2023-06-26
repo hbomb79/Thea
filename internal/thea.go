@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/api"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/service/activity"
 	"github.com/hbomb79/Thea/internal/service/ingest"
@@ -39,6 +41,13 @@ type DownloadService interface {
 
 type IngestService interface {
 	AsyncService
+	RemoveItem(uuid.UUID) error
+	Item(uuid.UUID) *ingest.IngestItem
+	AllItems() *[]*ingest.IngestItem
+}
+
+type RestGateway interface {
+	Start()
 }
 
 type AsyncService interface {
@@ -54,6 +63,7 @@ type theaImpl struct {
 	config           TheaConfig
 
 	// profileManager ProfileManager
+	restGateway RestGateway
 
 	activityService  ActivityService
 	downloadService  DownloadService
@@ -80,6 +90,8 @@ func New(config TheaConfig) *theaImpl {
 	// thea.activityService = activity.New()
 	// thea.downloadService = download.New()
 	// thea.transcodeService = transcode.NewFfmpegCommander(thea, config.Format)
+
+	thea.restGateway = api.NewRestGateway(thea.ingestService)
 
 	return thea
 }

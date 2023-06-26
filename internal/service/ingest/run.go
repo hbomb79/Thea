@@ -168,8 +168,8 @@ func (service *IngestService) PerformItemIngest(w worker.Worker) (bool, error) {
 
 	if err := item.ingest(); err != nil {
 		if trbl, ok := err.(IngestItemTrouble); ok {
-			item.trouble = &trbl
-			item.state = TROUBLED
+			item.Trouble = &trbl
+			item.State = TROUBLED
 		} else {
 			return false, err
 		}
@@ -196,7 +196,7 @@ func (service *IngestService) DiscoverNewFiles() {
 		sourcePathsLookup[path] = true
 	}
 	for _, item := range service.items {
-		sourcePathsLookup[item.path] = true
+		sourcePathsLookup[item.Path] = true
 	}
 
 	newItems, err := recursivelyWalkFileSystem(service.config.IngestPath, sourcePathsLookup)
@@ -218,9 +218,9 @@ func (service *IngestService) DiscoverNewFiles() {
 		}
 
 		ingestItem := &IngestItem{
-			id:    itemID,
-			path:  itemPath,
-			state: itemState,
+			Id:    itemID,
+			Path:  itemPath,
+			State: itemState,
 		}
 
 		service.items = append(service.items, ingestItem)
@@ -246,9 +246,9 @@ func (service *IngestService) RemoveItem(itemID uuid.UUID) error {
 	defer service.Unlock()
 
 	for k, v := range service.items {
-		if v.id == itemID {
+		if v.Id == itemID {
 			// Remove item from service
-			if v.state == INGESTING {
+			if v.State == INGESTING {
 				return fmt.Errorf("cannot remove item %v as a worker is currently ingesting it", itemID)
 			}
 
@@ -263,7 +263,7 @@ func (service *IngestService) RemoveItem(itemID uuid.UUID) error {
 // in the services queue. If it cannot be found, nil is returned.
 func (service *IngestService) Item(itemID uuid.UUID) *IngestItem {
 	for _, item := range service.items {
-		if item.id == itemID {
+		if item.Id == itemID {
 			return item
 		}
 	}
@@ -292,7 +292,7 @@ func (service *IngestService) evaluateItemHold(id uuid.UUID) {
 	defer service.Unlock()
 
 	item := service.Item(id)
-	if item == nil || item.state != IMPORT_HOLD {
+	if item == nil || item.State != IMPORT_HOLD {
 		return
 	}
 
@@ -309,7 +309,7 @@ func (service *IngestService) evaluateItemHold(id uuid.UUID) {
 		return
 	}
 
-	item.state = IDLE
+	item.State = IDLE
 	service.wakeupWorkerPool()
 }
 
@@ -351,8 +351,8 @@ func (service *IngestService) claimIdleItem() *IngestItem {
 	defer service.Unlock()
 
 	for _, item := range service.items {
-		if item.state == IDLE {
-			item.state = INGESTING
+		if item.State == IDLE {
+			item.State = INGESTING
 			return item
 		}
 	}

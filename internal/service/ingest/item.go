@@ -18,18 +18,17 @@ const (
 )
 
 type IngestItem struct {
-	id      uuid.UUID
-	path    string
-	state   IngestItemState
-	trouble *IngestItemTrouble
+	Id      uuid.UUID
+	Path    string
+	State   IngestItemState
+	Trouble *IngestItemTrouble
 }
 
-func (item *IngestItem) ingest() error {
-	return errors.New("not yet implemented")
-}
+func (item *IngestItem) ResolveTrouble() error { return errors.New("not yet implemented") }
+func (item *IngestItem) ingest() error         { return errors.New("not yet implemented") }
 
 func (item *IngestItem) modtimeDiff() (*time.Duration, error) {
-	itemInfo, err := os.Stat(item.path)
+	itemInfo, err := os.Stat(item.Path)
 	if err != nil {
 		return nil, err
 	}

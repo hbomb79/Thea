@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/activity"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/media"
-	"github.com/hbomb79/Thea/internal/service/activity"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/pkg/logger"
 )

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/hbomb79/Thea/internal/database"
-	"github.com/hbomb79/Thea/internal/service/ingest"
-	"github.com/hbomb79/Thea/internal/service/transcode"
+	"github.com/hbomb79/Thea/internal/ingest"
+	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/ilyakaznacheev/cleanenv"
 )
 

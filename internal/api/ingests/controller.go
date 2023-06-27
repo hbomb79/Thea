@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/media"
-	"github.com/hbomb79/Thea/internal/service/ingest"
 	"github.com/labstack/echo/v4"
 )
 

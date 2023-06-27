@@ -6,10 +6,10 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/activity"
 	"github.com/hbomb79/Thea/internal/api"
 	"github.com/hbomb79/Thea/internal/database"
-	"github.com/hbomb79/Thea/internal/service/activity"
-	"github.com/hbomb79/Thea/internal/service/ingest"
+	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 

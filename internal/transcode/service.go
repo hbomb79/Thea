@@ -15,44 +15,57 @@ import (
 
 var log = logger.Get("TranscodeServ")
 
-type MediaStore interface {
-	GetMedia(uuid.UUID) *media.Container
-}
+type (
+	mediaStore interface {
+		GetMedia(uuid.UUID) *media.Container
+	}
 
-type FfmpegStore interface {
-	GetWorkflows() []*workflow.Workflow
-	GetTarget(uuid.UUID) *ffmpeg.Target
-}
+	workflowStore interface {
+		GetWorkflows() []*workflow.Workflow
+	}
 
-// TranscodeService is Thea's solution to pre-transcoding of user media.
-// It is responsible for some key aspects of Thea:
-//   - Transcoding workflows for newly ingested media
-//   - Manual transcode requests for ingested media
-//   - Live-tracking and reporting of ongoing transcodes over the event bus
-type TranscodeService struct {
-	*sync.Mutex
-	taskWg          *sync.WaitGroup
-	config          *Config
-	tasks           []*TranscodeTask
-	consumedThreads int
+	targetStore interface {
+		GetTarget(uuid.UUID) *ffmpeg.Target
+	}
 
-	eventBus activity.EventHandler
+	transcodeStore interface {
+		SaveTranscode(*TranscodeTask) error
+	}
 
-	mediaStore  MediaStore
-	ffmpegStore FfmpegStore
+	// transcodeService is Thea's solution to pre-transcoding of user media.
+	// It is responsible for some key aspects of Thea:
+	//   - Transcoding workflows for newly ingested media
+	//   - Manual transcode requests for ingested media
+	//   - Live-tracking and reporting of ongoing transcodes over the event bus
+	transcodeService struct {
+		*sync.Mutex
+		taskWg          *sync.WaitGroup
+		config          *Config
+		tasks           []*TranscodeTask
+		consumedThreads int
 
-	queueChange chan bool
-	taskChange  chan uuid.UUID
-}
+		eventBus activity.EventCoordinator
+
+		mediaStore     mediaStore
+		workflowStore  workflowStore
+		targetStore    targetStore
+		transcodeStore transcodeStore
+
+		queueChange chan bool
+		taskChange  chan uuid.UUID
+	}
+)
 
 // New creates a new TranscodeService using the Config provided.
-func New(config Config) (*TranscodeService, error) { return nil, nil }
+func New(config Config, mediaStore mediaStore, workflowStore workflowStore, targetStore targetStore, transcodeStore transcodeStore) (*transcodeService, error) {
+	return nil, nil
+}
 
-// Start is the main entry point for this service. This method will block
+// Run is the main entry point for this service. This method will block
 // until the provided context is cancelled.
 // Note: when context is cancelled this method will not immediately return as it
 // will wait for it's running transcode tasks to cancel.
-func (service *TranscodeService) Start(ctx context.Context) {
+func (service *transcodeService) Run(ctx context.Context) {
 	eventChannel := make(activity.HandlerChannel, 2)
 	service.eventBus.RegisterHandlerChannel(activity.INGEST_MEDIA_COMPLETE, eventChannel)
 
@@ -81,15 +94,21 @@ func (service *TranscodeService) Start(ctx context.Context) {
 			return
 		}
 	}
+}
 
+// RegisterEventCoordinator allows the consumer/manager of this service to
+// inject an event bus that we can use to send/receive messages with other
+// parts of the system.
+func (service *transcodeService) RegisterEventCoordinator(ev activity.EventCoordinator) {
+	service.eventBus = ev
 }
 
 // AllTasks returns the array/slice of the transcode task pointers.
-func (service *TranscodeService) AllTasks() []*TranscodeTask { return service.tasks }
+func (service *transcodeService) AllTasks() []*TranscodeTask { return service.tasks }
 
 // Task looks through all the tasks known to this service and returns the one with
 // a matching ID, if it can be found. If no such task exists, nil is returned.
-func (service *TranscodeService) Task(id uuid.UUID) *TranscodeTask {
+func (service *transcodeService) Task(id uuid.UUID) *TranscodeTask {
 	for _, t := range service.tasks {
 		if t.Id() == id {
 			return t
@@ -102,7 +121,7 @@ func (service *TranscodeService) Task(id uuid.UUID) *TranscodeTask {
 // TaskForMediaAndTarget searches through all the tasks in this service and looks for one
 // which was created for the media and target matching the IDs provided. If no such task exists
 // then nil is returned.
-func (service *TranscodeService) TaskForMediaAndTarget(mediaId uuid.UUID, targetId uuid.UUID) *TranscodeTask {
+func (service *transcodeService) TaskForMediaAndTarget(mediaId uuid.UUID, targetId uuid.UUID) *TranscodeTask {
 	for _, t := range service.tasks {
 		if t.media.Id() == mediaId && t.target.Id() == targetId {
 			return t
@@ -116,13 +135,13 @@ func (service *TranscodeService) TaskForMediaAndTarget(mediaId uuid.UUID, target
 // a task using the result.
 // If the media/target fail to be retrieved, or if a transcode task for the
 // media+target already exists, an error is returned.
-func (service *TranscodeService) NewTask(mediaId uuid.UUID, targetId uuid.UUID) error {
+func (service *transcodeService) NewTask(mediaId uuid.UUID, targetId uuid.UUID) error {
 	media := service.mediaStore.GetMedia(mediaId)
 	if media == nil {
 		return fmt.Errorf("media %s not found", mediaId)
 	}
 
-	target := service.ffmpegStore.GetTarget(targetId)
+	target := service.targetStore.GetTarget(targetId)
 	if target == nil {
 		return fmt.Errorf("target %s not found", targetId)
 	}
@@ -132,7 +151,7 @@ func (service *TranscodeService) NewTask(mediaId uuid.UUID, targetId uuid.UUID) 
 
 // CancelTask will find the transcode task with the ID provided and cancel it. If the task
 // is not in a cancellable state, it will simply be removed from the service.
-func (service *TranscodeService) CancelTask(id uuid.UUID) {
+func (service *transcodeService) CancelTask(id uuid.UUID) {
 	task := service.Task(id)
 	isBeingMonitored := task.Status() == WORKING
 
@@ -147,7 +166,7 @@ func (service *TranscodeService) CancelTask(id uuid.UUID) {
 // startWaitingTasks finds any transcode items that are waiting to be started will be started, and any that are
 // finished will be removed from the transcoders. The starting of FFmpeg tasks will be subject to
 // the maximum thread usage defined in the services configuration.
-func (service *TranscodeService) startWaitingTasks(ctx context.Context) {
+func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 	service.Lock()
 	defer service.Unlock()
 
@@ -188,23 +207,33 @@ func (service *TranscodeService) startWaitingTasks(ctx context.Context) {
 
 // handleTaskUpdate is the handler for any task updates in this service.
 // Any dead tasks are removed from the queue.
-func (service *TranscodeService) handleTaskUpdate(taskId uuid.UUID) {
+func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 	task := service.Task(taskId)
 	if task == nil {
 		return
 	}
 
+	if task.status == COMPLETE {
+		if err := service.transcodeStore.SaveTranscode(task); err != nil {
+			// Failed to save
+			// TODO: implement a retry logic here because otherwise this transcode is lost
+			log.Emit(logger.ERROR, "failed to save transcode %s due to error: %s\n", task, err.Error())
+		}
+	}
+
 	if task.status == CANCELLED || task.status == COMPLETE {
 		service.removeTaskFromQueue(task.id)
 	}
+
+	service.eventBus.Dispatch(activity.TRANSCODE_TASK_UPDATE, taskId)
 }
 
 // createWorkflowTasksForMedia takes a media ID, and queries the Ffmpeg Store for a workflow
 // matching the media provided. The first workflow to be found as eligible will see the associatted
 // tasks be created, managed and monitored by this service.
-func (service *TranscodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) {
+func (service *transcodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) {
 	media := service.mediaStore.GetMedia(mediaId)
-	workflows := service.ffmpegStore.GetWorkflows()
+	workflows := service.workflowStore.GetWorkflows()
 
 	for _, workflow := range workflows {
 		if workflow.IsMediaEligible(media) {
@@ -227,7 +256,7 @@ func (service *TranscodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) 
 // An error is returned if a task for this media+target already exists.
 // Note: This function does not START the transcoding, it only creates the task and adds it to the
 // processing queue.
-func (service *TranscodeService) spawnFfmpegTarget(m *media.Container, target *ffmpeg.Target) error {
+func (service *transcodeService) spawnFfmpegTarget(m *media.Container, target *ffmpeg.Target) error {
 	service.Lock()
 	defer service.Unlock()
 
@@ -245,7 +274,7 @@ func (service *TranscodeService) spawnFfmpegTarget(m *media.Container, target *f
 // removeTaskFromQueue will look for and remove the task with the ID provided
 // from the services queue.
 // NOTE: The task will NOT be cancelled as part of removal
-func (service *TranscodeService) removeTaskFromQueue(taskId uuid.UUID) {
+func (service *transcodeService) removeTaskFromQueue(taskId uuid.UUID) {
 	for i, v := range service.tasks {
 		if v.id == taskId {
 			service.tasks = append(service.tasks[:i], service.tasks[i+1:]...)

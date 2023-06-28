@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
@@ -15,54 +16,47 @@ var log = logger.Log.GetLogger("Event")
 // of Theas' architecture.
 // Each silo/service of Thea's architecture listens for a specific event, which indicates
 // an item is ready for processing by that service
-type Event string
+type (
+	Event         string
+	Payload       any
+	HandlerMethod func(Event, Payload)
 
-type Payload any
+	HandlerChannel chan HandlerEvent
+	HandlerEvent   struct {
+		Event   Event
+		Payload Payload
+	}
 
-// TODO remove these constants and allow each service to register their events instead
-const (
-	PROFILE_UPDATE_EVENT Event = "thea:profile:update"
+	EventDispatcher interface {
+		Dispatch(Event, Payload)
+	}
 
-	INGEST_MEDIA_COMPLETE Event = "ingest:media:complete"
+	EventHandler interface {
+		RegisterAsyncHandlerFunction(Event, HandlerMethod)
+		RegisterHandlerFunction(Event, HandlerMethod)
+		RegisterHandlerChannel(Event, HandlerChannel)
+	}
 
-	// A QueueItem has been updated, this includes any changes to it's state, trouble changes, or including trouble updates.
-	ITEM_UPDATE_EVENT        Event = "item:update"
-	ITEM_FFMPEG_UPDATE_EVENT Event = "item:ffmpeg:update"
-	QUEUE_UPDATE_EVENT       Event = "queue:update"
+	EventCoordinator interface {
+		EventDispatcher
+		EventHandler
+	}
+
+	eventHandler struct {
+		fnHandlers   map[Event][]handlerMethod
+		chanHandlers map[Event][]HandlerChannel
+	}
+
+	handlerMethod struct {
+		handle HandlerMethod
+		async  bool
+	}
 )
 
-type HandlerMethod func(Event, Payload)
-
-type HandlerChannel chan HandlerEvent
-type HandlerEvent struct {
-	Event   Event
-	Payload Payload
-}
-
-type EventDispatcher interface {
-	Dispatch(Event, Payload)
-}
-
-type EventHandler interface {
-	RegisterAsyncHandlerFunction(Event, HandlerMethod)
-	RegisterHandlerFunction(Event, HandlerMethod)
-	RegisterHandlerChannel(Event, HandlerChannel)
-}
-
-type EventCoordinator interface {
-	EventDispatcher
-	EventHandler
-}
-
-type eventHandler struct {
-	fnHandlers   map[Event][]handlerMethod
-	chanHandlers map[Event][]HandlerChannel
-}
-
-type handlerMethod struct {
-	handle HandlerMethod
-	async  bool
-}
+const (
+	INGEST_MEDIA_COMPLETE Event = "ingest:media:complete"
+	TRANSCODE_TASK_UPDATE Event = "transcode:task:update"
+)
 
 func NewEventHandler() EventCoordinator {
 	return &eventHandler{
@@ -135,8 +129,6 @@ func (handler *eventHandler) Dispatch(event Event, payload Payload) {
 // will be returned if the payload is not valid, and the event should not be sent to the registered
 // handlers in this case.
 func (handler *eventHandler) validatePayload(event Event, payload Payload) error {
-	log.Emit(logger.VERBOSE, "Validating payload %#v for event %v\n", payload, event)
-
 	var payloadTypeName string
 	if t := reflect.TypeOf(payload); t != nil {
 		payloadTypeName = t.Name()
@@ -145,20 +137,11 @@ func (handler *eventHandler) validatePayload(event Event, payload Payload) error
 	}
 
 	switch event {
-	case QUEUE_UPDATE_EVENT:
-		fallthrough
 	case INGEST_MEDIA_COMPLETE:
-		if payload != nil {
-			return fmt.Errorf("event does not accept any payload, found %v", payloadTypeName)
-		}
-
-		return nil
-	case ITEM_UPDATE_EVENT:
 		fallthrough
-	case ITEM_FFMPEG_UPDATE_EVENT:
-		_, ok := payload.(int)
-		if !ok {
-			return fmt.Errorf("ITEM events require int representing QueueItem ID, found %v", payloadTypeName)
+	case TRANSCODE_TASK_UPDATE:
+		if _, ok := payload.(uuid.UUID); !ok {
+			return fmt.Errorf("illegal payload (type %s) for %s event. Expected uuid.UUID payload", payloadTypeName, event)
 		}
 
 		return nil

@@ -1,4 +1,4 @@
-package downloads
+package targets
 
 import (
 	"net/http"
@@ -7,38 +7,37 @@ import (
 )
 
 type (
-	Dto   struct{}
-	Store interface {
-	}
-	Controller struct {
-		Store Store
-	}
+	Dto struct{}
+
+	TargetStore interface{}
+
+	Controller struct{ Store TargetStore }
 )
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
+	eg.POST("/", controller.create)
 	eg.GET("/", controller.list)
 	eg.GET("/:id/", controller.get)
+	eg.PATCH("/:id/", controller.update)
 	eg.DELETE("/:id/", controller.delete)
-	eg.POST("/:id/approve", controller.postApproval)
-	eg.POST("/:id/trouble-resolution", controller.postTroubleResolution)
 }
 
-func (controller *Controller) list(ctx echo.Context) error {
+func (controller *Controller) create(ec echo.Context) error {
 	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
 }
 
-func (controller *Controller) get(ctx echo.Context) error {
+func (controller *Controller) list(ec echo.Context) error {
 	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
 }
 
-func (controller *Controller) delete(ctx echo.Context) error {
+func (controller *Controller) get(ec echo.Context) error {
 	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
 }
 
-func (controller *Controller) postApproval(ctx echo.Context) error {
+func (controller *Controller) update(ec echo.Context) error {
 	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
 }
 
-func (controller *Controller) postTroubleResolution(ctx echo.Context) error {
+func (controller *Controller) delete(ec echo.Context) error {
 	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
 }

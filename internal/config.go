@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/hbomb79/Thea/internal/api"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/transcode"
@@ -19,11 +20,12 @@ type TheaConfig struct {
 	IngestService ingest.Config           `yaml:"ingest_service"`
 	Services      DockerConfig            `yaml:"docker_services"`
 	Database      database.DatabaseConfig `yaml:"database" env-required:"true"`
-	OmdbKey       string                  `yaml:"omdb_api_key" env:"OMDB_API_KEY" env-required:"true"`
-	CacheDirPath  string                  `yaml:"cache_dir" env:"CACHE_DIR"`
-	ConfigDirPath string                  `yaml:"config_dir" env:"CONFIG_DIR"`
-	ApiHostAddr   string                  `yaml:"host" env:"HOST_ADDR" env-default:"0.0.0.0"`
-	ApiHostPort   string                  `yaml:"port" env:"HOST_PORT" env-default:"8080"`
+	RestConfig    api.RestConfig
+	OmdbKey       string `yaml:"omdb_api_key" env:"OMDB_API_KEY" env-required:"true"`
+	CacheDirPath  string `yaml:"cache_dir" env:"CACHE_DIR"`
+	ConfigDirPath string `yaml:"config_dir" env:"CONFIG_DIR"`
+	ApiHostAddr   string `yaml:"host" env:"HOST_ADDR" env-default:"0.0.0.0"`
+	ApiHostPort   string `yaml:"port" env:"HOST_PORT" env-default:"8080"`
 }
 
 // DockerConfig is used to enable/disable the internal intialisation of

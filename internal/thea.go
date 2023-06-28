@@ -9,84 +9,115 @@ import (
 	"github.com/hbomb79/Thea/internal/activity"
 	"github.com/hbomb79/Thea/internal/api"
 	"github.com/hbomb79/Thea/internal/database"
+	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/ingest"
+	"github.com/hbomb79/Thea/internal/media"
+	"github.com/hbomb79/Thea/internal/transcode"
+	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 var log = logger.Get("Core")
 
-type ActivityService interface {
-	AsyncService
-}
+type (
+	EventParticipator interface {
+		RegisterEventCoordinator(*activity.EventCoordinator)
+	}
 
-type TranscodeService interface {
-	AsyncService
-}
+	RunnableService interface {
+		Run(context.Context)
+	}
 
-type DownloadService interface {
-	AsyncService
-}
+	RestGateway interface {
+		RunnableService
+	}
 
-type IngestService interface {
-	AsyncService
-	RemoveItem(uuid.UUID) error
-	Item(uuid.UUID) *ingest.IngestItem
-	AllItems() []*ingest.IngestItem
-}
+	ActivityService interface {
+		RunnableService
+	}
 
-type RestGateway interface {
-	Start()
-}
+	TranscodeService interface {
+		RunnableService
+		NewTask(uuid.UUID, uuid.UUID) error
+		CancelTask(uuid.UUID)
+		AllTasks() []*transcode.TranscodeTask
+		Task(uuid.UUID) *transcode.TranscodeTask
+		TaskForMediaAndTarget(uuid.UUID, uuid.UUID) *transcode.TranscodeTask
+	}
 
-type AsyncService interface {
-	Run(context.Context)
-}
+	DownloadService interface {
+		RunnableService
+	}
+
+	IngestService interface {
+		RunnableService
+		RemoveItem(uuid.UUID) error
+		Item(uuid.UUID) *ingest.IngestItem
+		AllItems() []*ingest.IngestItem
+	}
+)
 
 // Thea represents the top-level object for the server, and is responsible
-// for initialising embedded support services, workers, threads, event
+// for initialising embedded support services, services, stores, event
 // handling, et cetera...
 type theaImpl struct {
-	eventBus         activity.EventHandler
-	serviceWaitGroup *sync.WaitGroup
-	config           TheaConfig
+	eventBus          activity.EventCoordinator
+	shutdownWaitGroup *sync.WaitGroup
+	config            TheaConfig
 
-	// profileManager ProfileManager
-	restGateway RestGateway
+	mediaStore     *media.Store
+	workflowStore  *workflow.Store
+	targetStore    *ffmpeg.Store
+	transcodeStore *transcode.Store
 
 	activityService  ActivityService
-	downloadService  DownloadService
 	ingestService    IngestService
 	transcodeService TranscodeService
+	restGateway      RestGateway
 }
 
 const THEA_USER_DIR_SUFFIX = "/thea/"
 
 func New(config TheaConfig) *theaImpl {
-	eventBus := activity.NewEventHandler()
-	thea := &theaImpl{
-		eventBus:         eventBus,
-		serviceWaitGroup: &sync.WaitGroup{},
-		config:           config,
-	}
+	/**  Bootstrapping  **/
+	thea := &theaImpl{}
+	thea.config = config
+	thea.eventBus = activity.NewEventHandler()
+	thea.shutdownWaitGroup = &sync.WaitGroup{}
 
-	if serv, err := ingest.New(ingest.Config{}); err == nil {
+	/**     Stores      **/
+	thea.workflowStore = &workflow.Store{}
+	thea.targetStore = &ffmpeg.Store{}
+	thea.mediaStore = &media.Store{}
+	thea.transcodeStore = &transcode.Store{}
+
+	/**    Services     **/
+	if serv, err := ingest.New(config.IngestService, thea.mediaStore); err == nil {
 		thea.ingestService = serv
 	} else {
 		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))
 	}
 
-	// thea.activityService = activity.New()
-	// thea.downloadService = download.New()
-	// thea.transcodeService = transcode.NewFfmpegCommander(thea, config.Format)
+	if serv, err := activity.New(); err == nil {
+		thea.activityService = serv
+	} else {
+		panic(fmt.Sprintf("failed to construct activity service due to error: %s", err.Error()))
+	}
 
-	thea.restGateway = api.NewRestGateway(thea.ingestService)
+	if serv, err := transcode.New(config.Format, thea.mediaStore, thea.workflowStore, thea.targetStore, thea.transcodeStore); err == nil {
+		thea.transcodeService = serv
+	} else {
+		panic(fmt.Sprintf("failed to construct transcode service due to error: %s", err.Error()))
+	}
+
+	thea.restGateway = api.NewRestGateway(&config.RestConfig, thea.ingestService, nil)
 
 	return thea
 }
 
-// Start will start Thea by initialising all supporting services/objects and starting
+// Run will start Thea by initialising all supporting services/objects and starting
 // the event loops
-func (thea *theaImpl) Start(ctx context.Context) error {
+func (thea *theaImpl) Run(ctx context.Context) error {
 	config := thea.config
 	log.Emit(logger.DEBUG, "Starting Thea initialisation with config: %#v\n", config)
 
@@ -94,30 +125,32 @@ func (thea *theaImpl) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to initialise Thea: %s", err)
 	}
 
-	thea.spawnAsyncService(ctx, thea.activityService)
-	thea.spawnAsyncService(ctx, thea.downloadService)
-	thea.spawnAsyncService(ctx, thea.ingestService)
-	thea.spawnAsyncService(ctx, thea.transcodeService)
-	thea.serviceWaitGroup.Wait()
+	thea.spawnAsyncService(ctx, thea.activityService, "activity-service")
+	thea.spawnAsyncService(ctx, thea.ingestService, "ingest-service")
+	thea.spawnAsyncService(ctx, thea.transcodeService, "transcode-service")
+	thea.spawnAsyncService(ctx, thea.restGateway, "rest-gateway")
+	thea.shutdownWaitGroup.Wait()
 
 	return nil
 }
 
 func (thea *theaImpl) EventHandler() activity.EventHandler { return thea.eventBus }
 
-// func (thea *theaImpl) Profiles() ProfileManager            { return thea.profileManager }
 func (thea *theaImpl) ActivityService() ActivityService   { return thea.activityService }
-func (thea *theaImpl) DownloadService() DownloadService   { return thea.downloadService }
 func (thea *theaImpl) IngestService() IngestService       { return thea.ingestService }
 func (thea *theaImpl) TranscodeService() TranscodeService { return thea.transcodeService }
 
 // spawnAsyncService will run the provided function/service as it's own
 // go-routine, ensuring that the Thea service waitgroup is updated correctly
-func (thea *theaImpl) spawnAsyncService(context context.Context, service AsyncService) {
-	thea.serviceWaitGroup.Add(1)
+func (thea *theaImpl) spawnAsyncService(context context.Context, service RunnableService, label string) {
+	if r, ok := service.(EventParticipator); ok {
+		log.Emit(logger.NEW, "Injecting event coordinator into %s\n", label)
+		r.RegisterEventCoordinator(&thea.eventBus)
+	}
 
+	thea.shutdownWaitGroup.Add(1)
 	go func() {
-		defer thea.serviceWaitGroup.Done()
+		defer thea.shutdownWaitGroup.Done()
 		service.Run(context)
 	}()
 }

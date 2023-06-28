@@ -20,73 +20,42 @@ import (
 
 var log = logger.Get("IngestServ")
 
-type Scraper interface {
-	ScrapeFileForMediaInfo(path string) (*media.FileMediaMetadata, error)
-}
+type (
+	Scraper interface {
+		ScrapeFileForMediaInfo(path string) (*media.FileMediaMetadata, error)
+	}
 
-type MediaSearcher interface {
-	SearchForEpisode(*media.FileMediaMetadata) (*media.Episode, error)
-	SearchForMovie(*media.FileMediaMetadata) (*media.Movie, error)
-	GetSeason(string, int) (*media.Season, error)
-	GetSeries(string) (*media.Series, error)
-}
+	MediaSearcher interface {
+		SearchForEpisode(*media.FileMediaMetadata) (*media.Episode, error)
+		SearchForMovie(*media.FileMediaMetadata) (*media.Movie, error)
+		GetSeason(string, int) (*media.Season, error)
+		GetSeries(string) (*media.Series, error)
+	}
 
-type MediaStore interface {
-	GetAllSourcePaths() []string
-}
+	MediaStore interface {
+		GetAllSourcePaths() []string
+	}
 
-// Config contains configuration options that allow
-// customization of how Thea detects files to auto-ingest.
-type Config struct {
-	// The IngestService uses a directory watcher, but a
-	// 'force' sync can be performed on a regular interval
-	// to protect against the watcher failing.
-	ForceSyncSeconds int
+	// IngestService is responsible for managing the automatic detection
+	// and ingestion of files from the servers file system. The detected
+	// files should be:
+	// - Checked against a blacklist to ensure they should be processed
+	// - Run through a metadata scraper to find out as much information as possible
+	// - Searched for in TMDB using the information we scraped
+	// - Added to Thea's database, along with any related data
+	IngestService struct {
+		*sync.Mutex
+		Scraper
+		Searcher MediaSearcher
 
-	// The path to the directory the service should monitor
-	// for new files
-	IngestPath string
+		mediaStore MediaStore
 
-	// An array of regular expressions that can be used to RESTRICT
-	// the files processed by this service. If any expression match
-	// the name of the file, it is ignored.
-	Blacklist []string
-
-	// When a new file is detected, it's likely to be an in-progress
-	// download using an external software. As we cannot KNOW when the
-	// download is complete, we instead wait for the 'modtime' of
-	// the item to be at least this long in the past before processing
-	RequiredModTimeAgeSeconds int
-
-	// Controls the number of workers that can perform ingestions. Reducing
-	// to 1 means one ingestion at a time.
-	// Caution should be taken to not increase this value too high, as ingestion
-	// involves talking to external APIs which may impose rate limits
-	IngestionParallelism int
-}
-
-func (config *Config) RequiredModTimeAgeDuration() time.Duration {
-	return time.Duration(config.RequiredModTimeAgeSeconds) * time.Second
-}
-
-// IngestService is responsible for managing the automatic detection
-// and ingestion of files from the servers file system. The detected
-// files should be:
-// - Checked against a blacklist to ensure they should be processed
-// - Run through a metadata scraper to find out as much information as possible
-// - Searched for in TMDB using the information we scraped
-// - Added to Thea's database, along with any related data
-type IngestService struct {
-	*sync.Mutex
-	Scraper
-	Searcher MediaSearcher
-	MediaStore
-
-	config           Config
-	items            []*IngestItem
-	importHoldTimers map[uuid.UUID]*time.Timer
-	workerPool       worker.WorkerPool
-}
+		config           Config
+		items            []*IngestItem
+		importHoldTimers map[uuid.UUID]*time.Timer
+		workerPool       worker.WorkerPool
+	}
+)
 
 // New creates a new IngestService, using the provided config for
 // subsequent calls to 'Start'.
@@ -94,7 +63,7 @@ type IngestService struct {
 // The configs 'IngestPath' is validated to be an existing directory.
 // If the directory is missing it will be created, if the path
 // provided points to an existing FILE, an error is returned.
-func New(config Config) (*IngestService, error) {
+func New(config Config, mediaStore MediaStore) (*IngestService, error) {
 	// Ensure config ingest path is a valid directory, create it
 	// if it's missing.
 	if info, err := os.Stat(config.IngestPath); err == nil {
@@ -111,7 +80,7 @@ func New(config Config) (*IngestService, error) {
 		Mutex:            &sync.Mutex{},
 		Scraper:          &media.MetadataScraper{},
 		Searcher:         tmdb.NewSearcher(tmdb.Config{}),
-		MediaStore:       &media.Store{},
+		mediaStore:       mediaStore,
 		config:           config,
 		items:            make([]*IngestItem, 0),
 		importHoldTimers: make(map[uuid.UUID]*time.Timer),
@@ -190,7 +159,7 @@ func (service *IngestService) DiscoverNewFiles() {
 	service.Lock()
 	defer service.Unlock()
 
-	sourcePaths := service.GetAllSourcePaths()
+	sourcePaths := service.mediaStore.GetAllSourcePaths()
 	sourcePathsLookup := make(map[string]bool, len(sourcePaths))
 	for _, path := range sourcePaths {
 		sourcePathsLookup[path] = true

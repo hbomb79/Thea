@@ -7,10 +7,20 @@ import "context"
  * and emitting update messages over the websocket.
  */
 
-type activityService struct{}
+type (
+	ActivityService struct {
+		eventBus EventCoordinator
+	}
+)
 
-func New() *activityService {
-	return &activityService{}
+func New() (*ActivityService, error) {
+	return &ActivityService{}, nil
 }
 
-func (service *activityService) Start(ctx context.Context) {}
+func (service *ActivityService) Run(ctx context.Context) {
+	// Listen to events we need to forward over the activity bus
+}
+
+func (service *ActivityService) RegisterEventCoordinator(ev EventCoordinator) {
+	service.eventBus = ev
+}

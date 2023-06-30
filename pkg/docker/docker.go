@@ -43,9 +43,7 @@ type docker struct {
 	broker     *broker.Broker[*dockerContainerStatus]
 }
 
-var DockerMgr = newDockerManager()
-
-func newDockerManager() DockerManager {
+func NewDockerManager() DockerManager {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {

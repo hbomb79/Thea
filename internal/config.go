@@ -48,10 +48,10 @@ func (config *TheaConfig) LoadFromFile(configPath string) error {
 	return nil
 }
 
-// getCacheDir will return the directory path used for storing cache information. It will first look to
+// GetCacheDir will return the directory path used for storing cache information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned. If the default
 // cannot be derived due to an error, a panic will occur.
-func (config *TheaConfig) getCacheDir() string {
+func (config *TheaConfig) GetCacheDir() string {
 	if config.CacheDirPath != "" {
 		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_SUFFIX)
 	}
@@ -65,9 +65,9 @@ func (config *TheaConfig) getCacheDir() string {
 	return filepath.Join(dir, THEA_USER_DIR_SUFFIX)
 }
 
-// getConfigDir will return the path used for storing config information. It will first look to
+// GetConfigDir will return the path used for storing config information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned
-func (config *TheaConfig) getConfigDir() string {
+func (config *TheaConfig) GetConfigDir() string {
 	if config.CacheDirPath != "" {
 		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_SUFFIX)
 	}

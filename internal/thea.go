@@ -14,6 +14,7 @@ import (
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
+	"github.com/hbomb79/Thea/pkg/docker"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
@@ -64,6 +65,7 @@ type theaImpl struct {
 	eventBus          activity.EventCoordinator
 	shutdownWaitGroup *sync.WaitGroup
 	config            TheaConfig
+	dockerManager     docker.DockerManager
 
 	mediaStore     *media.Store
 	workflowStore  *workflow.Store
@@ -84,6 +86,7 @@ func New(config TheaConfig) *theaImpl {
 	thea.config = config
 	thea.eventBus = activity.NewEventHandler()
 	thea.shutdownWaitGroup = &sync.WaitGroup{}
+	thea.dockerManager = docker.NewDockerManager()
 
 	/**     Stores      **/
 	thea.workflowStore = &workflow.Store{}
@@ -174,14 +177,15 @@ func (thea *theaImpl) initialiseDockerServices(config TheaConfig) error {
 	// provide the DB themselves
 	if config.Services.EnablePostgres {
 		log.Emit(logger.INFO, "Initialising embedded database...\n")
-		_, err := database.InitialiseDockerDatabase(config.Database, asyncErrorReport)
+		_, err := database.InitialiseDockerDatabase(thea.dockerManager, config.Database, asyncErrorReport)
 		if err != nil {
 			return err
 		}
 	}
+
 	if config.Services.EnablePgAdmin {
 		log.Emit(logger.INFO, "Initialising embedded pgAdmin server...\n")
-		_, err := database.InitialiseDockerPgAdmin(asyncErrorReport)
+		_, err := database.InitialiseDockerPgAdmin(thea.dockerManager, asyncErrorReport)
 		if err != nil {
 			return err
 		}

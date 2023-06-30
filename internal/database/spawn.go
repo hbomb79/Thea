@@ -21,7 +21,7 @@ type DatabaseConfig struct {
 	Port     string `yaml:"port" env:"DB_PORT" env-default:"5432"`
 }
 
-func InitialiseDockerDatabase(config DatabaseConfig, errChannel chan error) (docker.DockerContainer, error) {
+func InitialiseDockerDatabase(dockerManager docker.DockerManager, config DatabaseConfig, errChannel chan error) (docker.DockerContainer, error) {
 	// Setup container cofiguration
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -63,13 +63,13 @@ func InitialiseDockerDatabase(config DatabaseConfig, errChannel chan error) (doc
 
 	// Spawn docker container for postgres
 	db := docker.NewDockerContainer("db", "postgres:14.1-alpine", containerConfig, hostConfig)
-	if err := docker.DockerMgr.SpawnContainer(db); err != nil {
+	if err := dockerManager.SpawnContainer(db); err != nil {
 		return nil, err
 	}
 
 	// Watch for container crash (teardown)
 	go func() {
-		st, err := docker.DockerMgr.WaitForContainer(db, docker.CRASHED)
+		st, err := dockerManager.WaitForContainer(db, docker.CRASHED)
 		if st != docker.CRASHED || err != nil {
 			return
 		}
@@ -80,7 +80,7 @@ func InitialiseDockerDatabase(config DatabaseConfig, errChannel chan error) (doc
 	return db, nil
 }
 
-func InitialiseDockerPgAdmin(errChannel chan error) (docker.DockerContainer, error) {
+func InitialiseDockerPgAdmin(dockerManager docker.DockerManager, errChannel chan error) (docker.DockerContainer, error) {
 	// Setup container cofiguration
 	containerConfig := &container.Config{
 		Image: "dpage/pgadmin4",
@@ -103,13 +103,13 @@ func InitialiseDockerPgAdmin(errChannel chan error) (docker.DockerContainer, err
 
 	// Spawn docker container for postgres
 	db := docker.NewDockerContainer("pgAdmin", "dpage/pgadmin4", containerConfig, hostConfig)
-	if err := docker.DockerMgr.SpawnContainer(db); err != nil {
+	if err := dockerManager.SpawnContainer(db); err != nil {
 		return nil, err
 	}
 
 	// Watch for container crash (teardown)
 	go func() {
-		st, err := docker.DockerMgr.WaitForContainer(db)
+		st, err := dockerManager.WaitForContainer(db)
 		if st != docker.CRASHED || err != nil {
 			return
 		}

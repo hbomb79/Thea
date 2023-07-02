@@ -10,7 +10,7 @@ import (
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
-var log = logger.Log.GetLogger("Event")
+var log = logger.Get("Activity")
 
 // Events emitted by various parts of Thea that should be handled by another, silo'd part
 // of Theas' architecture.

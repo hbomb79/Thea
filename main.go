@@ -7,37 +7,42 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/hbomb79/Thea/internal"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
-var log = logger.Get("Bootstrap")
-
 const VERSION = 1.0
 
-func main() {
-	var (
-		conf              *internal.TheaConfig = &internal.TheaConfig{}
-		defaultConfigPath                      = filepath.Join(conf.GetConfigDir(), "/config.toml")
-		helpFlag                               = flag.Bool("help", false, "Whether to display help information")
-		configFlag                             = flag.String("config", "", fmt.Sprintf("The path to the config file that Thea can load, defaults to '%s'", defaultConfigPath))
-	)
+var (
+	log = logger.Get("Bootstrap")
 
+	conf              *internal.TheaConfig = &internal.TheaConfig{}
+	defaultConfigPath                      = filepath.Join(conf.GetConfigDir(), "/config.toml")
+	logLevel                               = flag.String("log-level", "info", "Define logging level from one of [verbose, debug, info, important, warning, error]")
+	helpFlag                               = flag.Bool("help", false, "Whether to display help information")
+	configFlag                             = flag.String("config", defaultConfigPath, "The path to the config file that Thea will load")
+)
+
+func main() {
 	flag.Parse()
+
+	level, err := parseLogLevelFromString(*logLevel)
+	if err != nil {
+		fmt.Println(err.Error())
+		flag.Usage()
+
+		return
+	}
+	logger.SetMinLoggingLevel(level)
 
 	if *helpFlag {
 		flag.Usage()
 	} else {
-		var path string
-		if *configFlag != "" {
-			path = *configFlag
-		} else {
-			path = defaultConfigPath
-		}
-
-		if err := conf.LoadFromFile(path); err != nil {
+		log.Emit(logger.DEBUG, "Loading configuration from '%s'\n", *configFlag)
+		if err := conf.LoadFromFile(*configFlag); err != nil {
 			panic(err)
 		}
 
@@ -66,4 +71,23 @@ func listenForInterrupt(ctxCancel context.CancelFunc) {
 
 	<-exitChannel
 	ctxCancel()
+}
+
+func parseLogLevelFromString(l string) (logger.LogLevel, error) {
+	switch strings.ToLower(l) {
+	case "verbose":
+		return logger.VERBOSE.Level(), nil
+	case "debug":
+		return logger.DEBUG.Level(), nil
+	case "info":
+		return logger.INFO.Level(), nil
+	case "important":
+		return logger.SUCCESS.Level(), nil
+	case "warning":
+		return logger.WARNING.Level(), nil
+	case "error":
+		return logger.ERROR.Level(), nil
+	default:
+		return logger.INFO.Level(), fmt.Errorf("logging level %s is not recognized", l)
+	}
 }

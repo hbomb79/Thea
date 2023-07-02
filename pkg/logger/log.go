@@ -2,7 +2,6 @@ package logger
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -39,31 +38,6 @@ const (
 	ERROR
 	FATAL
 )
-
-const DEFAULT_MIN_STATUS = info
-
-func getMinLogLevelFromEnv() LogLevel {
-	if value, ok := os.LookupEnv("THEA_LOG_LEVEL"); ok {
-		switch strings.ToLower(value) {
-		case "verbose":
-			return verbose
-		case "debug":
-			return debug
-		case "info":
-			return info
-		case "important":
-			return important
-		case "warning":
-			return warning
-		case "error":
-			return err
-		default:
-			fmt.Printf("ERR: logging level %v is not recognized, falling back to default\n", value)
-		}
-	}
-
-	return DEFAULT_MIN_STATUS
-}
 
 type LogLevel int
 
@@ -146,17 +120,12 @@ type loggerImpl struct {
 }
 
 func (l *loggerImpl) Emit(status LogStatus, message string, interpolations ...interface{}) {
-	Log.Emit(status, l.name, message, interpolations...)
+	manager.Emit(status, l.name, message, interpolations...)
 }
 
-type LoggerManager interface {
-	GetLogger(string) Logger
-	Emit(LogStatus, string, string, ...interface{})
-}
-
-var Log LoggerManager = &loggerMgr{
+var manager = &loggerMgr{
 	offset:   0,
-	minLevel: getMinLogLevelFromEnv(),
+	minLevel: info,
 }
 
 type loggerMgr struct {
@@ -186,6 +155,14 @@ func (l *loggerMgr) setNameOffset(offset int) {
 	}
 }
 
+func (l *loggerMgr) setMinLoggingLevel(level LogLevel) {
+	l.minLevel = level
+}
+
 func Get(name string) Logger {
-	return Log.GetLogger(name)
+	return manager.GetLogger(name)
+}
+
+func SetMinLoggingLevel(level LogLevel) {
+	manager.setMinLoggingLevel(level)
 }

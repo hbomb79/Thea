@@ -9,10 +9,14 @@ import (
 type (
 	Dto struct{}
 
-	TargetStore interface{}
+	Store interface{}
 
-	Controller struct{ Store TargetStore }
+	Controller struct{ Store Store }
 )
+
+func New(store Store) *Controller {
+	return &Controller{Store: store}
+}
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.POST("/", controller.create)

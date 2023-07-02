@@ -9,14 +9,18 @@ import (
 type (
 	Dto struct{}
 
-	MediaStore interface{}
+	Store interface{}
 
 	Controller struct {
-		Store MediaStore
+		Store Store
 	}
 )
 
-func (controller *Controller) SetupRoutes(eg echo.Group) {
+func New(store Store) *Controller {
+	return &Controller{Store: store}
+}
+
+func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.GET("/latest/", controller.getLatest)
 
 	eg.GET("/movie/:id/", controller.getMovie)

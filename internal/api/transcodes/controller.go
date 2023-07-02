@@ -10,15 +10,18 @@ import (
 type (
 	Dto struct{}
 
-	TranscodeStore interface {
-		Foo() error
+	Store interface {
 		Task() *transcode.TranscodeTask
 	}
 
 	Controller struct {
-		Store TranscodeStore
+		Store Store
 	}
 )
+
+func New(store Store) *Controller {
+	return &Controller{Store: store}
+}
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.POST("/", controller.create)

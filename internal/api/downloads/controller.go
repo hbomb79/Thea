@@ -15,6 +15,10 @@ type (
 	}
 )
 
+func New(store Store) *Controller {
+	return &Controller{Store: store}
+}
+
 func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.GET("/", controller.list)
 	eg.GET("/:id/", controller.get)

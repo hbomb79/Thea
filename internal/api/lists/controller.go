@@ -9,14 +9,18 @@ import (
 type (
 	Dto struct{}
 
-	ListsStore interface{}
+	Store interface{}
 
 	Controller struct {
-		Store ListsStore
+		Store Store
 	}
 )
 
-func (controller *Controller) SetupRoutes(eg echo.Group) {
+func New(store Store) *Controller {
+	return &Controller{Store: store}
+}
+
+func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.POST("/", controller.create)
 	eg.GET("/", controller.list)
 	eg.GET("/:id/", controller.get)

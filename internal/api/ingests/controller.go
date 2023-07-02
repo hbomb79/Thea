@@ -36,6 +36,10 @@ type (
 	}
 )
 
+func New(store Store) *Controller {
+	return &Controller{Store: store}
+}
+
 // Init accepts the Echo group for the ingest endpoints
 // and sets the routes on them.
 func (controller *Controller) SetRoutes(eg *echo.Group) {

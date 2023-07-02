@@ -17,27 +17,29 @@ import (
 )
 
 type (
-	Controller interface {
-		SetRoutes(*echo.Group)
-	}
-
 	RestConfig struct {
 		HostAddr string `toml:"host_address" env:"API_HOST_ADDR" env-default:"0.0.0.0:8080"`
+	}
+
+	controller interface {
+		SetRoutes(*echo.Group)
 	}
 
 	// The RestGateway is a thin-wrapper around the Echo HTTP router. It's sole responsbility
 	// is to create the routes Thea exposes, manage ongoing web socket connections and events,
 	// and to enforce authc + authz middleware where applicable.
 	RestGateway struct {
+		*broadcaster
+		config              *RestConfig
 		ec                  *echo.Echo
-		socket              socket.SocketHub
-		ingestController    Controller
-		transcodeController Controller
-		targetsController   Controller
-		downloadsController Controller
-		workflowController  Controller
-		listsController     Controller
-		mediaController     Controller
+		socket              *socket.SocketHub
+		ingestController    controller
+		transcodeController controller
+		targetsController   controller
+		downloadsController controller
+		workflowController  controller
+		listsController     controller
+		mediaController     controller
 	}
 )
 
@@ -48,9 +50,13 @@ func NewRestGateway(config *RestConfig, ingestStore ingests.Store, transcodeStor
 	ec := echo.New()
 	ec.HidePort = true
 	ec.HideBanner = true
+
+	socket := socket.NewSocketHub()
 	gateway := &RestGateway{
+		broadcaster:         newBroadcaster(socket, nil, ingestStore, nil, nil, nil, transcodeStore, nil),
+		config:              config,
 		ec:                  ec,
-		socket:              *socket.NewSocketHub(),
+		socket:              socket,
 		downloadsController: downloads.New(nil),
 		ingestController:    ingests.New(ingestStore),
 		transcodeController: transcodes.New(transcodeStore),
@@ -101,7 +107,7 @@ func (gateway *RestGateway) Run(parentCtx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := gateway.ec.Start(":5000"); err != nil {
+		if err := gateway.ec.Start(gateway.config.HostAddr); err != nil {
 			ctxCancel(err)
 		}
 	}()

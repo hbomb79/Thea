@@ -54,7 +54,7 @@ func (controller *Controller) list(ctx echo.Context) error {
 	items := controller.Store.AllItems()
 	dtos := make([]*Dto, len(items))
 	for k, v := range items {
-		dtos[k] = newDto(v)
+		dtos[k] = NewDto(v)
 	}
 
 	return ctx.JSON(http.StatusOK, dtos)
@@ -73,7 +73,7 @@ func (controller *Controller) get(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 
-	return ctx.JSON(http.StatusOK, newDto(item))
+	return ctx.JSON(http.StatusOK, NewDto(item))
 }
 
 // delete uses the 'id' path param from the context and retrieves the ingest from the
@@ -111,8 +111,8 @@ func (controller *Controller) postTroubleResolution(ctx echo.Context) error {
 	return ctx.NoContent(http.StatusOK)
 }
 
-// newDto creates a IngestDto using the IngestItem model.
-func newDto(item *ingest.IngestItem) *Dto {
+// NewDto creates a IngestDto using the IngestItem model.
+func NewDto(item *ingest.IngestItem) *Dto {
 	return &Dto{
 		Id:       item.Id,
 		Path:     item.Path,

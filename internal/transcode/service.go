@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/hbomb79/Thea/internal/activity"
+	"github.com/hbomb79/Thea/internal/event"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/workflow"
@@ -44,7 +44,7 @@ type (
 		tasks           []*TranscodeTask
 		consumedThreads int
 
-		eventBus activity.EventCoordinator
+		eventBus event.EventCoordinator
 
 		mediaStore     mediaStore
 		workflowStore  workflowStore
@@ -66,8 +66,8 @@ func New(config Config, mediaStore mediaStore, workflowStore workflowStore, targ
 // Note: when context is cancelled this method will not immediately return as it
 // will wait for it's running transcode tasks to cancel.
 func (service *transcodeService) Run(ctx context.Context) error {
-	eventChannel := make(activity.HandlerChannel, 2)
-	service.eventBus.RegisterHandlerChannel(activity.INGEST_MEDIA_COMPLETE, eventChannel)
+	eventChannel := make(event.HandlerChannel, 2)
+	service.eventBus.RegisterHandlerChannel(eventChannel, event.INGEST_COMPLETE)
 
 	for {
 		select {
@@ -75,18 +75,18 @@ func (service *transcodeService) Run(ctx context.Context) error {
 			service.startWaitingTasks(ctx)
 		case taskId := <-service.taskChange:
 			service.handleTaskUpdate(taskId)
-		case event := <-eventChannel:
-			ev := event.Event
-			if ev != activity.INGEST_MEDIA_COMPLETE {
+		case message := <-eventChannel:
+			ev := message.Event
+			if ev != event.INGEST_COMPLETE {
 				log.Emit(logger.WARNING, "received unknown event %s\n", ev)
 				continue
 			}
 
-			if mediaId, ok := event.Payload.(uuid.UUID); ok {
+			if mediaId, ok := message.Payload.(uuid.UUID); ok {
 				log.Emit(logger.DEBUG, "newly ingested media with ID %s detected\n", mediaId)
 				service.createWorkflowTasksForMedia(mediaId)
 			} else {
-				log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, event.Payload)
+				log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
 			}
 		case <-ctx.Done():
 			log.Emit(logger.STOP, "Shutting down (context cancelled). Waiting for transcode tasks to cancel.\n")
@@ -99,7 +99,7 @@ func (service *transcodeService) Run(ctx context.Context) error {
 // RegisterEventCoordinator allows the consumer/manager of this service to
 // inject an event bus that we can use to send/receive messages with other
 // parts of the system.
-func (service *transcodeService) RegisterEventCoordinator(ev activity.EventCoordinator) {
+func (service *transcodeService) RegisterEventCoordinator(ev event.EventCoordinator) {
 	service.eventBus = ev
 }
 
@@ -223,9 +223,12 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 
 	if task.status == CANCELLED || task.status == COMPLETE {
 		service.removeTaskFromQueue(task.id)
+		service.eventBus.Dispatch(event.TRANSCODE_COMPLETE, taskId)
+
+		return
 	}
 
-	service.eventBus.Dispatch(activity.TRANSCODE_TASK_UPDATE, taskId)
+	service.eventBus.Dispatch(event.TRANSCODE_UPDATE, taskId)
 }
 
 // createWorkflowTasksForMedia takes a media ID, and queries the Ffmpeg Store for a workflow

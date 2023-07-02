@@ -21,34 +21,34 @@ import (
 var log = logger.Get("IngestServ")
 
 type (
-	Scraper interface {
+	scraper interface {
 		ScrapeFileForMediaInfo(path string) (*media.FileMediaMetadata, error)
 	}
 
-	MediaSearcher interface {
+	searcher interface {
 		SearchForEpisode(*media.FileMediaMetadata) (*media.Episode, error)
 		SearchForMovie(*media.FileMediaMetadata) (*media.Movie, error)
 		GetSeason(string, int) (*media.Season, error)
 		GetSeries(string) (*media.Series, error)
 	}
 
-	MediaStore interface {
+	mediaStore interface {
 		GetAllSourcePaths() []string
 	}
 
-	// IngestService is responsible for managing the automatic detection
+	// ingestService is responsible for managing the automatic detection
 	// and ingestion of files from the servers file system. The detected
 	// files should be:
 	// - Checked against a blacklist to ensure they should be processed
 	// - Run through a metadata scraper to find out as much information as possible
 	// - Searched for in TMDB using the information we scraped
 	// - Added to Thea's database, along with any related data
-	IngestService struct {
+	ingestService struct {
 		*sync.Mutex
-		Scraper
-		Searcher MediaSearcher
+		scraper
+		Searcher searcher
 
-		mediaStore MediaStore
+		mediaStore mediaStore
 
 		config           Config
 		items            []*IngestItem
@@ -63,7 +63,7 @@ type (
 // The configs 'IngestPath' is validated to be an existing directory.
 // If the directory is missing it will be created, if the path
 // provided points to an existing FILE, an error is returned.
-func New(config Config, mediaStore MediaStore) (*IngestService, error) {
+func New(config Config, store mediaStore) (*ingestService, error) {
 	// Ensure config ingest path is a valid directory, create it
 	// if it's missing.
 	if info, err := os.Stat(config.IngestPath); err == nil {
@@ -76,11 +76,11 @@ func New(config Config, mediaStore MediaStore) (*IngestService, error) {
 		return nil, fmt.Errorf("ingestion path '%s' could not be accessed: %s", config.IngestPath, err.Error())
 	}
 
-	service := &IngestService{
+	service := &ingestService{
 		Mutex:            &sync.Mutex{},
-		Scraper:          &media.MetadataScraper{},
+		scraper:          &media.MetadataScraper{},
 		Searcher:         tmdb.NewSearcher(tmdb.Config{}),
-		mediaStore:       mediaStore,
+		mediaStore:       store,
 		config:           config,
 		items:            make([]*IngestItem, 0),
 		importHoldTimers: make(map[uuid.UUID]*time.Timer),
@@ -104,7 +104,7 @@ func New(config Config, mediaStore MediaStore) (*IngestService, error) {
 // has enabled this).
 // To kill the service, the calling code should cancel the context
 // provided.
-func (service *IngestService) Run(ctx context.Context) error {
+func (service *ingestService) Run(ctx context.Context) error {
 	fsNotifyChannel := make(chan notify.EventInfo)
 	forceIngestChannel := time.NewTicker(time.Second * time.Duration(service.config.ForceSyncSeconds)).C
 
@@ -129,7 +129,7 @@ func (service *IngestService) Run(ctx context.Context) error {
 // This function will claim the first IDLE item it finds and attempt to ingest it.
 // If the ingestion fails with an IngestTrouble, then it will be set on
 // the item and it's state set to TROUBLED.
-func (service *IngestService) PerformItemIngest(w worker.Worker) (bool, error) {
+func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 	item := service.claimIdleItem()
 	if item == nil {
 		return false, nil
@@ -155,7 +155,7 @@ func (service *IngestService) PerformItemIngest(w worker.Worker) (bool, error) {
 // be ignored.
 //
 // Note: This function will take ownership of the mutex, and releases it when returning
-func (service *IngestService) DiscoverNewFiles() {
+func (service *ingestService) DiscoverNewFiles() {
 	service.Lock()
 	defer service.Unlock()
 
@@ -210,7 +210,7 @@ func (service *IngestService) DiscoverNewFiles() {
 // This method does not error if the itemID does not exist.
 //
 // Note: This function takes ownership of the mutex and releases it on return
-func (service *IngestService) RemoveItem(itemID uuid.UUID) error {
+func (service *ingestService) RemoveItem(itemID uuid.UUID) error {
 	service.Lock()
 	defer service.Unlock()
 
@@ -230,7 +230,7 @@ func (service *IngestService) RemoveItem(itemID uuid.UUID) error {
 
 // Item accepts the ID of an ingest item and attempts to find it
 // in the services queue. If it cannot be found, nil is returned.
-func (service *IngestService) Item(itemID uuid.UUID) *IngestItem {
+func (service *ingestService) Item(itemID uuid.UUID) *IngestItem {
 	for _, item := range service.items {
 		if item.Id == itemID {
 			return item
@@ -242,7 +242,7 @@ func (service *IngestService) Item(itemID uuid.UUID) *IngestItem {
 
 // AllItems returns a pointer to the array containing all
 // the IngestItems being processed by this service.
-func (service *IngestService) AllItems() []*IngestItem {
+func (service *ingestService) AllItems() []*IngestItem {
 	return service.items
 }
 
@@ -256,7 +256,7 @@ func (service *IngestService) AllItems() []*IngestItem {
 // then a new timer will be scheduled to re-evaluate the item hold.
 //
 // Note: this function takes ownership of the mutex, and releases it when returning
-func (service *IngestService) evaluateItemHold(id uuid.UUID) {
+func (service *ingestService) evaluateItemHold(id uuid.UUID) {
 	service.Lock()
 	defer service.Unlock()
 
@@ -285,7 +285,7 @@ func (service *IngestService) evaluateItemHold(id uuid.UUID) {
 // scheduleImportHoldTimer will call evaluateItemHold for the item provided
 // after the delay duration specified has elapsed. Any existing import hold timer
 // for the item specified will be *cancelled* before the new timer is created.
-func (service *IngestService) scheduleImportHoldTimer(id uuid.UUID, delay time.Duration) {
+func (service *ingestService) scheduleImportHoldTimer(id uuid.UUID, delay time.Duration) {
 	service.clearImportHoldTimer(id)
 	service.importHoldTimers[id] = time.AfterFunc(delay, func() {
 		service.evaluateItemHold(id)
@@ -294,7 +294,7 @@ func (service *IngestService) scheduleImportHoldTimer(id uuid.UUID, delay time.D
 
 // clearImportHoldTimer cancels and deletes the import hold timer associatted
 // with the item ID specified.
-func (service *IngestService) clearImportHoldTimer(id uuid.UUID) {
+func (service *ingestService) clearImportHoldTimer(id uuid.UUID) {
 	if timer, ok := service.importHoldTimers[id]; ok {
 		timer.Stop()
 		delete(service.importHoldTimers, id)
@@ -303,7 +303,7 @@ func (service *IngestService) clearImportHoldTimer(id uuid.UUID) {
 
 // clearAllImportHoldTimers cancels and deletes the import hold timers for
 // all items.
-func (service *IngestService) clearAllImportHoldTimers() {
+func (service *ingestService) clearAllImportHoldTimers() {
 	for key, timer := range service.importHoldTimers {
 		timer.Stop()
 		delete(service.importHoldTimers, key)
@@ -315,7 +315,7 @@ func (service *IngestService) clearAllImportHoldTimers() {
 // worker from claiming it once the mutex lock is released.
 //
 // Note: This function takes ownership of the mutex, and releases it when returning
-func (service *IngestService) claimIdleItem() *IngestItem {
+func (service *ingestService) claimIdleItem() *IngestItem {
 	service.Lock()
 	defer service.Unlock()
 
@@ -329,7 +329,7 @@ func (service *IngestService) claimIdleItem() *IngestItem {
 	return nil
 }
 
-func (service *IngestService) wakeupWorkerPool() {
+func (service *ingestService) wakeupWorkerPool() {
 	service.workerPool.WakeupWorkers()
 }
 

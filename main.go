@@ -51,7 +51,7 @@ func main() {
 }
 
 func startThea(config *internal.TheaConfig) {
-	log.Emit(logger.INFO, " --- Starting Thea (version %v) ---\n", VERSION)
+	log.Emit(logger.INFO, " --- Starting Thea (version %f) ---\n", VERSION)
 
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	go listenForInterrupt(ctxCancel)

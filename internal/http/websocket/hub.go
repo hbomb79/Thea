@@ -65,7 +65,7 @@ func (hub *SocketHub) Start(ctx context.Context) {
 		socketLogger.Emit(logger.WARNING, "Attempting to start socketHub when already running! Ignoring request.\n")
 		return
 	} else if ctx.Err() != nil {
-		socketLogger.Emit(logger.STOP, "Refuding to start socket hub as provided context is already cancelled\n")
+		socketLogger.Emit(logger.STOP, "Refusing to start socket hub as provided context is already cancelled\n")
 		return
 	}
 	socketLogger.Emit(logger.INFO, "Opening SocketHub!\n")

@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hbomb79/Thea/internal/activity"
 	"github.com/hbomb79/Thea/internal/api"
 	"github.com/hbomb79/Thea/internal/database"
+	"github.com/hbomb79/Thea/internal/event"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/media"
@@ -23,7 +23,7 @@ var log = logger.Get("Core")
 
 type (
 	EventParticipator interface {
-		RegisterEventCoordinator(*activity.EventCoordinator)
+		RegisterEventCoordinator(event.EventCoordinator)
 	}
 
 	RunnableService interface {
@@ -32,23 +32,23 @@ type (
 
 	RestGateway interface {
 		RunnableService
-	}
-
-	ActivityService interface {
-		RunnableService
+		BroadcastTaskUpdate(uuid.UUID) error
+		BroadcastTaskProgressUpdate(uuid.UUID) error
+		BroadcastWorkflowUpdate(uuid.UUID) error
+		BroadcastDownloadUpdate(uuid.UUID) error
+		BroadcastDownloadProgressUpdate(uuid.UUID) error
+		BroadcastMediaUpdate(uuid.UUID) error
+		BroadcastIngestUpdate(uuid.UUID) error
 	}
 
 	TranscodeService interface {
 		RunnableService
+		EventParticipator
 		NewTask(uuid.UUID, uuid.UUID) error
 		CancelTask(uuid.UUID)
 		AllTasks() []*transcode.TranscodeTask
 		Task(uuid.UUID) *transcode.TranscodeTask
 		TaskForMediaAndTarget(uuid.UUID, uuid.UUID) *transcode.TranscodeTask
-	}
-
-	DownloadService interface {
-		RunnableService
 	}
 
 	IngestService interface {
@@ -63,47 +63,38 @@ type (
 // for initialising embedded support services, services, stores, event
 // handling, et cetera...
 type theaImpl struct {
-	eventBus      activity.EventCoordinator
-	config        TheaConfig
-	dockerManager docker.DockerManager
+	eventBus        event.EventCoordinator
+	activityManager *activityManager
+	config          TheaConfig
+	dockerManager   docker.DockerManager
 
 	mediaStore     *media.Store
 	workflowStore  *workflow.Store
 	targetStore    *ffmpeg.Store
 	transcodeStore *transcode.Store
 
-	activityService  ActivityService
+	restGateway      RestGateway
 	ingestService    IngestService
 	transcodeService TranscodeService
-	restGateway      RestGateway
 }
 
 const THEA_USER_DIR_SUFFIX = "/thea/"
 
 func New(config TheaConfig) *theaImpl {
-	/**  Bootstrapping  **/
 	log.Emit(logger.DEBUG, "Bootstrapping Thea services using config: %#v\n", config)
-	thea := &theaImpl{}
-	thea.config = config
-	thea.eventBus = activity.NewEventHandler()
+	thea := &theaImpl{
+		eventBus:       event.NewEventHandler(),
+		config:         config,
+		mediaStore:     &media.Store{},
+		workflowStore:  &workflow.Store{},
+		targetStore:    &ffmpeg.Store{},
+		transcodeStore: &transcode.Store{},
+	}
 
-	/**     Stores      **/
-	thea.workflowStore = &workflow.Store{}
-	thea.targetStore = &ffmpeg.Store{}
-	thea.mediaStore = &media.Store{}
-	thea.transcodeStore = &transcode.Store{}
-
-	/**     Services    **/
 	if serv, err := ingest.New(config.IngestService, thea.mediaStore); err == nil {
 		thea.ingestService = serv
 	} else {
 		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))
-	}
-
-	if serv, err := activity.New(); err == nil {
-		thea.activityService = serv
-	} else {
-		panic(fmt.Sprintf("failed to construct activity service due to error: %s", err.Error()))
 	}
 
 	if serv, err := transcode.New(config.Format, thea.mediaStore, thea.workflowStore, thea.targetStore, thea.transcodeStore); err == nil {
@@ -113,6 +104,7 @@ func New(config TheaConfig) *theaImpl {
 	}
 
 	thea.restGateway = api.NewRestGateway(&config.RestConfig, thea.ingestService, nil)
+	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	return thea
 }
@@ -140,7 +132,6 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	}
 
 	wg := &sync.WaitGroup{}
-	thea.spawnAsyncService(ctx, wg, thea.activityService, "activity-service", handleServiceCrash)
 	thea.spawnAsyncService(ctx, wg, thea.ingestService, "ingest-service", handleServiceCrash)
 	thea.spawnAsyncService(ctx, wg, thea.transcodeService, "transcode-service", handleServiceCrash)
 	thea.spawnAsyncService(ctx, wg, thea.restGateway, "rest-gateway", handleServiceCrash)
@@ -155,12 +146,8 @@ func (thea *theaImpl) Run(parent context.Context) error {
 // go-routine, ensuring that the Thea service waitgroup is updated correctly
 func (thea *theaImpl) spawnAsyncService(context context.Context, wg *sync.WaitGroup, service RunnableService, serviceLabel string, crashHandler func(string, error)) {
 	log.Emit(logger.NEW, "Spawning %s\n", serviceLabel)
-	if r, ok := service.(EventParticipator); ok {
-		log.Emit(logger.DEBUG, "Registering event coordinator on %s\n", serviceLabel)
-		r.RegisterEventCoordinator(&thea.eventBus)
-	}
-
 	wg.Add(1)
+
 	go func(wg *sync.WaitGroup, label string, crash func(string, error)) {
 		defer func() {
 			if r := recover(); r != nil {

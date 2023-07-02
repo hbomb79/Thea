@@ -1,8 +1,9 @@
 // A collection of event names and common methods used to handle the events, typically
 // redirecting the handling to a service method or other method via the `Handler` interface.
-package activity
+package event
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -34,7 +35,7 @@ type (
 	EventHandler interface {
 		RegisterAsyncHandlerFunction(Event, HandlerMethod)
 		RegisterHandlerFunction(Event, HandlerMethod)
-		RegisterHandlerChannel(Event, HandlerChannel)
+		RegisterHandlerChannel(HandlerChannel, ...Event)
 	}
 
 	EventCoordinator interface {
@@ -54,8 +55,18 @@ type (
 )
 
 const (
-	INGEST_MEDIA_COMPLETE Event = "ingest:media:complete"
-	TRANSCODE_TASK_UPDATE Event = "transcode:task:update"
+	INGEST_UPDATE   Event = "ingest:update"
+	INGEST_COMPLETE Event = "ingest:complete"
+
+	TRANSCODE_UPDATE        Event = "transcode:task:update"
+	TRANSCODE_COMPLETE      Event = "transcode:task:complete"
+	TRANSCODE_TASK_PROGRESS Event = "transcode:task:update:progress"
+
+	WORKFLOW_UPDATE Event = "workflow:update"
+
+	DOWNLOAD_UPDATE   Event = "download:update"
+	DOWNLOAD_COMPLETE Event = "download:complete"
+	DOWNLOAD_PROGRESS Event = "download:update:progress"
 )
 
 func NewEventHandler() EventCoordinator {
@@ -72,8 +83,10 @@ func NewEventHandler() EventCoordinator {
 // If the channel is BLOCKED when the event bus attempts to send the message on the handler channel,
 // then the thread dispatching the event will also be BLOCKED. It is recomended to buffer the handler channels
 // appropiately to avoid dispatcher-side blocking.
-func (handler *eventHandler) RegisterHandlerChannel(event Event, handle HandlerChannel) {
-	handler.chanHandlers[event] = append(handler.chanHandlers[event], handle)
+func (handler *eventHandler) RegisterHandlerChannel(handle HandlerChannel, events ...Event) {
+	for _, event := range events {
+		handler.chanHandlers[event] = append(handler.chanHandlers[event], handle)
+	}
 }
 
 // RegisterHandler takes an event type and a handler method which will be stored
@@ -137,9 +150,23 @@ func (handler *eventHandler) validatePayload(event Event, payload Payload) error
 	}
 
 	switch event {
-	case INGEST_MEDIA_COMPLETE:
+	case INGEST_UPDATE:
 		fallthrough
-	case TRANSCODE_TASK_UPDATE:
+	case INGEST_COMPLETE:
+		fallthrough
+	case TRANSCODE_COMPLETE:
+		fallthrough
+	case TRANSCODE_TASK_PROGRESS:
+		fallthrough
+	case WORKFLOW_UPDATE:
+		fallthrough
+	case DOWNLOAD_UPDATE:
+		fallthrough
+	case DOWNLOAD_COMPLETE:
+		fallthrough
+	case DOWNLOAD_PROGRESS:
+		fallthrough
+	case TRANSCODE_UPDATE:
 		if _, ok := payload.(uuid.UUID); !ok {
 			return fmt.Errorf("illegal payload (type %s) for %s event. Expected uuid.UUID payload", payloadTypeName, event)
 		}
@@ -147,5 +174,5 @@ func (handler *eventHandler) validatePayload(event Event, payload Payload) error
 		return nil
 	}
 
-	return fmt.Errorf("TheaEvent type not recognized for validation")
+	return errors.New("event type not recognized for validation")
 }

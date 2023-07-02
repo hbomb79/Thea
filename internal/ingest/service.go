@@ -104,7 +104,7 @@ func New(config Config, mediaStore MediaStore) (*IngestService, error) {
 // has enabled this).
 // To kill the service, the calling code should cancel the context
 // provided.
-func (service *IngestService) Run(ctx context.Context) {
+func (service *IngestService) Run(ctx context.Context) error {
 	fsNotifyChannel := make(chan notify.EventInfo)
 	forceIngestChannel := time.NewTicker(time.Second * time.Duration(service.config.ForceSyncSeconds)).C
 
@@ -119,7 +119,7 @@ func (service *IngestService) Run(ctx context.Context) {
 		case <-forceIngestChannel:
 			service.DiscoverNewFiles()
 		case <-ctx.Done():
-			return
+			return nil
 		}
 	}
 }
@@ -170,7 +170,7 @@ func (service *IngestService) DiscoverNewFiles() {
 
 	newItems, err := recursivelyWalkFileSystem(service.config.IngestPath, sourcePathsLookup)
 	if err != nil {
-		log.Emit(logger.FATAL, "file system polling failed: %s", err.Error())
+		log.Emit(logger.FATAL, "file system polling failed: %s\n", err.Error())
 		return
 	}
 

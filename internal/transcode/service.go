@@ -65,7 +65,7 @@ func New(config Config, mediaStore mediaStore, workflowStore workflowStore, targ
 // until the provided context is cancelled.
 // Note: when context is cancelled this method will not immediately return as it
 // will wait for it's running transcode tasks to cancel.
-func (service *transcodeService) Run(ctx context.Context) {
+func (service *transcodeService) Run(ctx context.Context) error {
 	eventChannel := make(activity.HandlerChannel, 2)
 	service.eventBus.RegisterHandlerChannel(activity.INGEST_MEDIA_COMPLETE, eventChannel)
 
@@ -91,7 +91,7 @@ func (service *transcodeService) Run(ctx context.Context) {
 		case <-ctx.Done():
 			log.Emit(logger.STOP, "Shutting down (context cancelled). Waiting for transcode tasks to cancel.\n")
 			service.taskWg.Wait()
-			return
+			return nil
 		}
 	}
 }

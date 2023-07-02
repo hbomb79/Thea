@@ -1,6 +1,7 @@
 package socket
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -59,9 +60,12 @@ func (hub *SocketHub) BindCommand(command string, handler SocketHandler) *Socket
 
 // Start beings the socket hub by listening on all related channels
 // for incoming clients and messages
-func (hub *SocketHub) Start() {
+func (hub *SocketHub) Start(ctx context.Context) {
 	if hub.running {
 		socketLogger.Emit(logger.WARNING, "Attempting to start socketHub when already running! Ignoring request.\n")
+		return
+	} else if ctx.Err() != nil {
+		socketLogger.Emit(logger.STOP, "Refuding to start socket hub as provided context is already cancelled\n")
 		return
 	}
 	socketLogger.Emit(logger.INFO, "Opening SocketHub!\n")
@@ -121,7 +125,7 @@ loop:
 			}
 
 			socketLogger.Emit(logger.WARNING, "Attempted to deregister unknown client {%v}\n", client.id)
-		case <-hub.doneCh:
+		case <-ctx.Done():
 			// Shutdown the socket hub, closing all clients and breaking this select loop
 			socketLogger.Emit(logger.REMOVE, "Shutting down socket hub! Closing all clients.\n")
 			break loop
@@ -200,18 +204,6 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	// Start the read loop for the client
 	if err := client.Read(hub.receiveCh); err != nil {
 		socketLogger.Emit(logger.WARNING, "Client {%v} closed, error: %v\n", client.id, err.Error())
-	}
-}
-
-// Signals the SocketHub to close
-func (hub *SocketHub) Close() {
-	// Send done notification to the hub
-	// We do this non-blocking because if the
-	// hub closes, it calls this function to close
-	// the channels and therefore nothing it receiving on doneCh
-	select {
-	case hub.doneCh <- 1:
-	default:
 	}
 }
 

@@ -16,28 +16,26 @@ import (
 // various user config supplied by file, or
 // manually inside the code.
 type TheaConfig struct {
-	Format        transcode.Config        `yaml:"transcode_service"`
-	IngestService ingest.Config           `yaml:"ingest_service"`
-	Services      DockerConfig            `yaml:"docker_services"`
-	Database      database.DatabaseConfig `yaml:"database" env-required:"true"`
-	RestConfig    api.RestConfig
-	OmdbKey       string `yaml:"omdb_api_key" env:"OMDB_API_KEY" env-required:"true"`
-	CacheDirPath  string `yaml:"cache_dir" env:"CACHE_DIR"`
-	ConfigDirPath string `yaml:"config_dir" env:"CONFIG_DIR"`
-	ApiHostAddr   string `yaml:"host" env:"HOST_ADDR" env-default:"0.0.0.0"`
-	ApiHostPort   string `yaml:"port" env:"HOST_PORT" env-default:"8080"`
+	Format        transcode.Config        `toml:"transcode"`
+	IngestService ingest.Config           `toml:"ingestion"`
+	Services      DockerConfig            `toml:"docker"`
+	Database      database.DatabaseConfig `toml:"database"`
+	RestConfig    api.RestConfig          `toml:"api"`
+	OmdbKey       string                  `toml:"omdb_api_key" env:"OMDB_API_KEY" env-required:"true"`
+	CacheDirPath  string                  `toml:"cache_dir" env:"CACHE_DIR"`
+	ConfigDirPath string                  `toml:"config_dir" env:"CONFIG_DIR"`
 }
 
 // DockerConfig is used to enable/disable the internal intialisation of
 // supporting services for Thea. By default, these will be enabled so that Thea
 // will initialise them automatically.
 type DockerConfig struct {
-	EnablePostgres bool `yaml:"enable_postgres" env:"SERVICE_ENABLE_POSTGRES" env-default:"true"`
-	EnablePgAdmin  bool `yaml:"enable_pg_admin" env:"SERVICE_ENABLE_PGADMIN" env-default:"false"`
-	EnableFrontend bool `yaml:"enable_frontend" env:"SERVICE_ENABLE_UI" env-default:"false"`
+	EnablePostgres bool `toml:"enable_postgres" env:"SERVICE_ENABLE_POSTGRES"`
+	EnablePgAdmin  bool `toml:"enable_pg_admin" env:"SERVICE_ENABLE_PGADMIN"`
+	EnableFrontend bool `toml:"enable_frontend" env:"SERVICE_ENABLE_UI"`
 }
 
-// Loads a configuration file formatted in YAML in to a
+// Loads a configuration file formatted in TOML in to a
 // TheaConfig struct ready to be passed to Processor
 func (config *TheaConfig) LoadFromFile(configPath string) error {
 	err := cleanenv.ReadConfig(configPath, config)
@@ -68,8 +66,8 @@ func (config *TheaConfig) GetCacheDir() string {
 // GetConfigDir will return the path used for storing config information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned
 func (config *TheaConfig) GetConfigDir() string {
-	if config.CacheDirPath != "" {
-		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_SUFFIX)
+	if config.ConfigDirPath != "" {
+		return filepath.Join(config.ConfigDirPath, THEA_USER_DIR_SUFFIX)
 	}
 
 	// Derive default

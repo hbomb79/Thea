@@ -45,11 +45,11 @@ func (db *dbServer) Connect(config DatabaseConfig) error {
 	for {
 		gorm, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
-			if attempt >= 3 {
+			if attempt >= 5 {
 				dbLogger.Emit(logger.ERROR, "All attempts FAILED!\n")
 				return err
 			} else {
-				dbLogger.Emit(logger.WARNING, "Attempt (%v/3) failed... Retrying in 3s\n", attempt)
+				dbLogger.Emit(logger.WARNING, "Attempt (%v/5) failed... Retrying in 3s\n", attempt)
 				attempt++
 				time.Sleep(time.Second * 3)
 				continue

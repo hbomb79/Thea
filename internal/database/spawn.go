@@ -14,14 +14,14 @@ import (
 // DatabaseConfig is a subset of the configuration focusing solely
 // on database connection items
 type DatabaseConfig struct {
-	User     string `yaml:"username" env:"DB_USERNAME" env-required:"true"`
-	Password string `yaml:"password" env:"DB_PASSWORD" env-required:"true"`
-	Name     string `yaml:"name" env:"DB_NAME" env-default:"THEA_DB"`
-	Host     string `yaml:"host" env:"DB_HOST" env-default:"0.0.0.0"`
-	Port     string `yaml:"port" env:"DB_PORT" env-default:"5432"`
+	User     string `toml:"username" env:"DB_USERNAME" env-required:"true"`
+	Password string `toml:"password" env:"DB_PASSWORD" env-required:"true"`
+	Name     string `toml:"name" env:"DB_NAME" env-default:"THEA_DB"`
+	Host     string `toml:"host" env:"DB_HOST" env-default:"0.0.0.0"`
+	Port     string `toml:"port" env:"DB_PORT" env-default:"5432"`
 }
 
-func InitialiseDockerDatabase(dockerManager docker.DockerManager, config DatabaseConfig, errChannel chan error) (docker.DockerContainer, error) {
+func InitialiseDockerDatabase(dockerManager docker.DockerManager, config DatabaseConfig, crashHandler func(error)) (docker.DockerContainer, error) {
 	// Setup container cofiguration
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -74,13 +74,13 @@ func InitialiseDockerDatabase(dockerManager docker.DockerManager, config Databas
 			return
 		}
 
-		errChannel <- fmt.Errorf("container %s has crashed", db)
+		crashHandler(fmt.Errorf("container %s has crashed", db))
 	}()
 
 	return db, nil
 }
 
-func InitialiseDockerPgAdmin(dockerManager docker.DockerManager, errChannel chan error) (docker.DockerContainer, error) {
+func InitialiseDockerPgAdmin(dockerManager docker.DockerManager, crashHandler func(error)) (docker.DockerContainer, error) {
 	// Setup container cofiguration
 	containerConfig := &container.Config{
 		Image: "dpage/pgadmin4",
@@ -114,7 +114,7 @@ func InitialiseDockerPgAdmin(dockerManager docker.DockerManager, errChannel chan
 			return
 		}
 
-		errChannel <- fmt.Errorf("container %s has crashed", db)
+		crashHandler(fmt.Errorf("container %s has crashed", db))
 	}()
 
 	return db, nil

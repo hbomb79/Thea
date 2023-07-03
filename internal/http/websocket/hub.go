@@ -1,4 +1,4 @@
-package socket
+package websocket
 
 import (
 	"context"
@@ -32,7 +32,7 @@ type SocketHub struct {
 // Returns a new SocketHub with the channels,
 // maps and slices initialised to sane starting
 // values
-func NewSocketHub() *SocketHub {
+func New() *SocketHub {
 	return &SocketHub{
 		handlers: make(map[string]SocketHandler),
 		upgrader: &websocket.Upgrader{

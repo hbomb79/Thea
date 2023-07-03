@@ -1,12 +1,70 @@
 package media
 
 import (
+	"errors"
+	"time"
+
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/database"
 	"gorm.io/gorm"
 )
 
-type Store struct {
-	db *gorm.DB
+type (
+	// Season represents the information Thea stores about a season
+	// of episodes itself. A season is related to many episodes (however
+	// this payload does not contain them); additionally, a series is related
+	// to many seasons.
+	Season struct {
+		Id        uuid.UUID `gorm:"primaryKey"`
+		CreatedAt time.Time
+		UpdatedAt time.Time
+		TmdbId    string `gorm:"uniqueIndex"`
+	}
+
+	// Series represents the information Thea stores about a series. A one-to-many
+	// relationship exists between series and seasons, although the seasons themselves
+	// are not contained within this struct.
+	Series struct {
+		Id        uuid.UUID `gorm:"primaryKey"`
+		CreatedAt time.Time
+		UpdatedAt time.Time
+		TmdbId    string `gorm:"uniqueIndex"`
+	}
+
+	// Episode contains all the information unique to an episode, combined
+	// with the 'Common' struct.
+	Episode struct {
+		SeasonNumber  int
+		EpisodeNumber int
+		Common
+	}
+
+	Movie struct {
+		Common
+	}
+
+	Common struct {
+		Id         uuid.UUID `gorm:"primaryKey"`
+		CreatedAt  time.Time
+		UpdatedAt  time.Time
+		Title      string
+		Resolution int
+		SourcePath string
+		TmdbId     string `gorm:"uniqueIndex"`
+	}
+
+	Store struct {
+		db *gorm.DB
+	}
+)
+
+func NewStore(db database.Manager) (*Store, error) {
+	if instance := db.GetInstance(); instance != nil {
+		db.RegisterModels(Movie{}, Episode{}, Series{}, Season{})
+		return &Store{db: instance}, nil
+	}
+
+	return nil, errors.New("database has no available instance")
 }
 
 // SaveMovie upserts the provided Movie model to the database. Existing models

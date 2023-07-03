@@ -69,7 +69,7 @@ const (
 	DOWNLOAD_PROGRESS Event = "download:update:progress"
 )
 
-func NewEventHandler() EventCoordinator {
+func New() EventCoordinator {
 	return &eventHandler{
 		fnHandlers:   make(map[Event][]handlerMethod),
 		chanHandlers: make(map[Event][]HandlerChannel),

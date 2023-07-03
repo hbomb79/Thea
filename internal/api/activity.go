@@ -11,7 +11,7 @@ import (
 	"github.com/hbomb79/Thea/internal/api/targets"
 	"github.com/hbomb79/Thea/internal/api/transcodes"
 	"github.com/hbomb79/Thea/internal/api/workflows"
-	socket "github.com/hbomb79/Thea/internal/http/websocket"
+	"github.com/hbomb79/Thea/internal/http/websocket"
 )
 
 const (
@@ -32,7 +32,7 @@ type (
 	MediaUpdate            struct{}
 
 	broadcaster struct {
-		socketHub      *socket.SocketHub
+		socketHub      *websocket.SocketHub
 		downloadStore  downloads.Store
 		ingestStore    ingests.Store
 		listStore      lists.Store
@@ -44,7 +44,7 @@ type (
 )
 
 func newBroadcaster(
-	socketHub *socket.SocketHub,
+	socketHub *websocket.SocketHub,
 	downloadStore downloads.Store,
 	ingestStore ingests.Store,
 	listStore lists.Store,
@@ -89,9 +89,9 @@ func (hub *broadcaster) BroadcastIngestUpdate(id uuid.UUID) error {
 }
 
 func (hub *broadcaster) broadcast(title string, update any) {
-	hub.socketHub.Send(&socket.SocketMessage{
+	hub.socketHub.Send(&websocket.SocketMessage{
 		Title: title,
 		Body:  map[string]interface{}{"arguments": update},
-		Type:  socket.Update,
+		Type:  websocket.Update,
 	})
 }

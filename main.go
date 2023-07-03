@@ -19,17 +19,16 @@ const VERSION = 1.0
 var (
 	log = logger.Get("Bootstrap")
 
-	conf              *internal.TheaConfig = &internal.TheaConfig{}
-	defaultConfigPath                      = filepath.Join(conf.GetConfigDir(), "/config.toml")
-	logLevel                               = flag.String("log-level", "info", "Define logging level from one of [verbose, debug, info, important, warning, error]")
-	helpFlag                               = flag.Bool("help", false, "Whether to display help information")
-	configFlag                             = flag.String("config", defaultConfigPath, "The path to the config file that Thea will load")
+	conf         *internal.TheaConfig = &internal.TheaConfig{}
+	logLevelFlag                      = flag.String("log-level", "info", "Define logging level from one of [verbose, debug, info, important, warning, error]")
+	helpFlag                          = flag.Bool("help", false, "Whether to display help information")
+	configFlag                        = flag.String("config", filepath.Join(conf.GetConfigDir(), "/config.toml"), "The path to the config file that Thea will load")
 )
 
 func main() {
 	flag.Parse()
 
-	level, err := parseLogLevelFromString(*logLevel)
+	level, err := parseLogLevelFromString(*logLevelFlag)
 	if err != nil {
 		fmt.Println(err.Error())
 		flag.Usage()
@@ -51,7 +50,7 @@ func main() {
 }
 
 func startThea(config *internal.TheaConfig) {
-	log.Emit(logger.INFO, " --- Starting Thea (version %f) ---\n", VERSION)
+	log.Emit(logger.INFO, " --- Starting Thea (version %.1f) ---\n", VERSION)
 
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	go listenForInterrupt(ctxCancel)

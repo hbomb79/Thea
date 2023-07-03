@@ -11,7 +11,7 @@ import (
 	"github.com/hbomb79/Thea/internal/api/targets"
 	"github.com/hbomb79/Thea/internal/api/transcodes"
 	"github.com/hbomb79/Thea/internal/api/workflows"
-	socket "github.com/hbomb79/Thea/internal/http/websocket"
+	"github.com/hbomb79/Thea/internal/http/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -32,7 +32,7 @@ type (
 		*broadcaster
 		config              *RestConfig
 		ec                  *echo.Echo
-		socket              *socket.SocketHub
+		socket              *websocket.SocketHub
 		ingestController    controller
 		transcodeController controller
 		targetsController   controller
@@ -51,7 +51,7 @@ func NewRestGateway(config *RestConfig, ingestStore ingests.Store, transcodeStor
 	ec.HidePort = true
 	ec.HideBanner = true
 
-	socket := socket.NewSocketHub()
+	socket := websocket.New()
 	gateway := &RestGateway{
 		broadcaster:         newBroadcaster(socket, nil, ingestStore, nil, nil, nil, transcodeStore, nil),
 		config:              config,

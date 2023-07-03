@@ -40,8 +40,8 @@ type TmdbSearchResultEntry struct {
 	PosterPath string `json:"poster_path"`
 }
 
-func (entry *TmdbSearchResultEntry) toMediaStub() *media.SearchStub {
-	return &media.SearchStub{
+func (entry *TmdbSearchResultEntry) toMediaStub() *media.Stub {
+	return &media.Stub{
 		Type:       media.EPISODE,
 		PosterPath: entry.PosterPath,
 		Title:      entry.Title,
@@ -104,7 +104,7 @@ func (searcher *tmdbSearcher) SearchForEpisode(metadata *media.FileMediaMetadata
 	if searchResult.TotalResults == 0 {
 		return nil, &NoResultError{}
 	} else if searchResult.TotalResults > 1 {
-		stubs := make([]*media.SearchStub, len(searchResult.Results))
+		stubs := make([]*media.Stub, len(searchResult.Results))
 		for i, r := range searchResult.Results {
 			stubs[i] = r.toMediaStub()
 		}
@@ -136,7 +136,7 @@ func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) 
 	if searchResult.TotalResults == 0 {
 		return nil, &NoResultError{}
 	} else if searchResult.TotalResults > 1 {
-		stubs := make([]*media.SearchStub, len(searchResult.Results))
+		stubs := make([]*media.Stub, len(searchResult.Results))
 		for i, r := range searchResult.Results {
 			stubs[i] = r.toMediaStub()
 		}
@@ -205,7 +205,7 @@ func (err *NoResultError) Error() string {
 // MutlipleResultError is returned when a search command has returned multiple
 // results. The results are contained within the error so the user
 // can use the IDs embedded in the search stubs to retrieve their desired result.
-type MultipleResultError struct{ results *[]*media.SearchStub }
+type MultipleResultError struct{ results *[]*media.Stub }
 
 func (err *MultipleResultError) Error() string {
 	return "too many results returned from TMDB"

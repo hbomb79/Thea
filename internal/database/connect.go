@@ -17,20 +17,22 @@ var dbLogger = logger.Get("DB")
  * database ourselves, and avoids polluting the users system with a database installation.
  */
 
-type DatabaseServer interface {
+type Manager interface {
 	Connect(DatabaseConfig) error
 	GetInstance() *gorm.DB
-	RegisterModel(...any)
+	RegisterModels(...any)
 }
 
-type dbServer struct {
+type manager struct {
 	gorm   *gorm.DB
 	models []interface{}
 }
 
-var DB DatabaseServer = &dbServer{models: make([]any, 0)}
+func New(models ...any) *manager {
+	return &manager{models: models}
+}
 
-func (db *dbServer) Connect(config DatabaseConfig) error {
+func (db *manager) Connect(config DatabaseConfig) error {
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Pacific/Auckland",
 		config.Host,
@@ -69,10 +71,16 @@ func (db *dbServer) Connect(config DatabaseConfig) error {
 	return nil
 }
 
-func (db *dbServer) GetInstance() *gorm.DB {
+// GetInstances returns the GORM database connection if
+// one has been opened using 'Connect'. Otherwise, nil is returned
+func (db *manager) GetInstance() *gorm.DB {
 	return db.gorm
 }
 
-func (db *dbServer) RegisterModel(models ...any) {
+func (db *manager) RegisterModels(models ...any) {
+	if db.gorm != nil {
+		panic("cannot register models to a database server that is already connected")
+	}
+
 	db.models = append(db.models, models...)
 }

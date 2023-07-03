@@ -4,9 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hbomb79/Thea/internal/api/downloads"
 	"github.com/hbomb79/Thea/internal/api/ingests"
-	"github.com/hbomb79/Thea/internal/api/lists"
 	"github.com/hbomb79/Thea/internal/api/medias"
 	"github.com/hbomb79/Thea/internal/api/targets"
 	"github.com/hbomb79/Thea/internal/api/transcodes"
@@ -36,9 +34,7 @@ type (
 		ingestController    controller
 		transcodeController controller
 		targetsController   controller
-		downloadsController controller
 		workflowController  controller
-		listsController     controller
 		mediaController     controller
 	}
 )
@@ -46,24 +42,30 @@ type (
 // NewRestGateway constructs the Echo router and populates it with all the
 // routes defined by the various controllers. Each controller requires access
 // to a data store, which are provided as arguments.
-func NewRestGateway(config *RestConfig, ingestStore ingests.Store, transcodeStore transcodes.Store) *RestGateway {
+func NewRestGateway(
+	config *RestConfig,
+	ingestService ingests.Service,
+	transcodeService transcodes.Service,
+	transcodeStore transcodes.Store,
+	targetStore targets.Store,
+	workflowStore workflows.Store,
+	mediaStore medias.Store,
+) *RestGateway {
 	ec := echo.New()
 	ec.HidePort = true
 	ec.HideBanner = true
 
 	socket := websocket.New()
 	gateway := &RestGateway{
-		broadcaster:         newBroadcaster(socket, nil, ingestStore, nil, nil, nil, transcodeStore, nil),
+		broadcaster:         newBroadcaster(socket, ingestService, mediaStore, targetStore, transcodeStore, workflowStore),
 		config:              config,
 		ec:                  ec,
 		socket:              socket,
-		downloadsController: downloads.New(nil),
-		ingestController:    ingests.New(ingestStore),
-		transcodeController: transcodes.New(transcodeStore),
-		targetsController:   targets.New(nil),
-		workflowController:  workflows.New(nil),
-		mediaController:     medias.New(nil),
-		listsController:     lists.New(nil),
+		ingestController:    ingests.New(ingestService),
+		transcodeController: transcodes.New(transcodeService, transcodeStore),
+		targetsController:   targets.New(targetStore),
+		workflowController:  workflows.New(workflowStore),
+		mediaController:     medias.New(mediaStore),
 	}
 
 	ec.Use(middleware.AddTrailingSlash())
@@ -87,14 +89,8 @@ func NewRestGateway(config *RestConfig, ingestStore ingests.Store, transcodeStor
 	transcodeWorkflows := ec.Group("/api/thea/v1/transcode-workflows")
 	gateway.workflowController.SetRoutes(transcodeWorkflows)
 
-	downloads := ec.Group("/api/thea/v1/downloads")
-	gateway.downloadsController.SetRoutes(downloads)
-
 	media := ec.Group("/api/thea/v1/media")
 	gateway.mediaController.SetRoutes(media)
-
-	lists := ec.Group("/api/thea/v1/lists")
-	gateway.listsController.SetRoutes(lists)
 
 	return gateway
 }

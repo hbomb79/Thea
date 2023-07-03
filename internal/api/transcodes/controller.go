@@ -3,6 +3,7 @@ package transcodes
 import (
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/labstack/echo/v4"
 )
@@ -10,17 +11,22 @@ import (
 type (
 	Dto struct{}
 
+	Service interface {
+		AllTasks() []*transcode.TranscodeTask
+	}
+
 	Store interface {
-		Task() *transcode.TranscodeTask
+		GetForMedia(uuid.UUID) ([]*transcode.TranscodeTask, error)
 	}
 
 	Controller struct {
-		Store Store
+		Service Service
+		Store   Store
 	}
 )
 
-func New(store Store) *Controller {
-	return &Controller{Store: store}
+func New(service Service, store Store) *Controller {
+	return &Controller{Service: service, Store: store}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
@@ -34,29 +40,29 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 }
 
 func (controller *Controller) create(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
 }
 
 func (controller *Controller) getActive(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
 }
 
 func (controller *Controller) getComplete(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
 }
 
 func (controller *Controller) get(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
 }
 
 func (controller *Controller) cancel(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
 }
 
 func (controller *Controller) postTroubleResolution(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
 }
 
 func (controller *Controller) stream(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
 }

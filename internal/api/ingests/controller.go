@@ -20,9 +20,9 @@ type (
 		Metadata *media.FileMediaMetadata
 	}
 
-	// Store is where this controller gets it's information from, this is
+	// Service is where this controller gets it's information from, this is
 	// typically the Ingest service.
-	Store interface {
+	Service interface {
 		AllItems() []*ingest.IngestItem
 		Item(uuid.UUID) *ingest.IngestItem
 		RemoveItem(uuid.UUID) error
@@ -32,11 +32,11 @@ type (
 	// routes for this controller. Additionally, it holds the reference to
 	// the store used to retrieve information about ingests from Thea
 	Controller struct {
-		Store Store
+		Store Service
 	}
 )
 
-func New(store Store) *Controller {
+func New(store Service) *Controller {
 	return &Controller{Store: store}
 }
 

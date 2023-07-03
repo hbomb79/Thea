@@ -42,8 +42,6 @@ type (
 		BroadcastTaskUpdate(uuid.UUID) error
 		BroadcastTaskProgressUpdate(uuid.UUID) error
 		BroadcastWorkflowUpdate(uuid.UUID) error
-		BroadcastDownloadUpdate(uuid.UUID) error
-		BroadcastDownloadProgressUpdate(uuid.UUID) error
 		BroadcastMediaUpdate(uuid.UUID) error
 		BroadcastIngestUpdate(uuid.UUID) error
 	}
@@ -106,7 +104,7 @@ func New(config TheaConfig) *theaImpl {
 		panic(fmt.Sprintf("failed to construct transcode service due to error: %s", err.Error()))
 	}
 
-	thea.restGateway = api.NewRestGateway(&config.RestConfig, thea.ingestService, nil)
+	thea.restGateway = api.NewRestGateway(&config.RestConfig, thea.ingestService, thea.transcodeService, thea.transcodeStore, thea.targetStore, thea.workflowStore, thea.mediaStore)
 	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	return thea

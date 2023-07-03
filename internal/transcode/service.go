@@ -37,6 +37,7 @@ type (
 	//   - Transcoding workflows for newly ingested media
 	//   - Manual transcode requests for ingested media
 	//   - Live-tracking and reporting of ongoing transcodes over the event bus
+	// 	 - Persistence of completed transcodes to the transcode store
 	transcodeService struct {
 		*sync.Mutex
 		taskWg          *sync.WaitGroup

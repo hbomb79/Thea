@@ -23,8 +23,6 @@ type (
 		BroadcastTaskUpdate(uuid.UUID) error
 		BroadcastTaskProgressUpdate(uuid.UUID) error
 		BroadcastWorkflowUpdate(uuid.UUID) error
-		BroadcastDownloadUpdate(uuid.UUID) error
-		BroadcastDownloadProgressUpdate(uuid.UUID) error
 		BroadcastMediaUpdate(uuid.UUID) error
 		BroadcastIngestUpdate(uuid.UUID) error
 	}
@@ -88,10 +86,10 @@ func (service *activityManager) handleEvent(ev event.HandlerEvent) error {
 		service.scheduleEventBroadcast(resourceID, service.BroadcastWorkflowUpdate)
 	case event.DOWNLOAD_UPDATE:
 		fallthrough
-	case event.DOWNLOAD_COMPLETE:
-		service.scheduleEventBroadcast(resourceID, service.BroadcastDownloadUpdate)
-	case event.DOWNLOAD_PROGRESS:
-		service.scheduleEventBroadcast(resourceID, service.BroadcastDownloadProgressUpdate)
+	// case event.DOWNLOAD_COMPLETE:
+	// 	service.scheduleEventBroadcast(resourceID, service.BroadcastDownloadUpdate)
+	// case event.DOWNLOAD_PROGRESS:
+	// 	service.scheduleEventBroadcast(resourceID, service.BroadcastDownloadProgressUpdate)
 	default:
 		return errors.New("unknown event type")
 	}

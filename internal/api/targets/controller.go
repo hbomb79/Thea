@@ -48,11 +48,11 @@ func New(store Store) *Controller {
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
-	eg.POST("", controller.create)
-	eg.GET("", controller.list)
-	eg.GET(":id", controller.get)
-	eg.PATCH(":id", controller.update)
-	eg.DELETE(":id", controller.delete)
+	eg.POST("/", controller.create)
+	eg.GET("/", controller.list)
+	eg.GET("/:id/", controller.get)
+	eg.PATCH("/:id/", controller.update)
+	eg.DELETE("/:id/", controller.delete)
 }
 
 func (controller *Controller) create(ec echo.Context) error {

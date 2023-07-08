@@ -10,9 +10,12 @@ import (
 	"github.com/hbomb79/Thea/internal/api/transcodes"
 	"github.com/hbomb79/Thea/internal/api/workflows"
 	"github.com/hbomb79/Thea/internal/http/websocket"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
+
+var log = logger.Get("API")
 
 type (
 	RestConfig struct {
@@ -52,6 +55,9 @@ func NewRestGateway(
 	mediaStore medias.Store,
 ) *RestGateway {
 	ec := echo.New()
+	ec.OnAddRouteHandler = func(host string, route echo.Route, handler echo.HandlerFunc, middleware []echo.MiddlewareFunc) {
+		log.Emit(logger.DEBUG, "Registered new route %s %s\n", route.Method, route.Path)
+	}
 	ec.HidePort = true
 	ec.HideBanner = true
 
@@ -70,9 +76,9 @@ func NewRestGateway(
 
 	ec.Use(middleware.Logger())
 	ec.Use(middleware.Recover())
-	ec.Use(middleware.AddTrailingSlash())
+	ec.Pre(middleware.AddTrailingSlash())
 
-	ec.GET("/api/thea/v1/activity/ws", func(ec echo.Context) error {
+	ec.GET("/api/thea/v1/activity/ws/", func(ec echo.Context) error {
 		gateway.socket.UpgradeToSocket(ec.Response(), ec.Request())
 		return nil
 	})

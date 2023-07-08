@@ -183,6 +183,8 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	var body map[string]interface{}
 	if hub.connectionCallback != nil {
 		body = hub.connectionCallback()
+	} else {
+		body = make(map[string]interface{})
 	}
 	body["client"] = id
 

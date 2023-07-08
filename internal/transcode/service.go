@@ -25,7 +25,7 @@ type (
 	}
 
 	targetStore interface {
-		GetTarget(uuid.UUID) *ffmpeg.Target
+		Get(uuid.UUID) *ffmpeg.Target
 	}
 
 	transcodeStore interface {
@@ -57,9 +57,28 @@ type (
 	}
 )
 
-// New creates a new TranscodeService using the Config provided.
-func New(config Config, mediaStore mediaStore, workflowStore workflowStore, targetStore targetStore, transcodeStore transcodeStore) (*transcodeService, error) {
-	return nil, nil
+// New creates a new transcodeService, injecting all required stores. Error is returned
+// in the configuration provided is not valid (e.g., ffmpeg path is wrong)
+func New(config Config, eventBus event.EventCoordinator, mediaStore mediaStore, workflowStore workflowStore, targetStore targetStore, transcodeStore transcodeStore) (*transcodeService, error) {
+	// Check for output path dir, create if not found
+
+	// Ensure ffmpeg/ffprobe available at the bin path provided
+
+	// Ensure maximum thread consumption is reasonable (>2)
+
+	return &transcodeService{
+		Mutex:          &sync.Mutex{},
+		taskWg:         &sync.WaitGroup{},
+		config:         &config,
+		tasks:          make([]*TranscodeTask, 0),
+		eventBus:       eventBus,
+		mediaStore:     mediaStore,
+		workflowStore:  workflowStore,
+		targetStore:    targetStore,
+		transcodeStore: transcodeStore,
+		queueChange:    make(chan bool),
+		taskChange:     make(chan uuid.UUID),
+	}, nil
 }
 
 // Run is the main entry point for this service. This method will block
@@ -124,7 +143,7 @@ func (service *transcodeService) Task(id uuid.UUID) *TranscodeTask {
 // then nil is returned.
 func (service *transcodeService) TaskForMediaAndTarget(mediaId uuid.UUID, targetId uuid.UUID) *TranscodeTask {
 	for _, t := range service.tasks {
-		if t.media.Id() == mediaId && t.target.Id() == targetId {
+		if t.media.Id() == mediaId && t.target.ID == targetId {
 			return t
 		}
 	}
@@ -142,7 +161,7 @@ func (service *transcodeService) NewTask(mediaId uuid.UUID, targetId uuid.UUID) 
 		return fmt.Errorf("media %s not found", mediaId)
 	}
 
-	target := service.targetStore.GetTarget(targetId)
+	target := service.targetStore.Get(targetId)
 	if target == nil {
 		return fmt.Errorf("target %s not found", targetId)
 	}
@@ -264,8 +283,8 @@ func (service *transcodeService) spawnFfmpegTarget(m *media.Container, target *f
 	service.Lock()
 	defer service.Unlock()
 
-	if existing := service.TaskForMediaAndTarget(m.Id(), target.Id()); existing != nil {
-		return fmt.Errorf("task for media %s and target %s already exists", m.Id(), target.Id())
+	if existing := service.TaskForMediaAndTarget(m.Id(), target.ID); existing != nil {
+		return fmt.Errorf("task for media %s and target %s already exists", m.Id(), target.ID)
 	}
 
 	newTask := NewTranscodeTask(service.config.OutputPath, m, target)

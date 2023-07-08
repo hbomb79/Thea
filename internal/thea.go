@@ -92,21 +92,6 @@ func New(config TheaConfig) *theaImpl {
 		config:   config,
 	}
 
-	if serv, err := ingest.New(config.IngestService, thea.mediaStore); err == nil {
-		thea.ingestService = serv
-	} else {
-		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))
-	}
-
-	if serv, err := transcode.New(config.Format, thea.mediaStore, thea.workflowStore, thea.targetStore, thea.transcodeStore); err == nil {
-		thea.transcodeService = serv
-	} else {
-		panic(fmt.Sprintf("failed to construct transcode service due to error: %s", err.Error()))
-	}
-
-	thea.restGateway = api.NewRestGateway(&config.RestConfig, thea.ingestService, thea.transcodeService, thea.transcodeStore, thea.targetStore, thea.workflowStore, thea.mediaStore)
-	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
-
 	return thea
 }
 
@@ -140,6 +125,21 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	if err := db.Connect(thea.config.Database); err != nil {
 		return err
 	}
+
+	if serv, err := ingest.New(thea.config.IngestService, thea.mediaStore); err == nil {
+		thea.ingestService = serv
+	} else {
+		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))
+	}
+
+	if serv, err := transcode.New(thea.config.Format, thea.eventBus, thea.mediaStore, thea.workflowStore, thea.targetStore, thea.transcodeStore); err == nil {
+		thea.transcodeService = serv
+	} else {
+		panic(fmt.Sprintf("failed to construct transcode service due to error: %s", err.Error()))
+	}
+
+	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.transcodeStore, thea.targetStore, thea.workflowStore, thea.mediaStore)
+	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	wg := &sync.WaitGroup{}
 	thea.spawnAsyncService(ctx, wg, thea.ingestService, "ingest-service", crashHandler)
@@ -204,16 +204,19 @@ func (thea *theaImpl) initialiseStores(db DatabaseServer) error {
 	} else {
 		return err
 	}
+
 	if store, err := workflow.NewStore(db); err == nil {
 		thea.workflowStore = store
 	} else {
 		return err
 	}
+
 	if store, err := ffmpeg.NewStore(db); err == nil {
 		thea.targetStore = store
 	} else {
 		return err
 	}
+
 	if store, err := transcode.NewStore(db); err == nil {
 		thea.transcodeStore = store
 	} else {

@@ -82,5 +82,6 @@ func (db *manager) RegisterModels(models ...any) {
 		panic("cannot register models to a database server that is already connected")
 	}
 
+	dbLogger.Emit(logger.DEBUG, "Registering DB models %#v\n", models)
 	db.models = append(db.models, models...)
 }

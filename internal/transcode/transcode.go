@@ -43,7 +43,7 @@ type TranscodeTask struct {
 }
 
 func NewTranscodeTask(outputPath string, m *media.Container, t *ffmpeg.Target) *TranscodeTask {
-	out := fmt.Sprintf("%s/%s.%s", outputPath, t.Label(), t.Ext())
+	out := fmt.Sprintf("%s/%s.%s", outputPath, t.Label, t.Ext)
 
 	return &TranscodeTask{
 		id:           uuid.New(),
@@ -68,7 +68,7 @@ func (task *TranscodeTask) Run(ctx context.Context, updateHandler func(*ffmpeg.P
 	}()
 
 	task.status = WORKING
-	err := task.command.Run(ctx, task.target.TranscodeOptions(), updateHandler)
+	err := task.command.Run(ctx, task.target.FfmpegOptions, updateHandler)
 	if err != nil {
 		task.status = TROUBLED
 		return fmt.Errorf("transcode task failed due to command error: %s", err.Error())

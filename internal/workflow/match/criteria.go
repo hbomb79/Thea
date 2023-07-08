@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/media"
 )
 
@@ -15,9 +16,11 @@ import (
 // For example, a criteria might be "TITLE MATCHES 'pattern' AND". This is
 // made up of four terms: the key, type, value and combine type (in order).
 type Criteria struct {
+	ID          uuid.UUID
+	WorkflowID  uuid.UUID
 	Key         Key         `json:"key"`
 	Type        Type        `json:"type"`
-	Value       interface{} `json:"value"`
+	Value       string      `json:"value"`
 	CombineType CombineType `json:"combine_type"`
 }
 
@@ -35,7 +38,7 @@ func (criteria *Criteria) ValidateLegal() error {
 		fallthrough
 	case DOES_NOT_MATCH:
 		// expects regular expression
-		if _, err := regexp.Compile(criteria.Value.(string)); err != nil {
+		if _, err := regexp.Compile(criteria.Value); err != nil {
 			return fmt.Errorf("match type %s expects a valid regular expression as the value; '%v' is not parseable as a regular expression", criteria.Type, criteria.Value)
 		}
 	case LESS_THAN:
@@ -46,7 +49,7 @@ func (criteria *Criteria) ValidateLegal() error {
 		fallthrough
 	case NOT_EQUALS:
 		// expects a integer
-		if _, err := strconv.Atoi(criteria.Value.(string)); err != nil {
+		if _, err := strconv.Atoi(criteria.Value); err != nil {
 			return fmt.Errorf("match type %s expects a valid int as the value; '%v' is not a valid int", criteria.Type, criteria.Value)
 		}
 	}
@@ -87,7 +90,7 @@ func (criteria *Criteria) IsMediaAcceptable(m *media.Container) (bool, error) {
 
 	isMatch, err := criteria.isValueAcceptable(valueToCheck)
 	if err != nil {
-		return false, fmt.Errorf("media %s is not acceptable for criteria %s: %s\n", m, criteria, err.Error())
+		return false, fmt.Errorf("media %s is not acceptable for criteria %s: %s", m, criteria, err.Error())
 	}
 
 	return isMatch, nil

@@ -1,0 +1,125 @@
+openapi: 3.0.0
+info:
+  title: Thea Spec
+  description: "Thea REST API spec. See http://github.com/hbomb79/Thea for more information"
+  version: 1.0.0
+  contact:
+    name: Thea Support
+    url: https://github.com/hbomb79/Thea
+tags:
+  - name: target
+    description: A transcode target, typically associatted with transcode tasks and workflows
+paths:      
+    /transcode-targets:
+      get:
+        tags:
+          - target
+        summary: List Targets
+        description: Returns all known targets
+        operationId: listTargets
+        responses:
+          "200":
+            description: A list of the targets
+            content:
+              application/json:
+                schema:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Target"
+      post:
+        tags:
+          - target
+        summary: Create Target
+        description: Creates a new target
+        operationId: createTarget
+        requestBody:
+          $ref: "#/components/requestBodies/CreateTarget"
+        responses:
+          "201":
+            description: The created target
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Target"
+          "400":
+            description: Invalid request
+    /transcode-targets/{id}:
+      get:
+        tags:
+          - target
+        summary: Get Target
+        description: Fetches the target with the ID specified
+        operationId: getTarget
+        parameters:
+          - in: path
+            name: id
+            required: true
+            schema:
+              type: string
+        responses:
+          "200":
+            description: The target
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Target"
+          "400":
+            description: Invalid request
+      patch:
+        tags:
+          - target
+        summary: Update Target
+        description: Updates the target specified using the ID
+        operationId: updateTarget
+        parameters:
+          - in: path
+            name: id
+            required: true
+            schema:
+              type: string
+        responses:
+          "200":
+            description: The updated target
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Target"
+          "400":
+            description: Invalid request
+      delete:
+        tags:
+          - target
+        summary: Delete Target
+        description: Delete the target specified using the ID
+        operationId: deleteTarget
+        parameters:
+          - in: path
+            name: id
+            required: true
+            schema:
+              type: string
+        responses:
+          "204":
+            description: Delete success
+          "400":
+            description: Invalid request
+externalDocs:
+  description: Find out more about Swagger
+  url: http://swagger.io
+servers:
+  - url: localhost:8080/api/thea/v1
+components:
+   requestBodies:
+    CreateTarget:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateTarget"
+   schemas:
+     Target:
+       type: object
+     CreateTarget:
+       type: object
+       properties:
+         name:
+           type: string

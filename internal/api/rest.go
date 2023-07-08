@@ -68,9 +68,9 @@ func NewRestGateway(
 		mediaController:     medias.New(mediaStore),
 	}
 
-	ec.Use(middleware.AddTrailingSlash())
 	ec.Use(middleware.Logger())
 	ec.Use(middleware.Recover())
+	ec.Use(middleware.AddTrailingSlash())
 
 	ec.GET("/api/thea/v1/activity/ws", func(ec echo.Context) error {
 		gateway.socket.UpgradeToSocket(ec.Response(), ec.Request())

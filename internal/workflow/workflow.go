@@ -1,8 +1,7 @@
 package workflow
 
 import (
-	"sync"
-
+	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/workflow/match"
@@ -12,10 +11,10 @@ import (
 var log = logger.Get("Workflow")
 
 type Workflow struct {
-	*sync.Mutex
+	ID       uuid.UUID
 	Label    string
-	Criteria []*match.Criteria
-	Targets  []*ffmpeg.Target
+	Criteria []match.Criteria
+	Targets  []*ffmpeg.Target `gorm:"many2many:workflow_targets"`
 }
 
 // Newprofile accepts a single string argument (tag) and returns a new profile
@@ -70,7 +69,7 @@ func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
 	return false
 }
 
-func (profile *Workflow) SetCriteria(criteria []*match.Criteria) error {
+func (profile *Workflow) SetCriteria(criteria []match.Criteria) error {
 	for _, cond := range criteria {
 		if err := cond.ValidateLegal(); err != nil {
 			return err

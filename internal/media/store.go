@@ -54,17 +54,25 @@ type (
 	}
 
 	Store struct {
-		db *gorm.DB
+		db database.Manager
 	}
 )
 
+// NewStore uses the provided DB manager to register
+// the models that this store defines, before storing
+// a reference to the manager for use later when
+// performing queries.
+//
+// Note: The manager provided is expected to NOT be
+// connected, and it is expected to have become
+// connected before any other store methods are used.
 func NewStore(db database.Manager) (*Store, error) {
-	if instance := db.GetInstance(); instance != nil {
-		db.RegisterModels(Movie{}, Episode{}, Series{}, Season{})
-		return &Store{db: instance}, nil
+	if db.GetInstance() != nil {
+		return nil, errors.New("database is already connected")
 	}
 
-	return nil, errors.New("database has no available instance")
+	db.RegisterModels(Movie{}, Episode{}, Series{}, Season{})
+	return &Store{db: db}, nil
 }
 
 // SaveMovie upserts the provided Movie model to the database. Existing models
@@ -73,7 +81,7 @@ func NewStore(db database.Manager) (*Store, error) {
 //
 // NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
 func (store *Store) SaveMovie(movie *Movie) error {
-	return saveMovie(store.db, movie)
+	return saveMovie(store.db.GetInstance(), movie)
 }
 
 // SaveSeries upserts the provided Series model to the database. Existing models
@@ -82,7 +90,7 @@ func (store *Store) SaveMovie(movie *Movie) error {
 //
 // NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
 func (store *Store) SaveSeries(series *Series) error {
-	return saveSeries(store.db, series)
+	return saveSeries(store.db.GetInstance(), series)
 }
 
 // SaveSeason upserts the provided Season model to the database. Existing models
@@ -91,7 +99,7 @@ func (store *Store) SaveSeries(series *Series) error {
 //
 // NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
 func (store *Store) SaveSeason(season *Season) error {
-	return saveSeason(store.db, season)
+	return saveSeason(store.db.GetInstance(), season)
 }
 
 // saveEpisode transactionally upserts the episode and it's season
@@ -105,7 +113,7 @@ func (store *Store) SaveEpisode(episode *Episode, season *Season, series *Series
 	seasonId := season.Id
 	seriesId := series.Id
 
-	if err := store.db.Transaction(func(tx *gorm.DB) error {
+	if err := store.db.GetInstance().Transaction(func(tx *gorm.DB) error {
 		if err := saveSeries(tx, series); err != nil {
 			return err
 		}
@@ -158,7 +166,7 @@ func (store *Store) GetMedia(mediaId uuid.UUID) *Container {
 // for any other reason will see 'nil' returned.
 func (store *Store) GetMovie(movieId uuid.UUID) (*Movie, error) {
 	var result Movie
-	err := store.db.Where(&Movie{Common: Common{Id: movieId}}).First(&result).Error
+	err := store.db.GetInstance().Where(&Movie{Common: Common{Id: movieId}}).First(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +179,7 @@ func (store *Store) GetMovie(movieId uuid.UUID) (*Movie, error) {
 // for any other reason will see 'nil' returned.
 func (store *Store) GetEpisode(episodeId uuid.UUID) (*Episode, error) {
 	var result Episode
-	err := store.db.Where(&Episode{Common: Common{Id: episodeId}}).First(&result).Error
+	err := store.db.GetInstance().Where(&Episode{Common: Common{Id: episodeId}}).First(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +192,7 @@ func (store *Store) GetEpisode(episodeId uuid.UUID) (*Episode, error) {
 // for any other reason will see 'nil' returned.
 func (store *Store) GetSeason(seasonId uuid.UUID) (*Season, error) {
 	var result Season
-	err := store.db.Where(&Season{Id: seasonId}).First(&result).Error
+	err := store.db.GetInstance().Where(&Season{Id: seasonId}).First(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +205,7 @@ func (store *Store) GetSeason(seasonId uuid.UUID) (*Season, error) {
 // for any other reason will see 'nil' returned.
 func (store *Store) GetSeries(seriesId uuid.UUID) (*Series, error) {
 	var result Series
-	err := store.db.Where(&Series{Id: seriesId}).First(&result).Error
+	err := store.db.GetInstance().Where(&Series{Id: seriesId}).First(&result).Error
 	if err != nil {
 		return nil, err
 	}

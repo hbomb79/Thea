@@ -3,11 +3,20 @@ package targets
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/labstack/echo/v4"
+)
+
+const (
+	alphaNumericWhitespaceRegexString = "^[a-zA-Z0-9\\s]+$"
+)
+
+var (
+	alphaNumericWhitespaceRegex = regexp.MustCompile(alphaNumericWhitespaceRegexString)
 )
 
 type (
@@ -18,15 +27,15 @@ type (
 		Opts  *ffmpeg.Opts `json:"ffmpeg_opts"`
 	}
 
-	CreateTargetRequest struct {
-		Label string      `json:"label" validate:"required,alphanum"`
-		Opts  ffmpeg.Opts `json:"ffmpeg_opts" validate:"required"`
+	CreateRequest struct {
+		Label string      `json:"label" validate:"required,alphaNumWhitespace"`
 		Ext   string      `json:"extension" validate:"required,alphanum"`
+		Opts  ffmpeg.Opts `json:"ffmpeg_opts" validate:"required"`
 	}
 
-	UpdateTargetRequest struct {
-		Label *string      `json:"label" validate:"alphanum"`
-		Ext   *string      `json:"extension" validate:"alphanum"`
+	UpdateRequest struct {
+		Label *string      `json:"label" validate:"omitempty,alphaNumWhitespace"`
+		Ext   *string      `json:"extension" validate:"omitempty,alphanum"`
 		Opts  *ffmpeg.Opts `json:"ffmpeg_opts"`
 	}
 
@@ -44,7 +53,12 @@ type (
 )
 
 func New(store Store) *Controller {
-	return &Controller{Store: store, validator: validator.New()}
+	validate := validator.New()
+	validate.RegisterValidation("alphaNumWhitespace", func(fl validator.FieldLevel) bool {
+		return alphaNumericWhitespaceRegex.MatchString(fl.Field().String())
+	}, true)
+
+	return &Controller{Store: store, validator: validate}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
@@ -56,7 +70,7 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 }
 
 func (controller *Controller) create(ec echo.Context) error {
-	var createRequest CreateTargetRequest
+	var createRequest CreateRequest
 	if err := ec.Bind(&createRequest); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
 	}
@@ -109,7 +123,7 @@ func (controller *Controller) update(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
 	}
 
-	var patchRequest UpdateTargetRequest
+	var patchRequest UpdateRequest
 	if err := ec.Bind(&patchRequest); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
 	}

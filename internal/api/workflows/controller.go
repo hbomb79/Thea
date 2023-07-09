@@ -42,6 +42,7 @@ type (
 	}
 
 	Store interface {
+		DeleteWorkflow(uuid.UUID)
 		GetWorkflow(uuid.UUID) *workflow.Workflow
 		GetAllWorkflows() []*workflow.Workflow
 		CreateWorkflow(uuid.UUID, string, []match.Criteria, []uuid.UUID) (*workflow.Workflow, error)
@@ -63,6 +64,7 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.GET("/", controller.list)
 	eg.GET("/:id/", controller.get)
 	eg.PATCH("/:id/", controller.update)
+	eg.DELETE("/:id/", controller.delete)
 }
 
 func (controller *Controller) create(ec echo.Context) error {
@@ -114,6 +116,16 @@ func (controller *Controller) get(ec echo.Context) error {
 
 func (controller *Controller) update(ec echo.Context) error {
 	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+}
+
+func (controller *Controller) delete(ec echo.Context) error {
+	id, err := uuid.Parse(ec.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Workflow ID is not a valid UUID")
+	}
+
+	controller.Store.DeleteWorkflow(id)
+	return ec.NoContent(http.StatusNoContent)
 }
 
 func NewCriteriaModel(workflowID uuid.UUID, dto *CriteriaDto) match.Criteria {

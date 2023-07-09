@@ -42,7 +42,12 @@ func (store *Store) GetAll(db *gorm.DB) []*Workflow {
 }
 
 func (store *Store) Delete(db *gorm.DB, id uuid.UUID) {
-	if err := db.Delete(&Workflow{ID: id}).Error; err != nil {
-		log.Emit(logger.ERROR, "Failed to delete workflow with ID = %v due to error: %s\n", id, err.Error())
-	}
+	db.Transaction(func(tx *gorm.DB) error {
+		tx.Model(&Workflow{ID: id}).Association("Targets").Clear()
+		if err := tx.Delete(&Workflow{ID: id}).Error; err != nil {
+			log.Emit(logger.ERROR, "Failed to delete workflow with ID = %v due to error: %s\n", id, err.Error())
+		}
+
+		return nil
+	})
 }

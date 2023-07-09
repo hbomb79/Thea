@@ -32,8 +32,8 @@ type (
 		GetSeries(string) (*media.Series, error)
 	}
 
-	mediaStore interface {
-		GetAllSourcePaths() []string
+	dataStore interface {
+		GetAllMediaSourcePaths() []string
 	}
 
 	// ingestService is responsible for managing the automatic detection
@@ -48,7 +48,7 @@ type (
 		scraper
 		Searcher searcher
 
-		mediaStore mediaStore
+		dataStore dataStore
 
 		config           Config
 		items            []*IngestItem
@@ -63,7 +63,7 @@ type (
 // The configs 'IngestPath' is validated to be an existing directory.
 // If the directory is missing it will be created, if the path
 // provided points to an existing FILE, an error is returned.
-func New(config Config, store mediaStore) (*ingestService, error) {
+func New(config Config, store dataStore) (*ingestService, error) {
 	// Ensure config ingest path is a valid directory, create it
 	// if it's missing.
 	if info, err := os.Stat(config.IngestPath); err == nil {
@@ -80,7 +80,7 @@ func New(config Config, store mediaStore) (*ingestService, error) {
 		Mutex:            &sync.Mutex{},
 		scraper:          &media.MetadataScraper{},
 		Searcher:         tmdb.NewSearcher(tmdb.Config{}),
-		mediaStore:       store,
+		dataStore:        store,
 		config:           config,
 		items:            make([]*IngestItem, 0),
 		importHoldTimers: make(map[uuid.UUID]*time.Timer),
@@ -159,7 +159,7 @@ func (service *ingestService) DiscoverNewFiles() {
 	service.Lock()
 	defer service.Unlock()
 
-	sourcePaths := service.mediaStore.GetAllSourcePaths()
+	sourcePaths := service.dataStore.GetAllMediaSourcePaths()
 	sourcePathsLookup := make(map[string]bool, len(sourcePaths))
 	for _, path := range sourcePaths {
 		sourcePathsLookup[path] = true
@@ -210,7 +210,7 @@ func (service *ingestService) DiscoverNewFiles() {
 // This method does not error if the itemID does not exist.
 //
 // Note: This function takes ownership of the mutex and releases it on return
-func (service *ingestService) RemoveItem(itemID uuid.UUID) error {
+func (service *ingestService) RemoveIngest(itemID uuid.UUID) error {
 	service.Lock()
 	defer service.Unlock()
 
@@ -230,7 +230,7 @@ func (service *ingestService) RemoveItem(itemID uuid.UUID) error {
 
 // Item accepts the ID of an ingest item and attempts to find it
 // in the services queue. If it cannot be found, nil is returned.
-func (service *ingestService) Item(itemID uuid.UUID) *IngestItem {
+func (service *ingestService) GetIngest(itemID uuid.UUID) *IngestItem {
 	for _, item := range service.items {
 		if item.Id == itemID {
 			return item
@@ -242,7 +242,7 @@ func (service *ingestService) Item(itemID uuid.UUID) *IngestItem {
 
 // AllItems returns a pointer to the array containing all
 // the IngestItems being processed by this service.
-func (service *ingestService) AllItems() []*IngestItem {
+func (service *ingestService) GetAllIngests() []*IngestItem {
 	return service.items
 }
 
@@ -260,15 +260,15 @@ func (service *ingestService) evaluateItemHold(id uuid.UUID) {
 	service.Lock()
 	defer service.Unlock()
 
-	item := service.Item(id)
+	item := service.GetIngest(id)
 	if item == nil || item.State != IMPORT_HOLD {
 		return
 	}
 
-	timeDiff, err := service.Item(id).modtimeDiff()
+	timeDiff, err := item.modtimeDiff()
 	if err != nil {
 		// Item's source file has gone away!
-		service.RemoveItem(id)
+		service.RemoveIngest(id)
 		return
 	}
 

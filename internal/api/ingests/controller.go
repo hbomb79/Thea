@@ -23,21 +23,21 @@ type (
 	// Service is where this controller gets it's information from, this is
 	// typically the Ingest service.
 	Service interface {
-		AllItems() []*ingest.IngestItem
-		Item(uuid.UUID) *ingest.IngestItem
-		RemoveItem(uuid.UUID) error
+		GetAllIngests() []*ingest.IngestItem
+		GetIngest(uuid.UUID) *ingest.IngestItem
+		RemoveIngest(uuid.UUID) error
 	}
 
 	// Controller is the struct which is responsible for defining the
 	// routes for this controller. Additionally, it holds the reference to
 	// the store used to retrieve information about ingests from Thea
 	Controller struct {
-		Store Service
+		Service Service
 	}
 )
 
-func New(store Service) *Controller {
-	return &Controller{Store: store}
+func New(serv Service) *Controller {
+	return &Controller{Service: serv}
 }
 
 // Init accepts the Echo group for the ingest endpoints
@@ -51,7 +51,7 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 
 // list returns all the ingests - represented as DTOs - from the underlying store.
 func (controller *Controller) list(ctx echo.Context) error {
-	items := controller.Store.AllItems()
+	items := controller.Service.GetAllIngests()
 	dtos := make([]*Dto, len(items))
 	for k, v := range items {
 		dtos[k] = NewDto(v)
@@ -68,7 +68,7 @@ func (controller *Controller) get(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
 	}
 
-	item := controller.Store.Item(id)
+	item := controller.Service.GetIngest(id)
 	if item == nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
@@ -84,7 +84,7 @@ func (controller *Controller) delete(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
 	}
 
-	if err := controller.Store.RemoveItem(id); err != nil {
+	if err := controller.Service.RemoveIngest(id); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
@@ -99,7 +99,7 @@ func (controller *Controller) postTroubleResolution(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
 	}
 
-	item := controller.Store.Item(id)
+	item := controller.Service.GetIngest(id)
 	if item == nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}

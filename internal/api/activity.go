@@ -5,10 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/api/ingests"
-	"github.com/hbomb79/Thea/internal/api/medias"
-	"github.com/hbomb79/Thea/internal/api/targets"
-	"github.com/hbomb79/Thea/internal/api/transcodes"
-	"github.com/hbomb79/Thea/internal/api/workflows"
 	"github.com/hbomb79/Thea/internal/http/websocket"
 )
 
@@ -28,24 +24,18 @@ type (
 	MediaUpdate        struct{}
 
 	broadcaster struct {
-		socketHub      *websocket.SocketHub
-		ingestStore    ingests.Service
-		mediaStore     medias.Store
-		targetStore    targets.Store
-		transcodeStore transcodes.Store
-		workflowStore  workflows.Store
+		socketHub     *websocket.SocketHub
+		ingestService ingests.Service
+		dataStore     dataStore
 	}
 )
 
 func newBroadcaster(
 	socketHub *websocket.SocketHub,
-	ingestStore ingests.Service,
-	mediaStore medias.Store,
-	targetStore targets.Store,
-	transcodeStore transcodes.Store,
-	workflowStore workflows.Store,
+	ingestService ingests.Service,
+	store dataStore,
 ) *broadcaster {
-	return &broadcaster{socketHub, ingestStore, mediaStore, targetStore, transcodeStore, workflowStore}
+	return &broadcaster{socketHub, ingestService, store}
 }
 
 func (hub *broadcaster) BroadcastTaskUpdate(id uuid.UUID) error {
@@ -65,7 +55,7 @@ func (hub *broadcaster) BroadcastMediaUpdate(id uuid.UUID) error {
 }
 
 func (hub *broadcaster) BroadcastIngestUpdate(id uuid.UUID) error {
-	item := hub.ingestStore.Item(id)
+	item := hub.ingestService.GetIngest(id)
 	update := IngestUpdate{IngestId: id, Ingest: ingests.NewDto(item)}
 	hub.broadcast(TITLE_INGEST_UPDATE, update)
 

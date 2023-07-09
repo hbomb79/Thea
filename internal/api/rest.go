@@ -26,6 +26,13 @@ type (
 		SetRoutes(*echo.Group)
 	}
 
+	// dataStore represents a union of all the controller store requirements
+	dataStore interface {
+		targets.Store
+		workflows.Store
+		transcodes.Store
+	}
+
 	// The RestGateway is a thin-wrapper around the Echo HTTP router. It's sole responsbility
 	// is to create the routes Thea exposes, manage ongoing web socket connections and events,
 	// and to enforce authc + authz middleware where applicable.
@@ -49,10 +56,7 @@ func NewRestGateway(
 	config *RestConfig,
 	ingestService ingests.Service,
 	transcodeService transcodes.Service,
-	transcodeStore transcodes.Store,
-	targetStore targets.Store,
-	workflowStore workflows.Store,
-	mediaStore medias.Store,
+	store dataStore,
 ) *RestGateway {
 	ec := echo.New()
 	ec.OnAddRouteHandler = func(host string, route echo.Route, handler echo.HandlerFunc, middleware []echo.MiddlewareFunc) {
@@ -63,15 +67,15 @@ func NewRestGateway(
 
 	socket := websocket.New()
 	gateway := &RestGateway{
-		broadcaster:         newBroadcaster(socket, ingestService, mediaStore, targetStore, transcodeStore, workflowStore),
+		broadcaster:         newBroadcaster(socket, ingestService, store),
 		config:              config,
 		ec:                  ec,
 		socket:              socket,
 		ingestController:    ingests.New(ingestService),
-		transcodeController: transcodes.New(transcodeService, transcodeStore),
-		targetsController:   targets.New(targetStore),
-		workflowController:  workflows.New(workflowStore),
-		mediaController:     medias.New(mediaStore),
+		transcodeController: transcodes.New(transcodeService, store),
+		targetsController:   targets.New(store),
+		workflowController:  workflows.New(store),
+		mediaController:     medias.New(store),
 	}
 
 	ec.Use(middleware.Logger())

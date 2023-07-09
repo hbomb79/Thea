@@ -16,7 +16,7 @@ type (
 	}
 
 	Store interface {
-		GetForMedia(uuid.UUID) ([]*transcode.TranscodeTask, error)
+		GetTranscodesForMedia(uuid.UUID) ([]*transcode.TranscodeTask, error)
 	}
 
 	Controller struct {

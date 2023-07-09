@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -28,22 +29,22 @@ type (
 	}
 
 	CreateRequest struct {
-		Label string      `json:"label" validate:"required,alphaNumWhitespace"`
+		Label string      `json:"label" validate:"required,alphaNumWhitespaceTrimmed"`
 		Ext   string      `json:"extension" validate:"required,alphanum"`
 		Opts  ffmpeg.Opts `json:"ffmpeg_opts" validate:"required"`
 	}
 
 	UpdateRequest struct {
-		Label *string      `json:"label" validate:"omitempty,alphaNumWhitespace"`
+		Label *string      `json:"label" validate:"omitempty,alphaNumWhitespaceTrimmed"`
 		Ext   *string      `json:"extension" validate:"omitempty,alphanum"`
 		Opts  *ffmpeg.Opts `json:"ffmpeg_opts"`
 	}
 
 	Store interface {
-		Save(*ffmpeg.Target) error
-		Get(uuid.UUID) *ffmpeg.Target
-		GetAll() []*ffmpeg.Target
-		Delete(uuid.UUID)
+		SaveTarget(*ffmpeg.Target) error
+		GetTarget(uuid.UUID) *ffmpeg.Target
+		GetAllTargets() []*ffmpeg.Target
+		DeleteTarget(uuid.UUID)
 	}
 
 	Controller struct {
@@ -54,8 +55,13 @@ type (
 
 func New(store Store) *Controller {
 	validate := validator.New()
-	validate.RegisterValidation("alphaNumWhitespace", func(fl validator.FieldLevel) bool {
-		return alphaNumericWhitespaceRegex.MatchString(fl.Field().String())
+	validate.RegisterValidation("alphaNumWhitespaceTrimmed", func(fl validator.FieldLevel) bool {
+		str := fl.Field().String()
+		if len(strings.TrimSpace(str)) != len(str) {
+			return false
+		}
+
+		return alphaNumericWhitespaceRegex.MatchString(str)
 	}, true)
 
 	return &Controller{Store: store, validator: validate}
@@ -86,7 +92,7 @@ func (controller *Controller) create(ec echo.Context) error {
 		Ext:           createRequest.Ext,
 	}
 
-	if err := controller.Store.Save(&newTarget); err != nil {
+	if err := controller.Store.SaveTarget(&newTarget); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %s", err.Error()))
 	}
 
@@ -94,7 +100,7 @@ func (controller *Controller) create(ec echo.Context) error {
 }
 
 func (controller *Controller) list(ec echo.Context) error {
-	targets := controller.Store.GetAll()
+	targets := controller.Store.GetAllTargets()
 	dtos := make([]*Dto, len(targets))
 	for i, t := range targets {
 		dtos[i] = NewDto(t)
@@ -109,7 +115,7 @@ func (controller *Controller) get(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
 	}
 
-	item := controller.Store.Get(id)
+	item := controller.Store.GetTarget(id)
 	if item == nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
@@ -131,7 +137,7 @@ func (controller *Controller) update(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
 	}
 
-	model := *controller.Store.Get(id)
+	model := *controller.Store.GetTarget(id)
 	if patchRequest.Ext != nil {
 		model.Ext = *patchRequest.Ext
 	}
@@ -142,7 +148,7 @@ func (controller *Controller) update(ec echo.Context) error {
 		model.FfmpegOptions = patchRequest.Opts
 	}
 
-	if err := controller.Store.Save(&model); err != nil {
+	if err := controller.Store.SaveTarget(&model); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %s", err.Error()))
 	}
 
@@ -155,7 +161,7 @@ func (controller *Controller) delete(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
 	}
 
-	controller.Store.Delete(id)
+	controller.Store.DeleteTarget(id)
 	return ec.NoContent(http.StatusNoContent)
 }
 

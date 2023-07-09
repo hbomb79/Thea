@@ -16,20 +16,11 @@ import (
 var log = logger.Get("TranscodeServ")
 
 type (
-	mediaStore interface {
-		GetMedia(uuid.UUID) *media.Container
-	}
-
-	workflowStore interface {
-		GetWorkflows() []*workflow.Workflow
-	}
-
-	targetStore interface {
-		Get(uuid.UUID) *ffmpeg.Target
-	}
-
-	transcodeStore interface {
+	dataStore interface {
 		SaveTranscode(*TranscodeTask) error
+		GetAllWorkflows() []*workflow.Workflow
+		GetMedia(uuid.UUID) *media.Container
+		GetTarget(uuid.UUID) *ffmpeg.Target
 	}
 
 	// transcodeService is Thea's solution to pre-transcoding of user media.
@@ -45,12 +36,8 @@ type (
 		tasks           []*TranscodeTask
 		consumedThreads int
 
-		eventBus event.EventCoordinator
-
-		mediaStore     mediaStore
-		workflowStore  workflowStore
-		targetStore    targetStore
-		transcodeStore transcodeStore
+		eventBus  event.EventCoordinator
+		dataStore dataStore
 
 		queueChange chan bool
 		taskChange  chan uuid.UUID
@@ -59,7 +46,7 @@ type (
 
 // New creates a new transcodeService, injecting all required stores. Error is returned
 // in the configuration provided is not valid (e.g., ffmpeg path is wrong)
-func New(config Config, eventBus event.EventCoordinator, mediaStore mediaStore, workflowStore workflowStore, targetStore targetStore, transcodeStore transcodeStore) (*transcodeService, error) {
+func New(config Config, eventBus event.EventCoordinator, dataStore dataStore) (*transcodeService, error) {
 	// Check for output path dir, create if not found
 
 	// Ensure ffmpeg/ffprobe available at the bin path provided
@@ -67,17 +54,14 @@ func New(config Config, eventBus event.EventCoordinator, mediaStore mediaStore, 
 	// Ensure maximum thread consumption is reasonable (>2)
 
 	return &transcodeService{
-		Mutex:          &sync.Mutex{},
-		taskWg:         &sync.WaitGroup{},
-		config:         &config,
-		tasks:          make([]*TranscodeTask, 0),
-		eventBus:       eventBus,
-		mediaStore:     mediaStore,
-		workflowStore:  workflowStore,
-		targetStore:    targetStore,
-		transcodeStore: transcodeStore,
-		queueChange:    make(chan bool),
-		taskChange:     make(chan uuid.UUID),
+		Mutex:       &sync.Mutex{},
+		taskWg:      &sync.WaitGroup{},
+		config:      &config,
+		tasks:       make([]*TranscodeTask, 0),
+		eventBus:    eventBus,
+		dataStore:   dataStore,
+		queueChange: make(chan bool),
+		taskChange:  make(chan uuid.UUID),
 	}, nil
 }
 
@@ -156,12 +140,12 @@ func (service *transcodeService) TaskForMediaAndTarget(mediaId uuid.UUID, target
 // If the media/target fail to be retrieved, or if a transcode task for the
 // media+target already exists, an error is returned.
 func (service *transcodeService) NewTask(mediaId uuid.UUID, targetId uuid.UUID) error {
-	media := service.mediaStore.GetMedia(mediaId)
+	media := service.dataStore.GetMedia(mediaId)
 	if media == nil {
 		return fmt.Errorf("media %s not found", mediaId)
 	}
 
-	target := service.targetStore.Get(targetId)
+	target := service.dataStore.GetTarget(targetId)
 	if target == nil {
 		return fmt.Errorf("target %s not found", targetId)
 	}
@@ -234,7 +218,7 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 	}
 
 	if task.status == COMPLETE {
-		if err := service.transcodeStore.SaveTranscode(task); err != nil {
+		if err := service.dataStore.SaveTranscode(task); err != nil {
 			// Failed to save
 			// TODO: implement a retry logic here because otherwise this transcode is lost
 			log.Emit(logger.ERROR, "failed to save transcode %s due to error: %s\n", task, err.Error())
@@ -255,8 +239,8 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 // matching the media provided. The first workflow to be found as eligible will see the associatted
 // tasks be created, managed and monitored by this service.
 func (service *transcodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) {
-	media := service.mediaStore.GetMedia(mediaId)
-	workflows := service.workflowStore.GetWorkflows()
+	media := service.dataStore.GetMedia(mediaId)
+	workflows := service.dataStore.GetAllWorkflows()
 
 	for _, workflow := range workflows {
 		if workflow.IsMediaEligible(media) {

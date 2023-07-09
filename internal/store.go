@@ -231,6 +231,9 @@ func (orchestrator *storeOrchestrator) DeleteWorkflow(id uuid.UUID) {
 func (orchestrator *storeOrchestrator) SaveTranscode(transcode *transcode.TranscodeTask) error {
 	return orchestrator.TranscodeStore.SaveTranscode(orchestrator.db.GetInstance(), transcode)
 }
+func (orchestrator *storeOrchestrator) GetTranscode(id uuid.UUID) *transcode.TranscodeTask {
+	return orchestrator.TranscodeStore.Get(orchestrator.db.GetInstance(), id)
+}
 func (orchestrator *storeOrchestrator) GetAllTranscodes() ([]*transcode.TranscodeTask, error) {
 	return orchestrator.TranscodeStore.GetAll(orchestrator.db.GetInstance())
 }

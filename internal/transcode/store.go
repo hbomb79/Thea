@@ -22,6 +22,9 @@ func (store *Store) SaveTranscode(db *gorm.DB, task *TranscodeTask) error {
 func (store *Store) GetAll(db *gorm.DB) ([]*TranscodeTask, error) {
 	return nil, errors.New("not yet implemented")
 }
+func (store *Store) Get(db *gorm.DB, id uuid.UUID) *TranscodeTask {
+	return nil
+}
 func (store *Store) GetForMedia(db *gorm.DB, mediaId uuid.UUID) ([]*TranscodeTask, error) {
 	return nil, errors.New("not yet implemented")
 }

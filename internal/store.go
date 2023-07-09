@@ -1,12 +1,15 @@
 package internal
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
+	"github.com/hbomb79/Thea/internal/workflow/match"
 	"gorm.io/gorm"
 )
 
@@ -127,6 +130,35 @@ func (rel *dataOrchestrator) SaveEpisode(episode *media.Episode, season *media.S
 }
 
 // Workflows
+
+// CreateWorkflow uses the information provided to construct and save a new workflow
+// in a single DB transaction.
+func (data *dataOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID) (*workflow.Workflow, error) {
+	var newWorkflow *workflow.Workflow
+	if txErr := data.db.GetInstance().Transaction(func(tx *gorm.DB) error {
+		var targetModels []*ffmpeg.Target
+		if err := tx.Find(&targetModels, targetIDs).Error; err != nil {
+			return fmt.Errorf("target IDs %v could not be resolved to matching targets", err.Error())
+		}
+
+		newWorkflow = &workflow.Workflow{
+			ID:       workflowID,
+			Label:    label,
+			Criteria: criteria,
+			Targets:  targetModels,
+		}
+
+		if err := data.WorkflowStore.Save(tx, newWorkflow); err != nil {
+			return err
+		}
+
+		return nil
+	}); txErr == nil {
+		return newWorkflow, nil
+	} else {
+		return nil, txErr
+	}
+}
 
 func (data *dataOrchestrator) SaveWorkflow(workflow *workflow.Workflow) error {
 	return data.WorkflowStore.Save(data.db.GetInstance(), workflow)

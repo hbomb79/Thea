@@ -75,16 +75,7 @@ func NewRestGateway(
 	ec.HidePort = true
 	ec.HideBanner = true
 
-	validate := validator.New()
-	validate.RegisterValidation("alphaNumericWhitespaceTrimmed", func(fl validator.FieldLevel) bool {
-		str := fl.Field().String()
-		if len(strings.TrimSpace(str)) != len(str) {
-			return false
-		}
-
-		return alphaNumericWhitespaceRegex.MatchString(str)
-	}, true)
-
+	validate := newValidator()
 	socket := websocket.New()
 	gateway := &RestGateway{
 		broadcaster:         newBroadcaster(socket, ingestService, store),
@@ -160,4 +151,18 @@ func (gateway *RestGateway) Run(parentCtx context.Context) error {
 	}
 
 	return nil
+}
+
+func newValidator() *validator.Validate {
+	validate := validator.New()
+	validate.RegisterValidation("alphaNumericWhitespaceTrimmed", func(fl validator.FieldLevel) bool {
+		str := fl.Field().String()
+		if len(strings.TrimSpace(str)) != len(str) {
+			return false
+		}
+
+		return alphaNumericWhitespaceRegex.MatchString(str)
+	}, true)
+
+	return validate
 }

@@ -68,12 +68,11 @@ type (
 	// for initialising embedded support services, services, stores, event
 	// handling, et cetera...
 	theaImpl struct {
-		eventBus        event.EventCoordinator
-		activityManager *activityManager
-		config          TheaConfig
-		dockerManager   docker.DockerManager
-
-		dataOrchestrator *dataOrchestrator
+		eventBus          event.EventCoordinator
+		dockerManager     docker.DockerManager
+		storeOrchestrator *storeOrchestrator
+		activityManager   *activityManager
+		config            TheaConfig
 
 		restGateway      RestGateway
 		ingestService    IngestService
@@ -117,8 +116,8 @@ func (thea *theaImpl) Run(parent context.Context) error {
 
 	log.Emit(logger.NEW, "Connecting to database with GORM...\n")
 	db := database.New()
-	if store, err := NewDataOrchestrator(db); err == nil {
-		thea.dataOrchestrator = store
+	if store, err := NewStoreOrchestrator(db); err == nil {
+		thea.storeOrchestrator = store
 	} else {
 		return err
 	}
@@ -127,19 +126,19 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return err
 	}
 
-	if serv, err := ingest.New(thea.config.IngestService, thea.dataOrchestrator); err == nil {
+	if serv, err := ingest.New(thea.config.IngestService, thea.storeOrchestrator); err == nil {
 		thea.ingestService = serv
 	} else {
 		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))
 	}
 
-	if serv, err := transcode.New(thea.config.Format, thea.eventBus, thea.dataOrchestrator); err == nil {
+	if serv, err := transcode.New(thea.config.Format, thea.eventBus, thea.storeOrchestrator); err == nil {
 		thea.transcodeService = serv
 	} else {
 		panic(fmt.Sprintf("failed to construct transcode service due to error: %s", err.Error()))
 	}
 
-	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.dataOrchestrator)
+	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.storeOrchestrator)
 	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	wg := &sync.WaitGroup{}

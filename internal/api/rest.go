@@ -2,8 +2,11 @@ package api
 
 import (
 	"context"
+	"regexp"
+	"strings"
 	"sync"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/hbomb79/Thea/internal/api/ingests"
 	"github.com/hbomb79/Thea/internal/api/medias"
 	"github.com/hbomb79/Thea/internal/api/targets"
@@ -15,7 +18,14 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
-var log = logger.Get("API")
+const (
+	alphaNumericWhitespaceRegexString = "^[a-zA-Z0-9\\s]+$"
+)
+
+var (
+	log                         = logger.Get("API")
+	alphaNumericWhitespaceRegex = regexp.MustCompile(alphaNumericWhitespaceRegexString)
+)
 
 type (
 	RestConfig struct {
@@ -65,17 +75,27 @@ func NewRestGateway(
 	ec.HidePort = true
 	ec.HideBanner = true
 
+	validate := validator.New()
+	validate.RegisterValidation("alphaNumericWhitespaceTrimmed", func(fl validator.FieldLevel) bool {
+		str := fl.Field().String()
+		if len(strings.TrimSpace(str)) != len(str) {
+			return false
+		}
+
+		return alphaNumericWhitespaceRegex.MatchString(str)
+	}, true)
+
 	socket := websocket.New()
 	gateway := &RestGateway{
 		broadcaster:         newBroadcaster(socket, ingestService, store),
 		config:              config,
 		ec:                  ec,
 		socket:              socket,
-		ingestController:    ingests.New(ingestService),
-		transcodeController: transcodes.New(transcodeService, store),
-		targetsController:   targets.New(store),
-		workflowController:  workflows.New(store),
-		mediaController:     medias.New(store),
+		ingestController:    ingests.New(validate, ingestService),
+		transcodeController: transcodes.New(validate, transcodeService, store),
+		targetsController:   targets.New(validate, store),
+		workflowController:  workflows.New(validate, store),
+		mediaController:     medias.New(validate, store),
 	}
 
 	ec.Use(middleware.Logger())

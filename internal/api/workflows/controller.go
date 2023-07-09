@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/workflow"
@@ -28,14 +29,14 @@ type (
 	}
 
 	CreateRequest struct {
-		Label     string        `json:"label" validate:"required,alphaNumericWhitespace"`
+		Label     string        `json:"label" validate:"required,alphaNumericWhitespaceTrimmed"`
 		Enabled   bool          `json:"enabled" validate:"required"`
 		TargetIDs []uuid.UUID   `json:"target_ids" validate:"required"`
 		Criteria  []CriteriaDto `json:"criteria"`
 	}
 
 	UpdateRequest struct {
-		Label     *string      `json:"label" validate:"omitempty,alphaNumericWhitespace"`
+		Label     *string      `json:"label" validate:"omitempty,alphaNumericWhitespaceTrimmed"`
 		Enabled   *bool        `json:"enabled"`
 		TargetIDs *[]uuid.UUID `json:"target_ids"`
 	}
@@ -48,12 +49,13 @@ type (
 	}
 
 	Controller struct {
-		Store Store
+		Store    Store
+		validate *validator.Validate
 	}
 )
 
-func New(store Store) *Controller {
-	return &Controller{Store: store}
+func New(validate *validator.Validate, store Store) *Controller {
+	return &Controller{Store: store, validate: validate}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
@@ -66,6 +68,10 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 func (controller *Controller) create(ec echo.Context) error {
 	var createRequest CreateRequest
 	if err := ec.Bind(&createRequest); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+	}
+
+	if err := controller.validate.Struct(createRequest); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
 	}
 

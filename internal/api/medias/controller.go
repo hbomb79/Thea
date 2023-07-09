@@ -3,6 +3,7 @@ package medias
 import (
 	"net/http"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 )
 
@@ -16,7 +17,7 @@ type (
 	}
 )
 
-func New(store Store) *Controller {
+func New(validate *validator.Validate, store Store) *Controller {
 	return &Controller{Store: store}
 }
 

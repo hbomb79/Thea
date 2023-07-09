@@ -3,6 +3,7 @@ package transcodes
 import (
 	"net/http"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/labstack/echo/v4"
@@ -25,7 +26,7 @@ type (
 	}
 )
 
-func New(service Service, store Store) *Controller {
+func New(validate *validator.Validate, service Service, store Store) *Controller {
 	return &Controller{Service: service, Store: store}
 }
 

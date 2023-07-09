@@ -14,7 +14,7 @@ import (
 )
 
 type (
-	// dataOrchestrator is responsible for managing all of Thea's resources,
+	// storeOrchestrator is responsible for managing all of Thea's resources,
 	// especially highly-relational data. You can think of all
 	// the data stores below this layer being 'dumb', and this store
 	// linking them together and providing the database instance
@@ -22,7 +22,7 @@ type (
 	// If consumers need to be able to access data stores directly, they're
 	// welcome to do so - however caution should be taken as stores have no
 	// obligation to take care of relational data (which is the orchestrator's job)
-	dataOrchestrator struct {
+	storeOrchestrator struct {
 		db             database.Manager
 		MediaStore     *media.Store
 		TranscodeStore *transcode.Store
@@ -31,12 +31,12 @@ type (
 	}
 )
 
-func NewDataOrchestrator(db database.Manager) (*dataOrchestrator, error) {
+func NewStoreOrchestrator(db database.Manager) (*storeOrchestrator, error) {
 	if db.GetInstance() != nil {
 		panic("cannot construct thea data store with an already connected database")
 	}
 
-	store := &dataOrchestrator{
+	store := &storeOrchestrator{
 		db:             db,
 		MediaStore:     &media.Store{},
 		TranscodeStore: &transcode.Store{},
@@ -52,56 +52,56 @@ func NewDataOrchestrator(db database.Manager) (*dataOrchestrator, error) {
 	return store, nil
 }
 
-func (rel *dataOrchestrator) GetMedia(mediaId uuid.UUID) *media.Container {
-	return rel.MediaStore.GetMedia(rel.db.GetInstance(), mediaId)
+func (orchestrator *storeOrchestrator) GetMedia(mediaId uuid.UUID) *media.Container {
+	return orchestrator.MediaStore.GetMedia(orchestrator.db.GetInstance(), mediaId)
 }
 
-func (rel *dataOrchestrator) GetMovie(movieId uuid.UUID) (*media.Movie, error) {
-	return rel.MediaStore.GetMovie(rel.db.GetInstance(), movieId)
+func (orchestrator *storeOrchestrator) GetMovie(movieId uuid.UUID) (*media.Movie, error) {
+	return orchestrator.MediaStore.GetMovie(orchestrator.db.GetInstance(), movieId)
 }
 
-func (rel *dataOrchestrator) GetEpisode(episodeId uuid.UUID) (*media.Episode, error) {
-	return rel.MediaStore.GetEpisode(rel.db.GetInstance(), episodeId)
+func (orchestrator *storeOrchestrator) GetEpisode(episodeId uuid.UUID) (*media.Episode, error) {
+	return orchestrator.MediaStore.GetEpisode(orchestrator.db.GetInstance(), episodeId)
 }
 
-func (rel *dataOrchestrator) GetSeason(seasonId uuid.UUID) (*media.Season, error) {
-	return rel.MediaStore.GetSeason(rel.db.GetInstance(), seasonId)
+func (orchestrator *storeOrchestrator) GetSeason(seasonId uuid.UUID) (*media.Season, error) {
+	return orchestrator.MediaStore.GetSeason(orchestrator.db.GetInstance(), seasonId)
 }
 
-func (rel *dataOrchestrator) GetSeries(seriesId uuid.UUID) (*media.Series, error) {
-	return rel.MediaStore.GetSeries(rel.db.GetInstance(), seriesId)
+func (orchestrator *storeOrchestrator) GetSeries(seriesId uuid.UUID) (*media.Series, error) {
+	return orchestrator.MediaStore.GetSeries(orchestrator.db.GetInstance(), seriesId)
 }
 
-func (rel *dataOrchestrator) GetAllMediaSourcePaths() []string {
-	return rel.MediaStore.GetAllSourcePaths(rel.db.GetInstance())
+func (orchestrator *storeOrchestrator) GetAllMediaSourcePaths() []string {
+	return orchestrator.MediaStore.GetAllSourcePaths(orchestrator.db.GetInstance())
 }
 
-func (rel *dataOrchestrator) SaveMovie(movie *media.Movie) error {
-	return rel.MediaStore.SaveMovie(rel.db.GetInstance(), movie)
+func (orchestrator *storeOrchestrator) SaveMovie(movie *media.Movie) error {
+	return orchestrator.MediaStore.SaveMovie(orchestrator.db.GetInstance(), movie)
 }
 
-func (rel *dataOrchestrator) SaveSeries(series *media.Series) error {
-	return rel.MediaStore.SaveSeries(rel.db.GetInstance(), series)
+func (orchestrator *storeOrchestrator) SaveSeries(series *media.Series) error {
+	return orchestrator.MediaStore.SaveSeries(orchestrator.db.GetInstance(), series)
 }
 
-func (rel *dataOrchestrator) SaveSeason(season *media.Season) error {
-	return rel.MediaStore.SaveSeason(rel.db.GetInstance(), season)
+func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
+	return orchestrator.MediaStore.SaveSeason(orchestrator.db.GetInstance(), season)
 }
 
 // SaveEpisode transactoinally saves the episode provided, as well as the season and series
 // it's associatted with IF they are provided.
-func (rel *dataOrchestrator) SaveEpisode(episode *media.Episode, season *media.Season, series *media.Series) error {
+func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, season *media.Season, series *media.Series) error {
 	// Store old PKs so we can rollback on transaction failure
 	episodeId := episode.Id
 	seasonId := season.Id
 	seriesId := series.Id
 
-	if err := rel.db.GetInstance().Transaction(func(tx *gorm.DB) error {
-		if err := rel.MediaStore.SaveSeries(tx, series); err != nil {
+	if err := orchestrator.db.GetInstance().Transaction(func(tx *gorm.DB) error {
+		if err := orchestrator.MediaStore.SaveSeries(tx, series); err != nil {
 			return err
 		}
 
-		if err := rel.MediaStore.SaveSeason(tx, season); err != nil {
+		if err := orchestrator.MediaStore.SaveSeason(tx, season); err != nil {
 			return err
 		}
 
@@ -133,9 +133,9 @@ func (rel *dataOrchestrator) SaveEpisode(episode *media.Episode, season *media.S
 
 // CreateWorkflow uses the information provided to construct and save a new workflow
 // in a single DB transaction.
-func (data *dataOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID) (*workflow.Workflow, error) {
+func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID) (*workflow.Workflow, error) {
 	var newWorkflow *workflow.Workflow
-	if txErr := data.db.GetInstance().Transaction(func(tx *gorm.DB) error {
+	if txErr := orchestrator.db.GetInstance().Transaction(func(tx *gorm.DB) error {
 		var targetModels []*ffmpeg.Target
 		if err := tx.Find(&targetModels, targetIDs).Error; err != nil {
 			return fmt.Errorf("target IDs %v could not be resolved to matching targets", err.Error())
@@ -148,7 +148,7 @@ func (data *dataOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string,
 			Targets:  targetModels,
 		}
 
-		if err := data.WorkflowStore.Save(tx, newWorkflow); err != nil {
+		if err := orchestrator.WorkflowStore.Save(tx, newWorkflow); err != nil {
 			return err
 		}
 
@@ -160,52 +160,52 @@ func (data *dataOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string,
 	}
 }
 
-func (data *dataOrchestrator) SaveWorkflow(workflow *workflow.Workflow) error {
-	return data.WorkflowStore.Save(data.db.GetInstance(), workflow)
+func (orchestrator *storeOrchestrator) SaveWorkflow(workflow *workflow.Workflow) error {
+	return orchestrator.WorkflowStore.Save(orchestrator.db.GetInstance(), workflow)
 }
 
-func (data *dataOrchestrator) GetWorkflow(id uuid.UUID) *workflow.Workflow {
-	return data.WorkflowStore.Get(data.db.GetInstance(), id)
+func (orchestrator *storeOrchestrator) GetWorkflow(id uuid.UUID) *workflow.Workflow {
+	return orchestrator.WorkflowStore.Get(orchestrator.db.GetInstance(), id)
 }
 
-func (data *dataOrchestrator) GetAllWorkflows() []*workflow.Workflow {
-	return data.WorkflowStore.GetAll(data.db.GetInstance())
+func (orchestrator *storeOrchestrator) GetAllWorkflows() []*workflow.Workflow {
+	return orchestrator.WorkflowStore.GetAll(orchestrator.db.GetInstance())
 }
 
-func (data *dataOrchestrator) DeleteWorkflow(id uuid.UUID) {
-	data.WorkflowStore.Delete(data.db.GetInstance(), id)
+func (orchestrator *storeOrchestrator) DeleteWorkflow(id uuid.UUID) {
+	orchestrator.WorkflowStore.Delete(orchestrator.db.GetInstance(), id)
 }
 
 // Transcodes
 
-func (data *dataOrchestrator) SaveTranscode(transcode *transcode.TranscodeTask) error {
-	return data.TranscodeStore.SaveTranscode(data.db.GetInstance(), transcode)
+func (orchestrator *storeOrchestrator) SaveTranscode(transcode *transcode.TranscodeTask) error {
+	return orchestrator.TranscodeStore.SaveTranscode(orchestrator.db.GetInstance(), transcode)
 }
-func (data *dataOrchestrator) GetAllTranscodes() ([]*transcode.TranscodeTask, error) {
-	return data.TranscodeStore.GetAll(data.db.GetInstance())
+func (orchestrator *storeOrchestrator) GetAllTranscodes() ([]*transcode.TranscodeTask, error) {
+	return orchestrator.TranscodeStore.GetAll(orchestrator.db.GetInstance())
 }
-func (data *dataOrchestrator) GetTranscodesForMedia(mediaId uuid.UUID) ([]*transcode.TranscodeTask, error) {
-	return data.TranscodeStore.GetForMedia(data.db.GetInstance(), mediaId)
+func (orchestrator *storeOrchestrator) GetTranscodesForMedia(mediaId uuid.UUID) ([]*transcode.TranscodeTask, error) {
+	return orchestrator.TranscodeStore.GetForMedia(orchestrator.db.GetInstance(), mediaId)
 }
 
 // Targets
 
-func (data *dataOrchestrator) SaveTarget(target *ffmpeg.Target) error {
-	return data.TargetStore.Save(data.db.GetInstance(), target)
+func (orchestrator *storeOrchestrator) SaveTarget(target *ffmpeg.Target) error {
+	return orchestrator.TargetStore.Save(orchestrator.db.GetInstance(), target)
 }
 
-func (data *dataOrchestrator) GetTarget(id uuid.UUID) *ffmpeg.Target {
-	return data.TargetStore.Get(data.db.GetInstance(), id)
+func (orchestrator *storeOrchestrator) GetTarget(id uuid.UUID) *ffmpeg.Target {
+	return orchestrator.TargetStore.Get(orchestrator.db.GetInstance(), id)
 }
 
-func (data *dataOrchestrator) GetAllTargets() []*ffmpeg.Target {
-	return data.TargetStore.GetAll(data.db.GetInstance())
+func (orchestrator *storeOrchestrator) GetAllTargets() []*ffmpeg.Target {
+	return orchestrator.TargetStore.GetAll(orchestrator.db.GetInstance())
 }
 
-func (data *dataOrchestrator) GetManyTargets(ids ...uuid.UUID) []*ffmpeg.Target {
-	return data.TargetStore.GetMany(data.db.GetInstance(), ids...)
+func (orchestrator *storeOrchestrator) GetManyTargets(ids ...uuid.UUID) []*ffmpeg.Target {
+	return orchestrator.TargetStore.GetMany(orchestrator.db.GetInstance(), ids...)
 }
 
-func (data *dataOrchestrator) DeleteTarget(id uuid.UUID) {
-	data.TargetStore.Delete(data.db.GetInstance(), id)
+func (orchestrator *storeOrchestrator) DeleteTarget(id uuid.UUID) {
+	orchestrator.TargetStore.Delete(orchestrator.db.GetInstance(), id)
 }

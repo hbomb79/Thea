@@ -3,21 +3,11 @@ package targets
 import (
 	"fmt"
 	"net/http"
-	"regexp"
-	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/labstack/echo/v4"
-)
-
-const (
-	alphaNumericWhitespaceRegexString = "^[a-zA-Z0-9\\s]+$"
-)
-
-var (
-	alphaNumericWhitespaceRegex = regexp.MustCompile(alphaNumericWhitespaceRegexString)
 )
 
 type (
@@ -29,13 +19,13 @@ type (
 	}
 
 	CreateRequest struct {
-		Label string      `json:"label" validate:"required,alphaNumWhitespaceTrimmed"`
+		Label string      `json:"label" validate:"required,alphaNumericWhitespaceTrimmed"`
 		Ext   string      `json:"extension" validate:"required,alphanum"`
 		Opts  ffmpeg.Opts `json:"ffmpeg_opts" validate:"required"`
 	}
 
 	UpdateRequest struct {
-		Label *string      `json:"label" validate:"omitempty,alphaNumWhitespaceTrimmed"`
+		Label *string      `json:"label" validate:"omitempty,alphaNumericWhitespaceTrimmed"`
 		Ext   *string      `json:"extension" validate:"omitempty,alphanum"`
 		Opts  *ffmpeg.Opts `json:"ffmpeg_opts"`
 	}
@@ -53,17 +43,7 @@ type (
 	}
 )
 
-func New(store Store) *Controller {
-	validate := validator.New()
-	validate.RegisterValidation("alphaNumWhitespaceTrimmed", func(fl validator.FieldLevel) bool {
-		str := fl.Field().String()
-		if len(strings.TrimSpace(str)) != len(str) {
-			return false
-		}
-
-		return alphaNumericWhitespaceRegex.MatchString(str)
-	}, true)
-
+func New(validate *validator.Validate, store Store) *Controller {
 	return &Controller{Store: store, validator: validate}
 }
 

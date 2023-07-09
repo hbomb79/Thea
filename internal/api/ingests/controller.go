@@ -3,6 +3,7 @@ package ingests
 import (
 	"net/http"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/media"
@@ -36,7 +37,7 @@ type (
 	}
 )
 
-func New(serv Service) *Controller {
+func New(validate *validator.Validate, serv Service) *Controller {
 	return &Controller{Service: serv}
 }
 

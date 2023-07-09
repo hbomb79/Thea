@@ -39,6 +39,10 @@ func (store *Store) GetAll(db *gorm.DB) []*Target {
 }
 
 func (store *Store) GetMany(db *gorm.DB, ids ...uuid.UUID) []*Target {
+	if len(ids) == 0 {
+		return make([]*Target, 0)
+	}
+
 	var results []*Target
 	if err := db.Debug().Find(&results, ids).Error; err != nil {
 		log.Emit(logger.ERROR, "Failed to get targets with ID = %v due to error: %s\n", ids, err.Error())

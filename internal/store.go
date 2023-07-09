@@ -11,6 +11,11 @@ import (
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+var (
+	forUpdateClause = clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}
 )
 
 type (
@@ -136,7 +141,7 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 //
 // Error will be returned if any of the target IDs provided do not refer to existing Target
 // DB entries, or if the workflow infringes on any uniqueness constraints (label)
-func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID) (*workflow.Workflow, error) {
+func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID, enabled bool) (*workflow.Workflow, error) {
 	var newWorkflow *workflow.Workflow
 	if txErr := orchestrator.db.GetInstance().Transaction(func(tx *gorm.DB) error {
 		targetModels := orchestrator.TargetStore.GetMany(tx, targetIDs...)
@@ -157,8 +162,56 @@ func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, labe
 	}
 }
 
-func (orchestrator *storeOrchestrator) SaveWorkflow(workflow *workflow.Workflow) error {
-	return orchestrator.WorkflowStore.Save(orchestrator.db.GetInstance(), workflow)
+// UpdateWorkflow transactionally updates an existing Workflow model
+// using the optional paramaters provided. If a param is `nil` then the
+// corresponding value in the model is NOT changed.
+func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newLabel *string, newCriteria *[]match.Criteria, newTargetIDs *[]uuid.UUID, newEnabled *bool) (*workflow.Workflow, error) {
+	var outputWorkflow *workflow.Workflow
+	if txErr := orchestrator.db.GetInstance().Debug().Transaction(func(tx *gorm.DB) error {
+		var existingWorkflow *workflow.Workflow = nil
+
+		if err := tx.Clauses(forUpdateClause).Where(workflow.Workflow{ID: workflowID}).First(&existingWorkflow).Error; err != nil {
+			return fmt.Errorf("failed to find workflow with ID = %s due to error: %s", workflowID, err.Error())
+		} else if existingWorkflow == nil {
+			return fmt.Errorf("failed to find workflow with ID = %s", workflowID)
+		}
+
+		if newTargetIDs != nil {
+			targetModels := orchestrator.TargetStore.GetMany(tx, *newTargetIDs...)
+			if len(targetModels) != len(*newTargetIDs) {
+				return fmt.Errorf("target IDs %v reference one or more missing targets", *newTargetIDs)
+			}
+
+			if err := tx.Debug().Model(&existingWorkflow).Association("Targets").Replace(targetModels); err != nil {
+				return fmt.Errorf("failed to update workflow target associations due to error %s", err.Error())
+			}
+		}
+
+		if newCriteria != nil {
+			if err := tx.Debug().Model(&existingWorkflow).Association("Criteria").Unscoped().Replace(newCriteria); err != nil {
+				return fmt.Errorf("failed to update workflow criteria associations due to error %s", err.Error())
+			}
+		}
+
+		columnUpdates := make(map[string]any)
+		if newLabel != nil {
+			columnUpdates["label"] = newLabel
+		}
+		if newEnabled != nil {
+			columnUpdates["enabled"] = newEnabled
+		}
+
+		if err := tx.Debug().Model(&existingWorkflow).Updates(columnUpdates).Error; err != nil {
+			return fmt.Errorf("failed to update workflow row due to error %s", err.Error())
+		}
+
+		outputWorkflow = orchestrator.WorkflowStore.Get(tx, workflowID)
+		return nil
+	}); txErr == nil {
+		return outputWorkflow, nil
+	} else {
+		return nil, txErr
+	}
 }
 
 func (orchestrator *storeOrchestrator) GetWorkflow(id uuid.UUID) *workflow.Workflow {

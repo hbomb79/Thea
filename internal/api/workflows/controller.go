@@ -13,6 +13,20 @@ import (
 )
 
 type (
+	CreateRequest struct {
+		Label     string        `json:"label" validate:"required,alphaNumericWhitespaceTrimmed"`
+		Enabled   bool          `json:"enabled" validate:"required"`
+		TargetIDs []uuid.UUID   `json:"target_ids" validate:"required,min=1"`
+		Criteria  []CriteriaDto `json:"criteria" validate:"required"`
+	}
+
+	UpdateRequest struct {
+		Label     *string       `json:"label" validate:"omitempty,alphaNumericWhitespaceTrimmed"`
+		Enabled   *bool         `json:"enabled"`
+		TargetIDs *[]uuid.UUID  `json:"target_ids"`
+		Criteria  []CriteriaDto `json:"criteria"`
+	}
+
 	WorkflowDto struct {
 		ID        uuid.UUID     `json:"id"`
 		Label     string        `json:"label"`
@@ -28,24 +42,12 @@ type (
 		CombineType match.CombineType `json:"combine_type"`
 	}
 
-	CreateRequest struct {
-		Label     string        `json:"label" validate:"required,alphaNumericWhitespaceTrimmed"`
-		Enabled   bool          `json:"enabled" validate:"required"`
-		TargetIDs []uuid.UUID   `json:"target_ids" validate:"required,min=1"`
-		Criteria  []CriteriaDto `json:"criteria" validate:"required"`
-	}
-
-	UpdateRequest struct {
-		Label     *string      `json:"label" validate:"omitempty,alphaNumericWhitespaceTrimmed"`
-		Enabled   *bool        `json:"enabled"`
-		TargetIDs *[]uuid.UUID `json:"target_ids"`
-	}
-
 	Store interface {
 		DeleteWorkflow(uuid.UUID)
 		GetWorkflow(uuid.UUID) *workflow.Workflow
 		GetAllWorkflows() []*workflow.Workflow
-		CreateWorkflow(uuid.UUID, string, []match.Criteria, []uuid.UUID) (*workflow.Workflow, error)
+		CreateWorkflow(uuid.UUID, string, []match.Criteria, []uuid.UUID, bool) (*workflow.Workflow, error)
+		UpdateWorkflow(uuid.UUID, *string, *[]match.Criteria, *[]uuid.UUID, *bool) (*workflow.Workflow, error)
 		GetManyTargets(...uuid.UUID) []*ffmpeg.Target
 	}
 
@@ -83,7 +85,7 @@ func (controller *Controller) create(ec echo.Context) error {
 		criteria[i] = NewCriteriaModel(workflowID, &v)
 	}
 
-	if model, err := controller.Store.CreateWorkflow(workflowID, createRequest.Label, criteria, createRequest.TargetIDs); err != nil {
+	if model, err := controller.Store.CreateWorkflow(workflowID, createRequest.Label, criteria, createRequest.TargetIDs, createRequest.Enabled); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create new workflow: %s", err.Error()))
 	} else {
 		return ec.JSON(http.StatusCreated, NewWorkflowDto(model))
@@ -115,7 +117,35 @@ func (controller *Controller) get(ec echo.Context) error {
 }
 
 func (controller *Controller) update(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	workflowID, err := uuid.Parse(ec.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Workflow ID is not a valid UUID")
+	}
+
+	var updateRequest UpdateRequest
+	if err := ec.Bind(&updateRequest); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+	}
+
+	if err := controller.validate.Struct(updateRequest); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+	}
+
+	var criteriaToUpdate *[]match.Criteria = nil
+	if updateRequest.Criteria != nil {
+		criteria := make([]match.Criteria, len(updateRequest.Criteria))
+		for i, v := range updateRequest.Criteria {
+			criteria[i] = NewCriteriaModel(workflowID, &v)
+		}
+
+		criteriaToUpdate = &criteria
+	}
+
+	if model, err := controller.Store.UpdateWorkflow(workflowID, updateRequest.Label, criteriaToUpdate, updateRequest.TargetIDs, updateRequest.Enabled); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to update workflow: %s", err.Error()))
+	} else {
+		return ec.JSON(http.StatusOK, NewWorkflowDto(model))
+	}
 }
 
 func (controller *Controller) delete(ec echo.Context) error {

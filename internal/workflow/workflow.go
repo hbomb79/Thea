@@ -12,15 +12,10 @@ var log = logger.Get("Workflow")
 
 type Workflow struct {
 	ID       uuid.UUID
+	Enabled  bool
 	Label    string `gorm:"unique"`
 	Criteria []match.Criteria
 	Targets  []*ffmpeg.Target `gorm:"many2many:workflow_targets"`
-}
-
-// Newprofile accepts a single string argument (tag) and returns a new profile
-// be reference to the caller with it's internal targets and tag set.
-func NewWorkflow() *Workflow {
-	return nil
 }
 
 func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {

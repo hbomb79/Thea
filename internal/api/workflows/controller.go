@@ -31,8 +31,8 @@ type (
 	CreateRequest struct {
 		Label     string        `json:"label" validate:"required,alphaNumericWhitespaceTrimmed"`
 		Enabled   bool          `json:"enabled" validate:"required"`
-		TargetIDs []uuid.UUID   `json:"target_ids" validate:"required"`
-		Criteria  []CriteriaDto `json:"criteria"`
+		TargetIDs []uuid.UUID   `json:"target_ids" validate:"required,min=1"`
+		Criteria  []CriteriaDto `json:"criteria" validate:"required"`
 	}
 
 	UpdateRequest struct {
@@ -78,7 +78,7 @@ func (controller *Controller) create(ec echo.Context) error {
 	}
 
 	workflowID := uuid.New()
-	var criteria []match.Criteria
+	criteria := make([]match.Criteria, len(createRequest.Criteria))
 	for i, v := range createRequest.Criteria {
 		criteria[i] = NewCriteriaModel(workflowID, &v)
 	}

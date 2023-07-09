@@ -10,7 +10,6 @@ import (
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
-	"github.com/hbomb79/Thea/pkg/logger"
 	"gorm.io/gorm"
 )
 
@@ -134,30 +133,20 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 
 // CreateWorkflow uses the information provided to construct and save a new workflow
 // in a single DB transaction.
+//
+// Error will be returned if any of the target IDs provided do not refer to existing Target
+// DB entries, or if the workflow infringes on any uniqueness constraints (label)
 func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID) (*workflow.Workflow, error) {
 	var newWorkflow *workflow.Workflow
 	if txErr := orchestrator.db.GetInstance().Transaction(func(tx *gorm.DB) error {
-		var targetModels []*ffmpeg.Target
-		if err := tx.Find(&targetModels, targetIDs).Error; err != nil {
-			return fmt.Errorf("target IDs %v could not be resolved to matching targets: %s", targetIDs, err.Error())
-		}
+		targetModels := orchestrator.TargetStore.GetMany(tx, targetIDs...)
 		if len(targetModels) != len(targetIDs) {
 			return fmt.Errorf("target IDs %v reference one or more missing targets", targetIDs)
 		}
 
-		newWorkflow = &workflow.Workflow{
-			ID:       workflowID,
-			Label:    label,
-			Criteria: criteria,
-			Targets:  targetModels,
-		}
-
+		newWorkflow = &workflow.Workflow{ID: workflowID, Label: label, Criteria: criteria, Targets: targetModels}
 		if err := orchestrator.WorkflowStore.Create(tx, newWorkflow); err != nil {
 			return err
-		}
-
-		if newWorkflow.ID != workflowID {
-			log.Emit(logger.FATAL, "Workflow insertion has changed primary key, association with targets BROKEN\n")
 		}
 
 		return nil

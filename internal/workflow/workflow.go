@@ -12,7 +12,7 @@ var log = logger.Get("Workflow")
 
 type Workflow struct {
 	ID       uuid.UUID
-	Label    string
+	Label    string `gorm:"unique"`
 	Criteria []match.Criteria
 	Targets  []*ffmpeg.Target `gorm:"many2many:workflow_targets"`
 }

@@ -84,7 +84,7 @@ func (controller *Controller) create(ec echo.Context) error {
 	if model, err := controller.Store.CreateWorkflow(workflowID, createRequest.Label, criteria, createRequest.TargetIDs); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create new workflow: %s", err.Error()))
 	} else {
-		return ec.JSON(http.StatusCreated, model)
+		return ec.JSON(http.StatusCreated, NewWorkflowDto(model))
 	}
 }
 

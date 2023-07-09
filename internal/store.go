@@ -10,6 +10,7 @@ import (
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"gorm.io/gorm"
 )
 
@@ -138,7 +139,10 @@ func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, labe
 	if txErr := orchestrator.db.GetInstance().Transaction(func(tx *gorm.DB) error {
 		var targetModels []*ffmpeg.Target
 		if err := tx.Find(&targetModels, targetIDs).Error; err != nil {
-			return fmt.Errorf("target IDs %v could not be resolved to matching targets", err.Error())
+			return fmt.Errorf("target IDs %v could not be resolved to matching targets: %s", targetIDs, err.Error())
+		}
+		if len(targetModels) != len(targetIDs) {
+			return fmt.Errorf("target IDs %v reference one or more missing targets", targetIDs)
 		}
 
 		newWorkflow = &workflow.Workflow{
@@ -148,8 +152,12 @@ func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, labe
 			Targets:  targetModels,
 		}
 
-		if err := orchestrator.WorkflowStore.Save(tx, newWorkflow); err != nil {
+		if err := orchestrator.WorkflowStore.Create(tx, newWorkflow); err != nil {
 			return err
+		}
+
+		if newWorkflow.ID != workflowID {
+			log.Emit(logger.FATAL, "Workflow insertion has changed primary key, association with targets BROKEN\n")
 		}
 
 		return nil

@@ -62,6 +62,7 @@ type (
 		RemoveIngest(uuid.UUID) error
 		GetIngest(uuid.UUID) *ingest.IngestItem
 		GetAllIngests() []*ingest.IngestItem
+		DiscoverNewFiles()
 	}
 
 	// Thea represents the top-level object for the server, and is responsible

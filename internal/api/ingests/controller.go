@@ -27,6 +27,7 @@ type (
 		GetAllIngests() []*ingest.IngestItem
 		GetIngest(uuid.UUID) *ingest.IngestItem
 		RemoveIngest(uuid.UUID) error
+		DiscoverNewFiles()
 	}
 
 	// Controller is the struct which is responsible for defining the
@@ -45,26 +46,27 @@ func New(validate *validator.Validate, serv Service) *Controller {
 // and sets the routes on them.
 func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.GET("/", controller.list)
+	eg.POST("/poll/", controller.performPoll)
 	eg.GET("/:id/", controller.get)
 	eg.DELETE("/:id/", controller.delete)
 	eg.POST("/:id/trouble-resolution/", controller.postTroubleResolution)
 }
 
 // list returns all the ingests - represented as DTOs - from the underlying store.
-func (controller *Controller) list(ctx echo.Context) error {
+func (controller *Controller) list(ec echo.Context) error {
 	items := controller.Service.GetAllIngests()
 	dtos := make([]*Dto, len(items))
 	for k, v := range items {
 		dtos[k] = NewDto(v)
 	}
 
-	return ctx.JSON(http.StatusOK, dtos)
+	return ec.JSON(http.StatusOK, dtos)
 }
 
 // get uses the 'id' path param from the context and retrieves the ingest from the
 // underlying store. If found, a DTO representing the ingest is returned
-func (controller *Controller) get(ctx echo.Context) error {
-	id, err := uuid.Parse(ctx.Param("id"))
+func (controller *Controller) get(ec echo.Context) error {
+	id, err := uuid.Parse(ec.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
 	}
@@ -74,13 +76,13 @@ func (controller *Controller) get(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 
-	return ctx.JSON(http.StatusOK, NewDto(item))
+	return ec.JSON(http.StatusOK, NewDto(item))
 }
 
 // delete uses the 'id' path param from the context and retrieves the ingest from the
 // underlying store. If found, the Ingest is cancelled.
-func (controller *Controller) delete(ctx echo.Context) error {
-	id, err := uuid.Parse(ctx.Param("id"))
+func (controller *Controller) delete(ec echo.Context) error {
+	id, err := uuid.Parse(ec.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
 	}
@@ -89,13 +91,13 @@ func (controller *Controller) delete(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	return ctx.NoContent(http.StatusOK)
+	return ec.NoContent(http.StatusOK)
 }
 
 // postTroubleResolution uses the 'id' path param from the context and retrieves the ingest
 // from the underlying store. If found, then an attempt to resolve the trouble will be made.
-func (controller *Controller) postTroubleResolution(ctx echo.Context) error {
-	id, err := uuid.Parse(ctx.Param("id"))
+func (controller *Controller) postTroubleResolution(ec echo.Context) error {
+	id, err := uuid.Parse(ec.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
 	}
@@ -109,7 +111,13 @@ func (controller *Controller) postTroubleResolution(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	return ctx.NoContent(http.StatusOK)
+	return ec.NoContent(http.StatusOK)
+}
+
+func (controller *Controller) performPoll(ec echo.Context) error {
+	controller.Service.DiscoverNewFiles()
+
+	return ec.NoContent(http.StatusOK)
 }
 
 // NewDto creates a IngestDto using the IngestItem model.

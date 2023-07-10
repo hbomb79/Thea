@@ -71,7 +71,7 @@ func New(config Config, store dataStore) (*ingestService, error) {
 			return nil, fmt.Errorf("ingestion path '%s' is not a directory", config.IngestPath)
 		}
 	} else if errors.Is(err, os.ErrNotExist) {
-		os.MkdirAll(config.IngestPath, os.ModeDir)
+		os.MkdirAll(config.IngestPath, os.ModeDir|os.ModePerm)
 	} else {
 		return nil, fmt.Errorf("ingestion path '%s' could not be accessed: %s", config.IngestPath, err.Error())
 	}

@@ -14,8 +14,8 @@ const (
 
 type (
 	IngestUpdate struct {
-		IngestId uuid.UUID    `json:"ingest_id"`
-		Ingest   *ingests.Dto `json:"ingest"`
+		IngestId uuid.UUID          `json:"ingest_id"`
+		Ingest   *ingests.IngestDto `json:"ingest"`
 	}
 
 	TaskUpdate         struct{}

@@ -8,7 +8,7 @@ type WorkerWakeupChan chan int
 type WorkerStatus int
 
 // WorkerTask is the function containing the task that this
-// worker should execute. It is called repeatedly until 'false'
+// worker should execute. It is called repeatedly until 'true'
 // is returned (indicating the worker should Sleep as there is
 // no more work to do), OR an error is returned (indicating
 // the worker should close)
@@ -58,6 +58,7 @@ func (worker *taskWorker) Start() {
 		}
 
 		shouldSleep, err := worker.task(worker)
+		workerLogger.Emit(logger.DEBUG, "Worker %s (status=%d) task complete. Should sleep: %v. Has error: %v\n", worker.label, worker.currentStatus, shouldSleep, err)
 		if err != nil {
 			workerLogger.Emit(logger.ERROR, "Worker labelled %v has reported an error(%T): %v\n", worker.label, err, err.Error())
 			break

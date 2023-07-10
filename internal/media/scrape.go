@@ -9,18 +9,30 @@ import (
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 )
 
-type FileMediaMetadata struct {
-	Title         string
-	Episodic      bool
-	SeasonNumber  int
-	EpisodeNumber int
-	Runtime       string
-	Year          *int
-	FrameW        *int
-	FrameH        *int
-}
+type (
+	FileMediaMetadata struct {
+		Title         string
+		Episodic      bool
+		SeasonNumber  int
+		EpisodeNumber int
+		Runtime       string
+		Year          *int
+		FrameW        *int
+		FrameH        *int
+	}
 
-type MetadataScraper struct{}
+	ScraperConfig struct {
+		FfprobeBinPath string
+	}
+
+	MetadataScraper struct {
+		config ScraperConfig
+	}
+)
+
+func NewScraper(config ScraperConfig) *MetadataScraper {
+	return &MetadataScraper{config: config}
+}
 
 // ScrapeFileForMediaInfo accepts a file path and tries to extract
 // some standard metadata from it for the purpose of later searching
@@ -93,9 +105,9 @@ func (scraper *MetadataScraper) extractTitleInformation(title string, output *Fi
 // extractFfprobeInformation will read the media metadata using ffprobe. If successful,
 // the frame width/height and the runtime of the media will be populated in the output
 func (scraper *MetadataScraper) extractFfprobeInformation(path string, output *FileMediaMetadata) error {
-	metadata, err := ffmpeg.ProbeFile(path)
+	metadata, err := ffmpeg.ProbeFile(path, scraper.config.FfprobeBinPath)
 	if err != nil {
-		return err
+		return ffmpeg.ParseFfmpegError(err)
 	}
 
 	//TODO Consider revising how we select the stream

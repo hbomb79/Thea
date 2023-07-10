@@ -12,6 +12,7 @@ import (
 type WorkerPool struct {
 	workers []Worker
 	Wg      sync.WaitGroup
+	started bool
 }
 
 // NewWorkerPool creates a new WorkerPool struct
@@ -20,32 +21,47 @@ func NewWorkerPool() *WorkerPool {
 	return &WorkerPool{workers: make([]Worker, 0)}
 }
 
-// StartWorkers cycles through all the workers
+// Start cycles through all the workers
 // currently inside the WorkerPool and creates
 // a goroutine for each. The 'Start' method of
 // each worker is executed concurrently.
-func (pool *WorkerPool) StartWorkers() {
-	for _, worker := range pool.workers {
-		pool.Wg.Add(1)
-		go func(pool *WorkerPool, w Worker) {
-			defer pool.Wg.Done()
-			w.Start()
-		}(pool, worker)
+//
+// Start does NOT block, however consumers
+// can wait on the WaitGroup in the pool if they
+// wish.
+func (pool *WorkerPool) Start() {
+	if pool.started {
+		panic("cannot start an already started worker pool")
 	}
 
-	pool.Wg.Wait()
+	pool.started = true
+	for _, worker := range pool.workers {
+		pool.Wg.Add(1)
+		go func(wg *sync.WaitGroup, w Worker) {
+			defer wg.Done()
+			w.Start()
+		}(&pool.Wg, worker)
+	}
 }
 
 // PushWorker inserts the worker provided in to the worker pool,
 // this method will first lock the mutex to ensure mutually exclusive
 // access to the worker pool slice.
 func (pool *WorkerPool) PushWorker(workers ...Worker) {
+	if pool.started {
+		panic("cannot push worker to already started worker pool")
+	}
+
 	pool.workers = append(pool.workers, workers...)
 }
 
 // WakeupWorkers will search for sleeping workers in the pool
 // and will send on their WakeupChannel to wake up sleeping workers
 func (pool *WorkerPool) WakeupWorkers() {
+	if !pool.started {
+		panic("cannot wakeup workers on worker pool that is not started")
+	}
+
 	for _, w := range pool.workers {
 		if w.Status() == SLEEPING {
 			select {
@@ -56,11 +72,16 @@ func (pool *WorkerPool) WakeupWorkers() {
 	}
 }
 
-// CloseWorkers will cycle through all the workers inside this
-// worker pool and close all the channels (notify and wait)
-// While doing this, the WorkerPool's mutex is locked.
-func (pool *WorkerPool) CloseWorkers() {
+// Close will cycle through all the workers inside this
+// worker pool and close their wakeup channels.
+func (pool *WorkerPool) Close() {
+	if !pool.started {
+		return
+	}
+
 	for _, w := range pool.workers {
 		w.Close()
 	}
+	pool.Wg.Wait()
+	pool.started = false
 }

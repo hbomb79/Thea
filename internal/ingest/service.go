@@ -26,14 +26,23 @@ type (
 	}
 
 	searcher interface {
-		SearchForEpisode(*media.FileMediaMetadata) (*media.Episode, error)
-		SearchForMovie(*media.FileMediaMetadata) (*media.Movie, error)
-		GetSeason(string, int) (*media.Season, error)
-		GetSeries(string) (*media.Series, error)
+		SearchForSeries(*media.FileMediaMetadata) (*tmdb.TmdbSeries, error)
+		SearchForMovie(*media.FileMediaMetadata) (*tmdb.TmdbMovie, error)
+		GetSeason(string, int) (*tmdb.TmdbSeason, error)
+		GetSeries(string) (*tmdb.TmdbSeries, error)
+		GetEpisode(string, int, int) (*tmdb.TmdbEpisode, error)
 	}
 
 	dataStore interface {
 		GetAllMediaSourcePaths() []string
+		GetSeasonWithTmdbId(string) (*media.Season, error)
+		GetSeriesWithTmdbId(string) (*media.Series, error)
+		GetEpisodeWithTmdbId(string) (*media.Episode, error)
+
+		SaveSeries(*media.Series) error
+		SaveSeason(*media.Season) error
+		SaveEpisode(*media.Episode, *media.Season, *media.Series) error
+		SaveMovie(*media.Movie) error
 	}
 
 	// ingestService is responsible for managing the automatic detection
@@ -63,7 +72,7 @@ type (
 // The configs 'IngestPath' is validated to be an existing directory.
 // If the directory is missing it will be created, if the path
 // provided points to an existing FILE, an error is returned.
-func New(config Config, store dataStore) (*ingestService, error) {
+func New(config Config, scraper scraper, store dataStore) (*ingestService, error) {
 	// Ensure config ingest path is a valid directory, create it
 	// if it's missing.
 	if info, err := os.Stat(config.IngestPath); err == nil {
@@ -78,7 +87,7 @@ func New(config Config, store dataStore) (*ingestService, error) {
 
 	service := &ingestService{
 		Mutex:            &sync.Mutex{},
-		scraper:          &media.MetadataScraper{},
+		scraper:          scraper,
 		Searcher:         tmdb.NewSearcher(tmdb.Config{}),
 		dataStore:        store,
 		config:           config,
@@ -110,6 +119,9 @@ func (service *ingestService) Run(ctx context.Context) error {
 
 	defer service.clearAllImportHoldTimers()
 
+	service.workerPool.Start()
+	defer service.workerPool.Close()
+
 	service.DiscoverNewFiles()
 
 	for {
@@ -132,19 +144,22 @@ func (service *ingestService) Run(ctx context.Context) error {
 func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 	item := service.claimIdleItem()
 	if item == nil {
-		return false, nil
+		return true, nil
 	}
 
-	if err := item.ingest(); err != nil {
+	log.Emit(logger.DEBUG, "Item %s claimed by worker %s for ingestion\n", item, w)
+	if err := item.ingest(service.scraper, service.Searcher, service.dataStore); err != nil {
 		if trbl, ok := err.(IngestItemTrouble); ok {
 			item.Trouble = &trbl
 			item.State = TROUBLED
+
+			log.Emit(logger.ERROR, "Ingestion of item %s failed due to error %s - Trouble (type=%d) raised!\n", item, trbl.Error(), trbl.Type)
 		} else {
 			return false, err
 		}
 	}
 
-	return true, nil
+	return false, nil
 }
 
 // DiscoverNewFiles will scan the host file system at the path

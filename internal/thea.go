@@ -11,6 +11,7 @@ import (
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/event"
 	"github.com/hbomb79/Thea/internal/ingest"
+	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/pkg/docker"
 	"github.com/hbomb79/Thea/pkg/logger"
@@ -127,7 +128,8 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return err
 	}
 
-	if serv, err := ingest.New(thea.config.IngestService, thea.storeOrchestrator); err == nil {
+	scraper := media.NewScraper(media.ScraperConfig{FfprobeBinPath: thea.config.Format.FfprobeBinaryPath})
+	if serv, err := ingest.New(thea.config.IngestService, scraper, thea.storeOrchestrator); err == nil {
 		thea.ingestService = serv
 	} else {
 		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))

@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -69,12 +70,24 @@ func (orchestrator *storeOrchestrator) GetEpisode(episodeId uuid.UUID) (*media.E
 	return orchestrator.MediaStore.GetEpisode(orchestrator.db.GetInstance(), episodeId)
 }
 
+func (orchestrator *storeOrchestrator) GetEpisodeWithTmdbId(tmdbID string) (*media.Episode, error) {
+	return nil, errors.New("not yet implemented")
+}
+
 func (orchestrator *storeOrchestrator) GetSeason(seasonId uuid.UUID) (*media.Season, error) {
 	return orchestrator.MediaStore.GetSeason(orchestrator.db.GetInstance(), seasonId)
 }
 
+func (orchestrator *storeOrchestrator) GetSeasonWithTmdbId(tmdbID string) (*media.Season, error) {
+	return nil, errors.New("not yet implemented")
+}
+
 func (orchestrator *storeOrchestrator) GetSeries(seriesId uuid.UUID) (*media.Series, error) {
 	return orchestrator.MediaStore.GetSeries(orchestrator.db.GetInstance(), seriesId)
+}
+
+func (orchestrator *storeOrchestrator) GetSeriesWithTmdbId(tmdbID string) (*media.Series, error) {
+	return nil, errors.New("not yet implemented")
 }
 
 func (orchestrator *storeOrchestrator) GetAllMediaSourcePaths() []string {

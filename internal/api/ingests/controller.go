@@ -11,14 +11,20 @@ import (
 )
 
 type (
-	// Dto is the response used by endpoints that return
+	// IngestDto is the response used by endpoints that return
 	// the items being ingested (e.g., list, get)
-	Dto struct {
-		Id       uuid.UUID
-		Path     string
-		State    ingest.IngestItemState
-		Trouble  *ingest.IngestItemTrouble
-		Metadata *media.FileMediaMetadata
+	IngestDto struct {
+		Id       uuid.UUID                `json:"id"`
+		Path     string                   `json:"source_path"`
+		State    ingest.IngestItemState   `json:"state"`
+		Trouble  *TroubleDto              `json:"trouble"`
+		Metadata *media.FileMediaMetadata `json:"file_metadata"`
+	}
+
+	TroubleDto struct {
+		Type    ingest.TroubleType `json:"type"`
+		Message string             `json:"message"`
+		Context map[string]any     `json:"context"`
 	}
 
 	// Service is where this controller gets it's information from, this is
@@ -55,7 +61,7 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 // list returns all the ingests - represented as DTOs - from the underlying store.
 func (controller *Controller) list(ec echo.Context) error {
 	items := controller.Service.GetAllIngests()
-	dtos := make([]*Dto, len(items))
+	dtos := make([]*IngestDto, len(items))
 	for k, v := range items {
 		dtos[k] = NewDto(v)
 	}
@@ -121,12 +127,21 @@ func (controller *Controller) performPoll(ec echo.Context) error {
 }
 
 // NewDto creates a IngestDto using the IngestItem model.
-func NewDto(item *ingest.IngestItem) *Dto {
-	return &Dto{
+func NewDto(item *ingest.IngestItem) *IngestDto {
+	var trbl *TroubleDto = nil
+	if item.Trouble != nil {
+		trbl = &TroubleDto{
+			Type:    item.Trouble.Type,
+			Message: item.Trouble.Error(),
+			Context: map[string]any{},
+		}
+	}
+
+	return &IngestDto{
 		Id:       item.Id,
 		Path:     item.Path,
 		State:    item.State,
-		Trouble:  nil,
-		Metadata: nil,
+		Trouble:  trbl,
+		Metadata: item.ScrapedMetadata,
 	}
 }

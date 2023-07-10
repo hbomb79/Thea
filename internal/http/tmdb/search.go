@@ -49,21 +49,29 @@ func (entry *TmdbSearchResultEntry) toMediaStub() *media.Stub {
 	}
 }
 
-type TmdbMovie struct{}
+type TmdbMovie struct {
+	Id string
+}
 
-func (movie *TmdbMovie) toMediaMovie() *media.Movie { return nil }
+func (movie *TmdbMovie) ToMediaMovie() *media.Movie { return nil }
 
-type TmdbEpisode struct{}
+type TmdbEpisode struct {
+	Id string
+}
 
-func (ep *TmdbEpisode) toMediaEpisode() *media.Episode { return nil }
+func (ep *TmdbEpisode) ToMediaEpisode() *media.Episode { return nil }
 
-type TmdbSeason struct{}
+type TmdbSeason struct {
+	Id string
+}
 
-func (season *TmdbSeason) toMediaSeason() *media.Season { return nil }
+func (season *TmdbSeason) ToMediaSeason() *media.Season { return nil }
 
-type TmdbSeries struct{}
+type TmdbSeries struct {
+	Id string
+}
 
-func (series *TmdbSeries) toMediaSeries() *media.Series { return nil }
+func (series *TmdbSeries) ToMediaSeries() *media.Series { return nil }
 
 // tmdbSearcher is the primary search method for the Ingest and
 // Download service to find content on the TMDB API.
@@ -79,13 +87,10 @@ func NewSearcher(config Config) *tmdbSearcher {
 
 // SearchForEpisode will search the TMDB API for a match using the
 // provided file media metadata. An error will be raised if:
-// A query to TMDB fails
-// A search returns zero results
-// A search returns multiple results and the searcher cannot decide which is correct
-//
-// TMDB episode information can only be gathered by first finding the 'show'/series, and then
-// querying specifically for the episode using the season/episode number.
-func (searcher *tmdbSearcher) SearchForEpisode(metadata *media.FileMediaMetadata) (*media.Episode, error) {
+//   - A query to TMDB fails
+//   - A search returns zero results
+//   - A search returns multiple results
+func (searcher *tmdbSearcher) SearchForSeries(metadata *media.FileMediaMetadata) (*TmdbSeries, error) {
 	season := metadata.SeasonNumber
 	episode := metadata.EpisodeNumber
 	if !metadata.Episodic {
@@ -111,9 +116,8 @@ func (searcher *tmdbSearcher) SearchForEpisode(metadata *media.FileMediaMetadata
 		return nil, &MultipleResultError{&stubs}
 	}
 
-	// Get the episode
-	series := searchResult.Results[0]
-	return searcher.GetEpisode(series.Id, metadata.SeasonNumber, metadata.EpisodeNumber)
+	result := searchResult.Results[0]
+	return &TmdbSeries{Id: result.Id}, nil
 }
 
 // SearchForMovie will search the TMDB API for a match using the
@@ -121,7 +125,7 @@ func (searcher *tmdbSearcher) SearchForEpisode(metadata *media.FileMediaMetadata
 // A query to TMDB fails
 // A search returns zero results
 // A search returns multiple results and the searcher cannot decide which is correct
-func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) (*media.Movie, error) {
+func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) (*TmdbMovie, error) {
 	if metadata.Episodic {
 		return nil, &IllegalRequestError{"metadata provided claims media is episodic, but request is searching for a movie"}
 	}
@@ -145,54 +149,54 @@ func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) 
 
 	// Get the movie detaila
 	movie := searchResult.Results[0]
-	return searcher.GetMovie(movie.Id)
+	return &TmdbMovie{Id: movie.Id}, nil
 
 }
 
-func (searcher *tmdbSearcher) GetMovie(movieId string) (*media.Movie, error) {
+func (searcher *tmdbSearcher) GetMovie(movieId string) (*TmdbMovie, error) {
 	path := fmt.Sprintf(tmdbGetMovieTemplate, tmdbBaseUrl, movieId, searcher.config.apiKey)
 	var movie TmdbMovie
 	if err := httpGetJsonResponse(path, &movie); err != nil {
 		return nil, err
 	}
 
-	return movie.toMediaMovie(), nil
+	return &movie, nil
 }
 
 // GetSeries will query TMDB API for the series with the provided string ID. This ID
 // must be a valid TMDB ID, or else an error will be returned.
-func (searcher *tmdbSearcher) GetSeries(seriesId string) (*media.Series, error) {
+func (searcher *tmdbSearcher) GetSeries(seriesId string) (*TmdbSeries, error) {
 	path := fmt.Sprintf(tmdbGetSeriesTemplate, tmdbBaseUrl, seriesId, searcher.config.apiKey)
 	var series TmdbSeries
 	if err := httpGetJsonResponse(path, &series); err != nil {
 		return nil, err
 	}
 
-	return series.toMediaSeries(), nil
+	return &series, nil
 }
 
 // GetEpisode queries TMDB using the seriesID combined with the season and episode number. It is expected
 // that the seriesID provided is a valid TMDB ID, else the request will fail.
-func (searcher *tmdbSearcher) GetEpisode(seriesId string, seasonNumber int, episodeNumber int) (*media.Episode, error) {
+func (searcher *tmdbSearcher) GetEpisode(seriesId string, seasonNumber int, episodeNumber int) (*TmdbEpisode, error) {
 	path := fmt.Sprintf(tmdbGetEpisodeTemplate, tmdbBaseUrl, seriesId, seasonNumber, episodeNumber, searcher.config.apiKey)
 	var episode TmdbEpisode
 	if err := httpGetJsonResponse(path, &episode); err != nil {
 		return nil, err
 	}
 
-	return episode.toMediaEpisode(), nil
+	return &episode, nil
 }
 
 // GetSeason will query TMDB API for the season with the provided string ID. This ID
 // must be a valid TMDB ID, or else an error will be returned.
-func (searcher *tmdbSearcher) GetSeason(seriesId string, seasonNumber int) (*media.Season, error) {
+func (searcher *tmdbSearcher) GetSeason(seriesId string, seasonNumber int) (*TmdbSeason, error) {
 	path := fmt.Sprintf(tmdbGetSeasonTemplate, tmdbBaseUrl, seriesId, seasonNumber, searcher.config.apiKey)
 	var season TmdbSeason
 	if err := httpGetJsonResponse(path, &season); err != nil {
 		return nil, err
 	}
 
-	return season.toMediaSeason(), nil
+	return &season, nil
 }
 
 // NoResultError is used when a TMDB search has returned no results.

@@ -57,7 +57,7 @@ func (cmd *TranscodeCmd) Run(ctx context.Context, ffmpegConfig transcoder.Option
 
 	progressChannel, err := transcoder.Start(ffmpegConfig)
 	if err != nil {
-		return parseFfmpegError(err)
+		return ParseFfmpegError(err)
 	}
 
 	cmd.runningCommand = transcoder.GetRunningCmdInstance()
@@ -120,7 +120,7 @@ func (cmd *TranscodeCmd) String() string {
 	return fmt.Sprintf("{ffmpeg pid=%d | in_path=%s | out_path = %s}", pid, cmd.inputPath, cmd.outputPath)
 }
 
-func parseFfmpegError(err error) error {
+func ParseFfmpegError(err error) error {
 	// Try and pick out some relevant information from the HUGE
 	// output log from ffmpeg. The error we get contains lots of information
 	// about how the binary was compiled... this is useless info, we just

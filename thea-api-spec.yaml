@@ -9,7 +9,255 @@ info:
 tags:
   - name: target
     description: A transcode target, typically associatted with transcode tasks and workflows
+  - name: workflow
+    description: A Thea workflow is a collection of targets and conditions which are used to automatically perform transcodes
+  - name: transcodeTasks
+    description: Ongoing or completed tasks which transcoded media
+  - name: ingest
+    description: Ongoing tasks which represent the ingestion of media in to Thea
 paths:
+  /ingests:
+    get:
+      summary: List Ingests
+      description: Returns all active/troubled ingests
+      operationId: listIngests
+      tags:
+        - ingest
+      responses:
+        "200":
+          description: List of ingests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IngestTask"
+  /ingests/{id}:
+    get:
+      summary: Get
+      description: Returns the ingest with the ID provided
+      operationId: getIngest
+      tags:
+        - ingest
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The ingest, if found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestTask"
+    delete:
+      summary: Delete
+      description: Deletes the trouble with the ID provided
+      operationId: deleteIngest
+      tags:
+        - ingest
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Delete successful
+  /ingests/{id}/trouble-resolution:
+    post:
+      summary: Resolve Trouble
+      description: Resolves the trouble with the ID provided
+      operationId: resolveIngest
+      tags:
+        - ingest
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resolution successful
+
+  /ingests/poll:
+    post:
+      summary: Poll
+      description: Requests Ingest Service to re-poll the file system for new files which need to be ingested
+      operationId: pollIngests
+      tags:
+        - ingest
+      responses:
+        "200":
+          description: Acknowledged
+
+  /transcodes:
+    post:
+      summary: Create a new transcode task
+      description: Creates a new task
+      operationId: createTask
+      tags:
+        - transcodeTasks
+      requestBody:
+        $ref: "#/components/requestBodies/CreateTranscodeTask"
+      responses:
+        "201":
+          description: Creation successful
+  /transcodes/active:
+    get:
+      summary: List Active Tasks
+      description: Returns all active tasks
+      operationId: listActiveTasks
+      tags:
+        - transcodeTasks
+      responses:
+        "200":
+          description: List of active tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranscodeTask"
+  /transcodes/complete:
+    get:
+      summary: List Completed Tasks
+      description: Returns all completed tasks
+      operationId: listCompleteTasks
+      tags:
+        - transcodeTasks
+      responses:
+        "200":
+          description: List of complete tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranscodeTask"
+  /transcodes/{id}:
+    get:
+      summary: Get Transcode Task
+      description: Return matching task, whether active or completed
+      operationId: getTask
+      tags:
+        - transcodeTasks
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Complete or active transcode task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscodeTask"
+    delete:
+      summary: Delete Task
+      description: Deletes matching task. Cancells it if active, and cleans up transcoded media if completed.
+      operationId: deleteTask
+      tags:
+        - transcodeTasks
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Delete successful
+
+  /transcode-workflows:
+    get:
+      summary: List Workflows
+      description: Returns all workflows
+      operationId: listWorkflows
+      tags:
+        - workflow
+      responses:
+        "200":
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workflow"
+
+    post:
+      summary: Create Workflow
+      description: Creates a new workflow
+      operationId: createWorkflow
+      tags:
+        - workflow
+      requestBody:
+        $ref: "#/components/requestBodies/CreateWorkflow"
+      responses:
+        "201":
+          description: Creation successful
+  /transcode-workflows/{id}:
+    get:
+      summary: Get Workflow
+      description: Return matching workflow
+      operationId: getWorkflow
+      tags:
+        - workflow
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
+    patch:
+      summary: Update Workflow
+      description: Updates the matching workflow
+      operationId: updateWorkflow
+      tags:
+        - workflow
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The updated workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
+    delete:
+      summary: Delete Workflow
+      description: Deletes matching workflow
+      operationId: deleteWorkflow
+      tags:
+        - workflow
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Delete successful
+
   /transcode-targets:
     get:
       tags:
@@ -77,6 +325,8 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        $ref: "#/components/requestBodies/UpdateTarget"
       responses:
         "200":
           description: The updated target
@@ -107,9 +357,19 @@ externalDocs:
   description: Find out more about Swagger
   url: http://swagger.io
 servers:
-  - url: localhost:8080/api/thea/v1
+  - url: http://localhost:8080/api/thea/v1
 components:
   requestBodies:
+    CreateTranscodeTask:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateTranscodeTask"
+    CreateWorkflow:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateWorkflow"
     UpdateTarget:
       content:
         application/json:
@@ -121,8 +381,19 @@ components:
           schema:
             $ref: "#/components/schemas/CreateTarget"
   schemas:
-    Target:
+    IngestTask:
       type: object
+
+    CreateTranscodeTask:
+      type: object
+    TranscodeTask:
+      type: object
+
+    CreateWorkflow:
+      type: object
+    Workflow:
+      type: object
+
     CreateTarget:
       type: object
       properties:
@@ -141,3 +412,5 @@ components:
         ffmpeg_options:
           type: object
           nullable: true
+    Target:
+      type: object

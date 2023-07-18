@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -71,7 +70,7 @@ func (orchestrator *storeOrchestrator) GetEpisode(episodeId uuid.UUID) (*media.E
 }
 
 func (orchestrator *storeOrchestrator) GetEpisodeWithTmdbId(tmdbID string) (*media.Episode, error) {
-	return nil, errors.New("not yet implemented")
+	return orchestrator.MediaStore.GetEpisodeWithTmdbId(orchestrator.db.GetInstance(), tmdbID)
 }
 
 func (orchestrator *storeOrchestrator) GetSeason(seasonId uuid.UUID) (*media.Season, error) {
@@ -79,7 +78,7 @@ func (orchestrator *storeOrchestrator) GetSeason(seasonId uuid.UUID) (*media.Sea
 }
 
 func (orchestrator *storeOrchestrator) GetSeasonWithTmdbId(tmdbID string) (*media.Season, error) {
-	return nil, errors.New("not yet implemented")
+	return orchestrator.MediaStore.GetSeasonWithTmdbId(orchestrator.db.GetInstance(), tmdbID)
 }
 
 func (orchestrator *storeOrchestrator) GetSeries(seriesId uuid.UUID) (*media.Series, error) {
@@ -87,7 +86,7 @@ func (orchestrator *storeOrchestrator) GetSeries(seriesId uuid.UUID) (*media.Ser
 }
 
 func (orchestrator *storeOrchestrator) GetSeriesWithTmdbId(tmdbID string) (*media.Series, error) {
-	return nil, errors.New("not yet implemented")
+	return orchestrator.MediaStore.GetSeriesWithTmdbId(orchestrator.db.GetInstance(), tmdbID)
 }
 
 func (orchestrator *storeOrchestrator) GetAllMediaSourcePaths() []string {
@@ -108,11 +107,14 @@ func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
 
 // SaveEpisode transactoinally saves the episode provided, as well as the season and series
 // it's associatted with IF they are provided.
+//
+// Note: If the season/series are not provided, and the FK-constraint of the episode cannot
+// be fulfilled because of this, then the save will fail. It is recommended to supply all parameters.
 func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, season *media.Season, series *media.Series) error {
 	// Store old PKs so we can rollback on transaction failure
-	episodeId := episode.Id
-	seasonId := season.Id
-	seriesId := series.Id
+	episodeId := episode.ID
+	seasonId := season.ID
+	seriesId := series.ID
 
 	if err := orchestrator.db.GetInstance().Transaction(func(tx *gorm.DB) error {
 		if err := orchestrator.MediaStore.SaveSeries(tx, series); err != nil {
@@ -124,22 +126,22 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 		}
 
 		var existingEpisode *media.Episode
-		tx.Where(&media.Episode{Common: media.Common{TmdbId: episode.TmdbId}}).First(&existingEpisode)
+		tx.Where(&media.Episode{Model: media.Model{TmdbId: episode.TmdbId}}).First(&existingEpisode)
 		if existingEpisode != nil {
-			episode.Id = existingEpisode.Id
+			episode.ID = existingEpisode.ID
 		}
 
 		err := tx.Debug().Save(episode).Error
 		if err != nil {
-			episode.Id = episodeId
+			episode.ID = episodeId
 			return err
 		}
 
 		return nil
 	}); err != nil {
-		episode.Id = episodeId
-		season.Id = seasonId
-		series.Id = seriesId
+		episode.ID = episodeId
+		season.ID = seasonId
+		series.ID = seriesId
 
 		return err
 	}

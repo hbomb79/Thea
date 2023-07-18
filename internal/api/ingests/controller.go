@@ -1,6 +1,7 @@
 package ingests
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
@@ -16,15 +17,18 @@ type (
 	IngestDto struct {
 		Id       uuid.UUID                `json:"id"`
 		Path     string                   `json:"source_path"`
-		State    ingest.IngestItemState   `json:"state"`
+		State    IngestStateDto           `json:"state"`
 		Trouble  *TroubleDto              `json:"trouble"`
 		Metadata *media.FileMediaMetadata `json:"file_metadata"`
 	}
 
+	IngestStateDto string
+	TroubleTypeDto string
+
 	TroubleDto struct {
-		Type    ingest.TroubleType `json:"type"`
-		Message string             `json:"message"`
-		Context map[string]any     `json:"context"`
+		Type    TroubleTypeDto `json:"type"`
+		Message string         `json:"message"`
+		Context map[string]any `json:"context"`
 	}
 
 	// Service is where this controller gets it's information from, this is
@@ -42,6 +46,18 @@ type (
 	Controller struct {
 		Service Service
 	}
+)
+
+const (
+	IDLE        IngestStateDto = "IDLE"
+	IMPORT_HOLD IngestStateDto = "IMPORT_HOLD"
+	INGESTING   IngestStateDto = "INGESTING"
+	TROUBLED    IngestStateDto = "TROUBLED"
+
+	METADATA_FAILURE     TroubleTypeDto = "METADATA_FAILURE"
+	TMDB_FAILURE_UNKNOWN TroubleTypeDto = "TMDB_FAILURE_UNKNOWN"
+	TMDB_FAILURE_MULTI   TroubleTypeDto = "TMDB_FAILURE_MULTI_RESULT"
+	TMDB_FAILURE_NONE    TroubleTypeDto = "TMDB_FAILURE_NO_RESULT"
 )
 
 func New(validate *validator.Validate, serv Service) *Controller {
@@ -131,7 +147,7 @@ func NewDto(item *ingest.IngestItem) *IngestDto {
 	var trbl *TroubleDto = nil
 	if item.Trouble != nil {
 		trbl = &TroubleDto{
-			Type:    item.Trouble.Type,
+			Type:    TroubleTypeModelToDto(item.Trouble.Type),
 			Message: item.Trouble.Error(),
 			Context: map[string]any{},
 		}
@@ -140,8 +156,38 @@ func NewDto(item *ingest.IngestItem) *IngestDto {
 	return &IngestDto{
 		Id:       item.Id,
 		Path:     item.Path,
-		State:    item.State,
+		State:    IngestStateModelToDto(item.State),
 		Trouble:  trbl,
 		Metadata: item.ScrapedMetadata,
 	}
+}
+
+func TroubleTypeModelToDto(troubleType ingest.TroubleType) TroubleTypeDto {
+	switch troubleType {
+	case ingest.METADATA_FAILURE:
+		return METADATA_FAILURE
+	case ingest.TMDB_FAILURE_UNKNOWN:
+		return TMDB_FAILURE_UNKNOWN
+	case ingest.TMDB_FAILURE_NONE:
+		return TMDB_FAILURE_NONE
+	case ingest.TMDB_FAILURE_MULTI:
+		return TMDB_FAILURE_MULTI
+	}
+
+	panic(fmt.Sprintf("ingest trouble type %s is not recognized by API layer, DTO cannot be created. Please report this error.", troubleType))
+}
+
+func IngestStateModelToDto(modelType ingest.IngestItemState) IngestStateDto {
+	switch modelType {
+	case ingest.IDLE:
+		return IDLE
+	case ingest.IMPORT_HOLD:
+		return IMPORT_HOLD
+	case ingest.INGESTING:
+		return INGESTING
+	case ingest.TROUBLED:
+		return TROUBLED
+	}
+
+	panic(fmt.Sprintf("ingest type %s is not recognized by API layer, DTO cannot be created. Please report this error.", modelType))
 }

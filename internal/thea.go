@@ -10,6 +10,7 @@ import (
 	"github.com/hbomb79/Thea/internal/api"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/event"
+	"github.com/hbomb79/Thea/internal/http/tmdb"
 	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/transcode"
@@ -127,9 +128,9 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	if err := db.Connect(thea.config.Database); err != nil {
 		return err
 	}
-
+	searcher := tmdb.NewSearcher(tmdb.Config{ApiKey: thea.config.OmdbKey})
 	scraper := media.NewScraper(media.ScraperConfig{FfprobeBinPath: thea.config.Format.FfprobeBinaryPath})
-	if serv, err := ingest.New(thea.config.IngestService, scraper, thea.storeOrchestrator); err == nil {
+	if serv, err := ingest.New(thea.config.IngestService, searcher, scraper, thea.storeOrchestrator); err == nil {
 		thea.ingestService = serv
 	} else {
 		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))

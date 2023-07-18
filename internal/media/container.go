@@ -34,10 +34,10 @@ const (
 )
 
 func (cont *Container) Resolution() (int, int) { return 0, 0 }
-func (cont *Container) Id() uuid.UUID          { return cont.common().Id }
-func (cont *Container) Title() string          { return cont.common().Title }
-func (cont *Container) TmdbId() string         { return cont.common().TmdbId }
-func (cont *Container) Source() string         { return cont.common().SourcePath }
+func (cont *Container) Id() uuid.UUID          { return cont.model().ID }
+func (cont *Container) Title() string          { return cont.model().Title }
+func (cont *Container) TmdbId() string         { return cont.model().TmdbId }
+func (cont *Container) Source() string         { return cont.watchable().SourcePath }
 
 // EpisodeNumber returns the episode number for the media IF it is an Episode. -1
 // is returned if the container is holding a Movie.
@@ -60,15 +60,26 @@ func (cont *Container) SeasonNumber() int {
 }
 
 func (cont *Container) String() string {
-	return fmt.Sprintf("{media title=%s | id=%s | tmdb_id=%s }", cont.common().Title, cont.common().Id, cont.common().TmdbId)
+	return fmt.Sprintf("{media title=%s | id=%s | tmdb_id=%s }", cont.model().Title, cont.model().ID, cont.model().TmdbId)
 }
 
-func (cont *Container) common() *Common {
+func (cont *Container) watchable() *Watchable {
 	switch cont.Type {
 	case MOVIE:
-		return &cont.Movie.Common
+		return &cont.Movie.Watchable
 	case EPISODE:
-		return &cont.Episode.Common
+		return &cont.Episode.Watchable
+	default:
+		panic("Container type unknown?")
+	}
+}
+
+func (cont *Container) model() *Model {
+	switch cont.Type {
+	case MOVIE:
+		return &cont.Movie.Model
+	case EPISODE:
+		return &cont.Episode.Model
 	default:
 		panic("Container type unknown?")
 	}

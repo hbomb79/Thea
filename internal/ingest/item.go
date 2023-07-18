@@ -43,15 +43,19 @@ const (
 
 func (item *IngestItem) ResolveTrouble() error { return errors.New("not yet implemented") }
 
+// ingest is the main task for an ingest task which:
+// - Scrapes the metadata from the file
+// - Searches TMDB for a match
+// - Saves the episode/movie to the database
+// Any of the above can encounter an error - if the error can be cast to the
+// IngestItemTrouble type then it should be raised as a TROUBLE on the item.
 func (item *IngestItem) ingest(scraper scraper, searcher searcher, data dataStore) error {
 	log.Emit(logger.NEW, "Beginning ingestion of item %s\n", item)
 	if item.ScrapedMetadata == nil {
 		log.Emit(logger.DEBUG, "Performing file system metadata scrape\n")
 		if meta, err := scraper.ScrapeFileForMediaInfo(item.Path); err != nil {
-			log.Emit(logger.DEBUG, "Err %s\n", err.Error())
 			return IngestItemTrouble{err, METADATA_FAILURE}
 		} else if meta == nil {
-			log.Emit(logger.DEBUG, "Nil\n")
 			return IngestItemTrouble{errors.New("metadata scraping returned no error, but also returned nil"), METADATA_FAILURE}
 		} else {
 			log.Emit(logger.DEBUG, "Scrape for item %s complete:\n%#v\n", item, meta)
@@ -77,8 +81,12 @@ func (item *IngestItem) ingest(scraper scraper, searcher searcher, data dataStor
 			return IngestItemTrouble{err, TMDB_FAILURE_UNKNOWN}
 		}
 
-		log.Emit(logger.DEBUG, "Saving newly ingested EPISODE: %s\nSEASON: %s\nSERIES: %s\n", ep, season, series)
-		return data.SaveEpisode(ep.ToMediaEpisode(), season.ToMediaSeason(), series.ToMediaSeries())
+		log.Emit(logger.DEBUG, "Saving newly ingested EPISODE: %v\nSEASON: %v\nSERIES: %v\n", ep, season, series)
+		return data.SaveEpisode(
+			item.tmdbEpisodeToMedia(ep),
+			item.tmdbSeasonToMedia(season),
+			item.tmdbSeriesToMedia(series),
+		)
 	} else {
 		movie, err := searcher.SearchForMovie(item.ScrapedMetadata)
 		if err != nil {
@@ -86,7 +94,49 @@ func (item *IngestItem) ingest(scraper scraper, searcher searcher, data dataStor
 		}
 
 		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %s", movie)
-		return data.SaveMovie(movie.ToMediaMovie())
+		return data.SaveMovie(item.tmdbMovieToMedia(movie))
+	}
+}
+
+func (item *IngestItem) tmdbEpisodeToMedia(ep *tmdb.Episode) *media.Episode {
+	scrapedMetadata := item.ScrapedMetadata
+	return &media.Episode{
+		Model: media.Model{ID: uuid.New(), TmdbId: ep.Id, Title: ep.Name},
+		Watchable: media.Watchable{
+			MediaResolution: media.MediaResolution{
+				Width:  *scrapedMetadata.FrameW,
+				Height: *scrapedMetadata.FrameH,
+			},
+			SourcePath: item.Path,
+		},
+		SeasonNumber:  scrapedMetadata.SeasonNumber,
+		EpisodeNumber: scrapedMetadata.EpisodeNumber,
+	}
+}
+
+func (item *IngestItem) tmdbSeriesToMedia(series *tmdb.Series) *media.Series {
+	return &media.Series{
+		Model: media.Model{ID: uuid.New(), TmdbId: series.Id, Title: series.Name},
+		Adult: series.Adult,
+	}
+}
+
+func (item *IngestItem) tmdbSeasonToMedia(season *tmdb.Season) *media.Season {
+	return &media.Season{
+		Model: media.Model{ID: uuid.New(), TmdbId: season.Id, Title: season.Name},
+	}
+
+}
+
+func (item *IngestItem) tmdbMovieToMedia(movie *tmdb.Movie) *media.Movie {
+	scrapedMetadata := item.ScrapedMetadata
+	return &media.Movie{
+		Model: media.Model{ID: uuid.New(), TmdbId: movie.Id, Title: movie.Name},
+		Watchable: media.Watchable{
+			MediaResolution: media.MediaResolution{Width: *scrapedMetadata.FrameW, Height: *scrapedMetadata.FrameH},
+			SourcePath:      item.Path,
+		},
+		Adult: movie.Adult,
 	}
 }
 
@@ -114,5 +164,35 @@ func (item *IngestItem) modtimeDiff() (*time.Duration, error) {
 }
 
 func (item *IngestItem) String() string {
-	return fmt.Sprintf("IngestItem{ID=%s state=%d}", item.Id, item.State)
+	return fmt.Sprintf("IngestItem{ID=%s state=%s}", item.Id, item.State)
+}
+
+func (t TroubleType) String() string {
+	switch t {
+	case METADATA_FAILURE:
+		return fmt.Sprintf("METADATA_FAILURE[%d]", t)
+	case TMDB_FAILURE_UNKNOWN:
+		return fmt.Sprintf("TMDB_FAILURE_UNKNOWN[%d]", t)
+	case TMDB_FAILURE_MULTI:
+		return fmt.Sprintf("TMDB_FAILURE_MULTI[%d]", t)
+	case TMDB_FAILURE_NONE:
+		return fmt.Sprintf("TMDB_FAILURE_NONE[%d]", t)
+	}
+
+	return fmt.Sprintf("UNKNOWN[%d]", t)
+}
+
+func (s IngestItemState) String() string {
+	switch s {
+	case IDLE:
+		return fmt.Sprintf("IDLE[%d]", s)
+	case IMPORT_HOLD:
+		return fmt.Sprintf("IMPORT_HOLD[%d]", s)
+	case INGESTING:
+		return fmt.Sprintf("INGESTING[%d]", s)
+	case TROUBLED:
+		return fmt.Sprintf("TROUBLED[%d]", s)
+	}
+
+	return fmt.Sprintf("UNKNOWN[%d]", s)
 }

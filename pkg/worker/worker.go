@@ -1,6 +1,10 @@
 package worker
 
-import "github.com/hbomb79/Thea/pkg/logger"
+import (
+	"fmt"
+
+	"github.com/hbomb79/Thea/pkg/logger"
+)
 
 var workerLogger = logger.Get("Worker")
 
@@ -58,9 +62,9 @@ func (worker *taskWorker) Start() {
 		}
 
 		shouldSleep, err := worker.task(worker)
-		workerLogger.Emit(logger.DEBUG, "Worker %s (status=%d) task complete. Should sleep: %v. Has error: %v\n", worker.label, worker.currentStatus, shouldSleep, err)
+		workerLogger.Emit(logger.VERBOSE, "%s task complete. Should sleep: %v. Has error: %v\n", worker, shouldSleep, err)
 		if err != nil {
-			workerLogger.Emit(logger.ERROR, "Worker labelled %v has reported an error(%T): %v\n", worker.label, err, err.Error())
+			workerLogger.Emit(logger.ERROR, "%s has reported an error(%T): %v\n", worker, err, err.Error())
 			break
 		}
 
@@ -73,7 +77,7 @@ func (worker *taskWorker) Start() {
 	}
 
 	worker.currentStatus = DEAD
-	workerLogger.Emit(logger.STOP, "Worker for stage %v with label %v has stopped\n", worker.label)
+	workerLogger.Emit(logger.STOP, "Worker %s has stopped\n", worker.label)
 }
 
 // Status returns the current status of this worker
@@ -115,4 +119,8 @@ func (worker *taskWorker) Sleep() (isAlive bool) {
 	}
 
 	return isAlive
+}
+
+func (worker *taskWorker) String() string {
+	return fmt.Sprintf("Worker{label=%s state=%d}", worker.label, worker.currentStatus)
 }

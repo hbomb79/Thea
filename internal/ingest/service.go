@@ -26,11 +26,11 @@ type (
 	}
 
 	searcher interface {
-		SearchForSeries(*media.FileMediaMetadata) (*tmdb.TmdbSeries, error)
-		SearchForMovie(*media.FileMediaMetadata) (*tmdb.TmdbMovie, error)
-		GetSeason(string, int) (*tmdb.TmdbSeason, error)
-		GetSeries(string) (*tmdb.TmdbSeries, error)
-		GetEpisode(string, int, int) (*tmdb.TmdbEpisode, error)
+		SearchForSeries(*media.FileMediaMetadata) (*tmdb.Series, error)
+		SearchForMovie(*media.FileMediaMetadata) (*tmdb.Movie, error)
+		GetSeason(string, int) (*tmdb.Season, error)
+		GetSeries(string) (*tmdb.Series, error)
+		GetEpisode(string, int, int) (*tmdb.Episode, error)
 	}
 
 	dataStore interface {
@@ -72,7 +72,7 @@ type (
 // The configs 'IngestPath' is validated to be an existing directory.
 // If the directory is missing it will be created, if the path
 // provided points to an existing FILE, an error is returned.
-func New(config Config, scraper scraper, store dataStore) (*ingestService, error) {
+func New(config Config, searcher searcher, scraper scraper, store dataStore) (*ingestService, error) {
 	// Ensure config ingest path is a valid directory, create it
 	// if it's missing.
 	if info, err := os.Stat(config.IngestPath); err == nil {
@@ -88,7 +88,7 @@ func New(config Config, scraper scraper, store dataStore) (*ingestService, error
 	service := &ingestService{
 		Mutex:            &sync.Mutex{},
 		scraper:          scraper,
-		Searcher:         tmdb.NewSearcher(tmdb.Config{}),
+		Searcher:         searcher,
 		dataStore:        store,
 		config:           config,
 		items:            make([]*IngestItem, 0),
@@ -153,7 +153,7 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 			item.Trouble = &trbl
 			item.State = TROUBLED
 
-			log.Emit(logger.ERROR, "Ingestion of item %s failed due to error %s - Trouble (type=%d) raised!\n", item, trbl.Error(), trbl.Type)
+			log.Emit(logger.ERROR, "Ingestion of item %s failed due to error %s - Trouble (%s) raised!\n", item, trbl.Error(), trbl.Type)
 		} else {
 			return false, err
 		}

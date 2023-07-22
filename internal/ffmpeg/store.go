@@ -1,10 +1,13 @@
 package ffmpeg
 
 import (
-	"errors"
-
+	"github.com/doug-martin/goqu/v9"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
+)
+
+const (
+	TargetTable = "transcode_target"
 )
 
 type Store struct {
@@ -15,50 +18,50 @@ func (store *Store) RegisterModels(db database.Manager) {
 }
 
 func (store *Store) Save(db database.Goqu, target *Target) error {
-	// return db.Save(target).Error
-	return errors.New("not yet implemented")
+	_, err := db.Insert(TargetTable).Rows(target).Executor().Exec()
+	return err
 }
 
 func (store *Store) Get(db database.Goqu, id uuid.UUID) *Target {
-	return nil
-	// var result Target
-	// if err := db.Where(&Target{ID: id}).First(&result).Error; err != nil {
-	// 	log.Emit(logger.ERROR, "Failed to find target (id=%s): %s\n", id, err.Error())
-	// 	return nil
-	// }
+	var result *Target = nil
+	found, err := db.From(TargetTable).Where(goqu.C("id").Is(id)).ScanStruct(&result)
+	if err != nil {
+		log.Fatalf("Failed to find target (id=%v): %s\n", id, err.Error())
+		return nil
+	}
 
-	// return &result
+	if found {
+		return result
+	}
+
+	return nil
 }
 
 func (store *Store) GetAll(db database.Goqu) []*Target {
-	// results := make([]*Target, 0)
-	// if err := db.Find(&results).Error; err != nil {
-	// 	log.Emit(logger.ERROR, "Failed to fetch all targets: %s\n", err.Error())
-	// 	return make([]*Target, 0)
-	// }
+	var results []*Target
+	err := db.From(TargetTable).ScanStructs(&results)
+	if err != nil {
+		log.Fatalf("Failed to fetch all targets: %s\n", err.Error())
+		return make([]*Target, 0)
+	}
 
-	// return results
-	return nil
+	return results
 }
 
 func (store *Store) GetMany(db database.Goqu, ids ...uuid.UUID) []*Target {
-	// if len(ids) == 0 {
-	// 	return make([]*Target, 0)
-	// }
+	var results []*Target
+	err := db.From(TargetTable).Where(goqu.C("id").In(ids)).ScanStructs(&results)
+	if err != nil {
+		log.Fatalf("Failed to get targets with IDs=%#v: %s\n", ids, err.Error())
+		return nil
+	}
 
-	// var results []*Target
-	// if err := db.Debug().Find(&results, ids).Error; err != nil {
-	// 	log.Emit(logger.ERROR, "Failed to get targets with ID = %v due to error: %s\n", ids, err.Error())
-	// 	return make([]*Target, 0)
-	// }
-
-	// return results
-	return nil
+	return results
 }
 
 func (store *Store) Delete(db database.Goqu, id uuid.UUID) {
-	// err := db.Delete(&Target{ID: id}).Error
-	// if err != nil {
-	// 	log.Emit(logger.ERROR, "Failed to delete target (id=%s): %s\n", id, err.Error())
-	// }
+	_, err := db.From(TargetTable).Where(goqu.C("id").Is(id)).Delete().Executor().Exec()
+	if err != nil {
+		log.Fatalf("Failed to delete target (ID=%s): %s\n", id, err.Error())
+	}
 }

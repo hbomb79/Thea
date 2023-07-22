@@ -186,7 +186,7 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 		requiredBudget := task.Target().RequiredThreads()
 		availableBudget := service.config.MaximumThreadConsumption - service.consumedThreads
 		if requiredBudget > availableBudget {
-			log.Emit(logger.DEBUG, "Thread requirements of task %s (%s) exceed remaining budget (%s), instance spawning complete\n", task, requiredBudget, availableBudget)
+			log.Emit(logger.DEBUG, "Thread requirements of task %s (%d) exceed remaining budget (%d), instance spawning complete\n", task, requiredBudget, availableBudget)
 			return
 		}
 
@@ -246,7 +246,7 @@ func (service *transcodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) 
 		if workflow.IsMediaEligible(media) {
 			for _, target := range workflow.Targets {
 				if err := service.spawnFfmpegTarget(media, target); err != nil {
-					log.Emit(logger.ERROR, "failed to spawn ffmpeg target %s for media %s: %s\n", target, media, err.Error())
+					log.Emit(logger.ERROR, "failed to spawn ffmpeg target %s for media %s: %s\n", target, media.Id(), err.Error())
 				}
 			}
 

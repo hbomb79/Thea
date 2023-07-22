@@ -81,6 +81,8 @@ func (opts Opts) GetStrArguments() []string {
 	return values
 }
 
-func (target *Target) RequiredThreads() int {
-	return 2
+func (target *Target) String() string {
+	return fmt.Sprintf("Target{ID=%s Label=%s}", target.ID, target.Label)
 }
+
+func (target *Target) RequiredThreads() int { return 2 }

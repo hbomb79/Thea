@@ -100,3 +100,25 @@ func (task *TranscodeTask) Media() *media.Container        { return task.media }
 func (task *TranscodeTask) Target() *ffmpeg.Target         { return task.target }
 func (task *TranscodeTask) Status() TranscodeTaskStatus    { return task.status }
 func (task *TranscodeTask) Trouble() any                   { return nil }
+func (task *TranscodeTask) String() string {
+	return fmt.Sprintf("Task{ID=%s MediaID=%s TargetID=%s Status=%s}", task.id, task.media.Id(), task.target.ID, task.status)
+}
+
+func (s TranscodeTaskStatus) String() string {
+	switch s {
+	case WAITING:
+		return fmt.Sprintf("WAITING[%d]", s)
+	case WORKING:
+		return fmt.Sprintf("WORKING[%d]", s)
+	case SUSPENDED:
+		return fmt.Sprintf("SUSPENDED[%d]", s)
+	case TROUBLED:
+		return fmt.Sprintf("TROUBLED[%d]", s)
+	case CANCELLED:
+		return fmt.Sprintf("CANCELLED[%d]", s)
+	case COMPLETE:
+		return fmt.Sprintf("COMPLETE[%d]", s)
+	}
+
+	return fmt.Sprintf("UNKNOWN[%d]", s)
+}

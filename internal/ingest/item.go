@@ -104,7 +104,7 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 			return handleSearchError(err)
 		}
 
-		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %s", movie)
+		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %v", movie)
 		mov := item.tmdbMovieToMedia(movie)
 		if err := data.SaveMovie(mov); err != nil {
 			return IngestItemTrouble{err, GENERIC_FAILURE}

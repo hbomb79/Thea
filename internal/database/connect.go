@@ -14,14 +14,15 @@ import (
 )
 
 const (
-	SqlDialect = "postgres"
+	SqlDialect          = "postgres"
+	SqlConnectionString = "host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Pacific/Auckland"
 )
 
 var (
-	dbLogger = logger.Get("DB")
-
 	//go:embed migrations/*.sql
 	migrations embed.FS
+
+	dbLogger = logger.Get("DB")
 )
 
 type (
@@ -73,14 +74,7 @@ func New() *manager {
 }
 
 func (db *manager) Connect(config DatabaseConfig) error {
-	sql, err := sql.Open(SqlDialect, fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Pacific/Auckland",
-		config.Host,
-		config.User,
-		config.Password,
-		config.Name,
-		config.Port,
-	))
+	sql, err := sql.Open(SqlDialect, fmt.Sprintf(SqlConnectionString, config.Host, config.User, config.Password, config.Name, config.Port))
 	if err != nil {
 		return fmt.Errorf("failed to open postgres connection: %s", err.Error())
 	}

@@ -124,7 +124,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	}
 	searcher := tmdb.NewSearcher(tmdb.Config{ApiKey: thea.config.OmdbKey})
 	scraper := media.NewScraper(media.ScraperConfig{FfprobeBinPath: thea.config.Format.FfprobeBinaryPath})
-	if serv, err := ingest.New(thea.config.IngestService, searcher, scraper, thea.storeOrchestrator); err == nil {
+	if serv, err := ingest.New(thea.config.IngestService, searcher, scraper, thea.storeOrchestrator, thea.eventBus); err == nil {
 		thea.ingestService = serv
 	} else {
 		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))

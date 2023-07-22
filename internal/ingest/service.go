@@ -73,7 +73,7 @@ type (
 // The configs 'IngestPath' is validated to be an existing directory.
 // If the directory is missing it will be created, if the path
 // provided points to an existing FILE, an error is returned.
-func New(config Config, searcher searcher, scraper scraper, store dataStore) (*ingestService, error) {
+func New(config Config, searcher searcher, scraper scraper, store dataStore, eventBus event.EventCoordinator) (*ingestService, error) {
 	// Ensure config ingest path is a valid directory, create it
 	// if it's missing.
 	if info, err := os.Stat(config.IngestPath); err == nil {
@@ -95,6 +95,7 @@ func New(config Config, searcher searcher, scraper scraper, store dataStore) (*i
 		items:            make([]*IngestItem, 0),
 		importHoldTimers: make(map[uuid.UUID]*time.Timer),
 		workerPool:       *worker.NewWorkerPool(),
+		eventBus:         eventBus,
 	}
 
 	for i := 0; i < config.IngestionParallelism; i++ {

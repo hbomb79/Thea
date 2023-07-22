@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/event"
 	"github.com/hbomb79/Thea/internal/http/tmdb"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/pkg/logger"
@@ -34,14 +35,18 @@ const (
 	IMPORT_HOLD
 	INGESTING
 	TROUBLED
+	COMPLETE
 
 	METADATA_FAILURE TroubleType = iota
 	TMDB_FAILURE_UNKNOWN
 	TMDB_FAILURE_MULTI
 	TMDB_FAILURE_NONE
+	GENERIC_FAILURE
 )
 
-func (item *IngestItem) ResolveTrouble() error { return errors.New("not yet implemented") }
+func (item *IngestItem) ResolveTrouble(method string, context map[string]string) error {
+	return nil
+}
 
 // ingest is the main task for an ingest task which:
 // - Scrapes the metadata from the file
@@ -49,7 +54,7 @@ func (item *IngestItem) ResolveTrouble() error { return errors.New("not yet impl
 // - Saves the episode/movie to the database
 // Any of the above can encounter an error - if the error can be cast to the
 // IngestItemTrouble type then it should be raised as a TROUBLE on the item.
-func (item *IngestItem) ingest(scraper scraper, searcher searcher, data dataStore) error {
+func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper, searcher searcher, data dataStore) error {
 	log.Emit(logger.NEW, "Beginning ingestion of item %s\n", item)
 	if item.ScrapedMetadata == nil {
 		log.Emit(logger.DEBUG, "Performing file system metadata scrape\n")
@@ -71,22 +76,28 @@ func (item *IngestItem) ingest(scraper scraper, searcher searcher, data dataStor
 			return handleSearchError(err)
 		}
 
-		season, err := searcher.GetSeason(series.Id, meta.SeasonNumber)
+		season, err := searcher.GetSeason(series.Id.String(), meta.SeasonNumber)
 		if err != nil {
 			return IngestItemTrouble{err, TMDB_FAILURE_UNKNOWN}
 		}
 
-		ep, err := searcher.GetEpisode(series.Id, meta.SeasonNumber, meta.EpisodeNumber)
+		episode, err := searcher.GetEpisode(series.Id.String(), meta.SeasonNumber, meta.EpisodeNumber)
 		if err != nil {
 			return IngestItemTrouble{err, TMDB_FAILURE_UNKNOWN}
 		}
 
-		log.Emit(logger.DEBUG, "Saving newly ingested EPISODE: %v\nSEASON: %v\nSERIES: %v\n", ep, season, series)
-		return data.SaveEpisode(
-			item.tmdbEpisodeToMedia(ep),
+		log.Emit(logger.DEBUG, "Saving TMDB EPISODE: %v\nSEASON: %v\nSERIES: %v\n", episode, season, series)
+		ep := item.tmdbEpisodeToMedia(episode)
+		if err := data.SaveEpisode(
+			ep,
 			item.tmdbSeasonToMedia(season),
 			item.tmdbSeriesToMedia(series),
-		)
+		); err != nil {
+			return IngestItemTrouble{err, GENERIC_FAILURE}
+		}
+
+		log.Emit(logger.SUCCESS, "Saved newly ingested episode %v", ep)
+		eventBus.Dispatch(event.NEW_MEDIA, ep.ID)
 	} else {
 		movie, err := searcher.SearchForMovie(item.ScrapedMetadata)
 		if err != nil {
@@ -94,14 +105,22 @@ func (item *IngestItem) ingest(scraper scraper, searcher searcher, data dataStor
 		}
 
 		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %s", movie)
-		return data.SaveMovie(item.tmdbMovieToMedia(movie))
+		mov := item.tmdbMovieToMedia(movie)
+		if err := data.SaveMovie(mov); err != nil {
+			return IngestItemTrouble{err, GENERIC_FAILURE}
+		}
+
+		log.Emit(logger.SUCCESS, "Saved newly ingested movie %v", mov)
+		eventBus.Dispatch(event.NEW_MEDIA, mov.ID)
 	}
+
+	return nil
 }
 
 func (item *IngestItem) tmdbEpisodeToMedia(ep *tmdb.Episode) *media.Episode {
 	scrapedMetadata := item.ScrapedMetadata
 	return &media.Episode{
-		Model: media.Model{ID: uuid.New(), TmdbId: ep.Id, Title: ep.Name},
+		Model: media.Model{ID: uuid.New(), TmdbId: ep.Id.String(), Title: ep.Name},
 		Watchable: media.Watchable{
 			MediaResolution: media.MediaResolution{
 				Width:  *scrapedMetadata.FrameW,
@@ -109,21 +128,20 @@ func (item *IngestItem) tmdbEpisodeToMedia(ep *tmdb.Episode) *media.Episode {
 			},
 			SourcePath: item.Path,
 		},
-		SeasonNumber:  scrapedMetadata.SeasonNumber,
 		EpisodeNumber: scrapedMetadata.EpisodeNumber,
 	}
 }
 
 func (item *IngestItem) tmdbSeriesToMedia(series *tmdb.Series) *media.Series {
 	return &media.Series{
-		Model: media.Model{ID: uuid.New(), TmdbId: series.Id, Title: series.Name},
+		Model: media.Model{ID: uuid.New(), TmdbId: series.Id.String(), Title: series.Name},
 		Adult: series.Adult,
 	}
 }
 
 func (item *IngestItem) tmdbSeasonToMedia(season *tmdb.Season) *media.Season {
 	return &media.Season{
-		Model: media.Model{ID: uuid.New(), TmdbId: season.Id, Title: season.Name},
+		Model: media.Model{ID: uuid.New(), TmdbId: season.Id.String(), Title: season.Name},
 	}
 
 }
@@ -131,7 +149,7 @@ func (item *IngestItem) tmdbSeasonToMedia(season *tmdb.Season) *media.Season {
 func (item *IngestItem) tmdbMovieToMedia(movie *tmdb.Movie) *media.Movie {
 	scrapedMetadata := item.ScrapedMetadata
 	return &media.Movie{
-		Model: media.Model{ID: uuid.New(), TmdbId: movie.Id, Title: movie.Name},
+		Model: media.Model{ID: uuid.New(), TmdbId: movie.Id.String(), Title: movie.Name},
 		Watchable: media.Watchable{
 			MediaResolution: media.MediaResolution{Width: *scrapedMetadata.FrameW, Height: *scrapedMetadata.FrameH},
 			SourcePath:      item.Path,

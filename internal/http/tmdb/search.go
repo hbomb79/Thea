@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"time"
 
@@ -17,17 +18,16 @@ const (
 	tmdbBaseUrl = "https://api.themoviedb.org/3"
 
 	tmdbSearchMovieTemplate  = "%s/search/movie?query=%s&api_key=%s"
-	tmdbSearchSeriesTemplate = "%s/search/series?query=%s&api_key=%s"
+	tmdbSearchSeriesTemplate = "%s/search/tv?query=%s&api_key=%s"
 
-	tmdbGetMovieTemplate = "%s/movie/%s?api_key=%s"
-
+	tmdbGetMovieTemplate   = "%s/movie/%s?api_key=%s"
 	tmdbGetSeriesTemplate  = "%s/tv/%s?api_key=%s"
 	tmdbGetSeasonTemplate  = "%s/tv/%s/season/%d?api_key=%s"
 	tmdbGetEpisodeTemplate = "%s/tv/%s/season/%d/episode/%d?api_key=%s"
 )
 
 type (
-	date   struct{ time.Time }
+	Date   struct{ time.Time }
 	Config struct {
 		ApiKey string
 	}
@@ -39,41 +39,41 @@ type (
 	}
 
 	SearchResultItem struct {
-		Id           string `json:"id"`
-		Adult        bool   `json:"adult"`
-		Title        string `json:"name"`
-		Plot         string `json:"overview"`
-		PosterPath   string `json:"poster_path"`
-		FirstAirDate *date  `json:"first_air_date"`
-		ReleaseDate  *date  `json:"release_date"`
+		Id           json.Number `json:"id"`
+		Adult        bool        `json:"adult"`
+		Title        string      `json:"name"`
+		Plot         string      `json:"overview"`
+		PosterPath   string      `json:"poster_path"`
+		FirstAirDate *Date       `json:"first_air_date"`
+		ReleaseDate  *Date       `json:"release_date"`
 	}
 
 	Movie struct {
-		Id          string `json:"id"`
-		Adult       bool   `json:"adult"`
-		ReleaseDate string `json:"release_date"`
-		Name        string `json:"title"`
-		Tagline     string `json:"tagline"`
-		Overview    string `json:"overview"`
+		Id          json.Number `json:"id"`
+		Adult       bool        `json:"adult"`
+		ReleaseDate string      `json:"release_date"`
+		Name        string      `json:"title"`
+		Tagline     string      `json:"tagline"`
+		Overview    string      `json:"overview"`
 	}
 
 	Episode struct {
-		Id       string `json:"id"`
-		Name     string `json:"name"`
-		Overview string `json:"overview"`
+		Id       json.Number `json:"id"`
+		Name     string      `json:"name"`
+		Overview string      `json:"overview"`
 	}
 
 	Season struct {
-		Id       string `json:"id"`
-		Name     string `json:"name"`
-		Overview string `json:"overview"`
+		Id       json.Number `json:"id"`
+		Name     string      `json:"name"`
+		Overview string      `json:"overview"`
 	}
 
 	Series struct {
-		Id       string `json:"id"`
-		Adult    bool   `json:"adult"`
-		Name     string `json:"name"`
-		Overview string `json:"overview"`
+		Id       json.Number `json:"id"`
+		Adult    bool        `json:"adult"`
+		Name     string      `json:"name"`
+		Overview string      `json:"overview"`
 	}
 
 	// tmdbSearcher is the primary search method for the Ingest and
@@ -104,7 +104,7 @@ func (searcher *tmdbSearcher) SearchForSeries(metadata *media.FileMediaMetadata)
 	}
 
 	// Search for the series
-	path := fmt.Sprintf(tmdbSearchSeriesTemplate, tmdbBaseUrl, metadata.Title, searcher.config.ApiKey)
+	path := fmt.Sprintf(tmdbSearchSeriesTemplate, tmdbBaseUrl, url.QueryEscape(metadata.Title), searcher.config.ApiKey)
 	var searchResult SearchResult
 	if err := httpGetJsonResponse(path, &searchResult); err != nil {
 		return nil, err
@@ -128,7 +128,7 @@ func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) 
 	}
 
 	// Search for the movie stub
-	path := fmt.Sprintf(tmdbSearchMovieTemplate, tmdbBaseUrl, metadata.Title, searcher.config.ApiKey)
+	path := fmt.Sprintf(tmdbSearchMovieTemplate, tmdbBaseUrl, url.QueryEscape(metadata.Title), searcher.config.ApiKey)
 	var searchResult SearchResult
 	if err := httpGetJsonResponse(path, &searchResult); err != nil {
 		return nil, err
@@ -225,7 +225,7 @@ func (searcher *tmdbSearcher) handleSearchResults(results []SearchResultItem, me
 	return nil, &MultipleResultError{results}
 }
 
-func (entry *SearchResultItem) effectiveDate() *date {
+func (entry *SearchResultItem) effectiveDate() *Date {
 	if entry.FirstAirDate != nil {
 		return entry.FirstAirDate
 	}
@@ -233,14 +233,14 @@ func (entry *SearchResultItem) effectiveDate() *date {
 	return entry.ReleaseDate
 }
 
-func (d *date) UnmarshalJSON(dateBytes []byte) error {
+func (date *Date) UnmarshalJSON(dateBytes []byte) error {
 	trimmedDateString := string(dateBytes[1 : len(dateBytes)-1])
 	parsed, err := time.Parse(time.DateOnly, trimmedDateString)
 	if err != nil {
 		return fmt.Errorf("cannot unmarshal Date due to error: %s", err.Error())
 	}
 
-	*d = date{parsed}
+	*date = Date{parsed}
 	return nil
 }
 

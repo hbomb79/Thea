@@ -10,6 +10,7 @@ import (
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -106,7 +107,8 @@ func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
 }
 
 // SaveEpisode transactoinally saves the episode provided, as well as the season and series
-// it's associatted with IF they are provided.
+// it's associatted with IF they are provided. The relational FK's of the series/season
+// will automatically be set to the new/existing DB models.
 //
 // Note: If the season/series are not provided, and the FK-constraint of the episode cannot
 // be fulfilled because of this, then the save will fail. It is recommended to supply all parameters.
@@ -125,19 +127,7 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 			return err
 		}
 
-		var existingEpisode *media.Episode
-		tx.Where(&media.Episode{Model: media.Model{TmdbId: episode.TmdbId}}).First(&existingEpisode)
-		if existingEpisode != nil {
-			episode.ID = existingEpisode.ID
-		}
-
-		err := tx.Debug().Save(episode).Error
-		if err != nil {
-			episode.ID = episodeId
-			return err
-		}
-
-		return nil
+		return orchestrator.MediaStore.SaveEpisode(tx, episode)
 	}); err != nil {
 		episode.ID = episodeId
 		season.ID = seasonId

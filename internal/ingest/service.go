@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/event"
 	"github.com/hbomb79/Thea/internal/http/tmdb"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/pkg/logger"
@@ -54,10 +55,10 @@ type (
 	// - Added to Thea's database, along with any related data
 	ingestService struct {
 		*sync.Mutex
-		scraper
-		Searcher searcher
-
+		scraper   scraper
+		searcher  searcher
 		dataStore dataStore
+		eventBus  event.EventCoordinator
 
 		config           Config
 		items            []*IngestItem
@@ -88,7 +89,7 @@ func New(config Config, searcher searcher, scraper scraper, store dataStore) (*i
 	service := &ingestService{
 		Mutex:            &sync.Mutex{},
 		scraper:          scraper,
-		Searcher:         searcher,
+		searcher:         searcher,
 		dataStore:        store,
 		config:           config,
 		items:            make([]*IngestItem, 0),
@@ -122,6 +123,9 @@ func (service *ingestService) Run(ctx context.Context) error {
 	service.workerPool.Start()
 	defer service.workerPool.Close()
 
+	ev := make(event.HandlerChannel, 10)
+	service.eventBus.RegisterHandlerChannel(ev, event.INGEST_COMPLETE)
+
 	service.DiscoverNewFiles()
 
 	for {
@@ -130,6 +134,19 @@ func (service *ingestService) Run(ctx context.Context) error {
 			service.DiscoverNewFiles()
 		case <-forceIngestChannel:
 			service.DiscoverNewFiles()
+		case message := <-ev:
+			ev := message.Event
+			if ev != event.INGEST_COMPLETE {
+				log.Emit(logger.WARNING, "received unknown event %s\n", ev)
+				continue
+			}
+
+			if injestID, ok := message.Payload.(uuid.UUID); ok {
+				log.Emit(logger.DEBUG, "ingest with ID %s has completed - removing\n", injestID)
+				service.RemoveIngest(injestID)
+			} else {
+				log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
+			}
 		case <-ctx.Done():
 			return nil
 		}
@@ -148,7 +165,8 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 	}
 
 	log.Emit(logger.DEBUG, "Item %s claimed by worker %s for ingestion\n", item, w)
-	if err := item.ingest(service.scraper, service.Searcher, service.dataStore); err != nil {
+	time.Sleep(time.Second * 1)
+	if err := item.ingest(service.eventBus, service.scraper, service.searcher, service.dataStore); err != nil {
 		if trbl, ok := err.(IngestItemTrouble); ok {
 			item.Trouble = &trbl
 			item.State = TROUBLED
@@ -158,6 +176,9 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 			return false, err
 		}
 	}
+
+	log.Emit(logger.SUCCESS, "Ingestion of item %s complete!\n", item)
+	service.eventBus.Dispatch(event.INGEST_COMPLETE, item.Id)
 
 	return false, nil
 }
@@ -253,6 +274,15 @@ func (service *ingestService) GetIngest(itemID uuid.UUID) *IngestItem {
 	}
 
 	return nil
+}
+
+func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method string, context map[string]string) error {
+	item := service.GetIngest(itemID)
+	if item == nil {
+		return errors.New("ingest with ID provided does not exist")
+	}
+
+	return item.ResolveTrouble(method, context)
 }
 
 // AllItems returns a pointer to the array containing all

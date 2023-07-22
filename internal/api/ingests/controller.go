@@ -129,7 +129,7 @@ func (controller *Controller) postTroubleResolution(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 
-	if err := item.ResolveTrouble(); err != nil {
+	if err := item.ResolveTrouble("retry", map[string]string{}); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 

@@ -8,12 +8,17 @@ import (
 
 type (
 	// Container is a struct which contains either a Movie or
-	// an Episode. This is indicated using the 'Type' enum.
+	// an Episode. This is indicated using the 'Type' enum. If
+	// container is holding an 'Episode' type, then the 'Season'
+	// and 'Series' that the episode belongs to will also be populated
+	// if available
 	ContainerType int
 	Container     struct {
 		Type    ContainerType
 		Movie   *Movie
 		Episode *Episode
+		Series  *Series
+		Season  *Season
 	}
 
 	// Stub represents the minimal information required to represent
@@ -56,7 +61,7 @@ func (cont *Container) SeasonNumber() int {
 		return -1
 	}
 
-	return cont.Episode.SeasonNumber
+	return cont.Season.SeasonNumber
 }
 
 func (cont *Container) String() string {

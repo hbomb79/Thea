@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 )
@@ -67,16 +68,16 @@ func (scraper *MetadataScraper) ScrapeFileForMediaInfo(path string) (*FileMediaM
 // - Is episode or movie?
 // - Season/episode information
 func (scraper *MetadataScraper) extractTitleInformation(title string, output *FileMediaMetadata) error {
-	normaliserMatcher := regexp.MustCompile(`(?i)[\.\s]`)
-	seasonMatcher := regexp.MustCompile(`(?i)^(.*?)\_?s(\d+)\_?e(\d+)\_*((?:20|19)\d{2})?`)
-	movieMatcher := regexp.MustCompile(`(?i)^(.+?)\_*((?:20|19)\d{2})`)
+	normaliserMatcher := regexp.MustCompile(`(?i)[\.\s\-]`)
+	seasonMatcher := regexp.MustCompile(`(?i)^(.*?)\s?s(\d+)\s?e(\d+)\s*((?:20|19)\d{2})?`)
+	movieMatcher := regexp.MustCompile(`(?i)^(.+?)\s*((?:20|19)\d{2})`)
 
-	normalizedTitle := normaliserMatcher.ReplaceAllString(title, "_")
+	normalizedTitle := normaliserMatcher.ReplaceAllString(title, " ")
 
 	// Search for season info and optional year information
 	if seasonGroups := seasonMatcher.FindStringSubmatch(normalizedTitle); len(seasonGroups) >= 1 {
 		output.Episodic = true
-		output.Title = seasonGroups[1]
+		output.Title = strings.TrimSpace(seasonGroups[1])
 		output.SeasonNumber = convertToInt(seasonGroups[2])
 		output.EpisodeNumber = convertToInt(seasonGroups[3])
 		year := convertToInt(seasonGroups[4])
@@ -88,7 +89,7 @@ func (scraper *MetadataScraper) extractTitleInformation(title string, output *Fi
 	// Try find if it's a movie instead
 	if movieGroups := movieMatcher.FindStringSubmatch(normalizedTitle); len(movieGroups) >= 1 {
 		output.Episodic = false
-		output.Title = movieGroups[1]
+		output.Title = strings.TrimSpace(movieGroups[1])
 		output.SeasonNumber = -1
 		output.EpisodeNumber = -1
 		year := convertToInt(movieGroups[2])

@@ -71,7 +71,7 @@ func New(config Config, eventBus event.EventCoordinator, dataStore dataStore) (*
 // will wait for it's running transcode tasks to cancel.
 func (service *transcodeService) Run(ctx context.Context) error {
 	eventChannel := make(event.HandlerChannel, 2)
-	service.eventBus.RegisterHandlerChannel(eventChannel, event.INGEST_COMPLETE)
+	service.eventBus.RegisterHandlerChannel(eventChannel, event.NEW_MEDIA)
 
 	for {
 		select {
@@ -81,7 +81,7 @@ func (service *transcodeService) Run(ctx context.Context) error {
 			service.handleTaskUpdate(taskId)
 		case message := <-eventChannel:
 			ev := message.Event
-			if ev != event.INGEST_COMPLETE {
+			if ev != event.NEW_MEDIA {
 				log.Emit(logger.WARNING, "received unknown event %s\n", ev)
 				continue
 			}

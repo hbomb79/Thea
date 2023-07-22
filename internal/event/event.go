@@ -58,6 +58,8 @@ const (
 	INGEST_UPDATE   Event = "ingest:update"
 	INGEST_COMPLETE Event = "ingest:complete"
 
+	NEW_MEDIA Event = "media:new"
+
 	TRANSCODE_UPDATE        Event = "transcode:task:update"
 	TRANSCODE_COMPLETE      Event = "transcode:task:complete"
 	TRANSCODE_TASK_PROGRESS Event = "transcode:task:update:progress"

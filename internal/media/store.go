@@ -12,8 +12,8 @@ type (
 	// Model contains the union of properties that we expect all store-able information
 	// to contain. This is typically basic information about the container.
 	Model struct {
-		ID        uuid.UUID `gorm:"primaryKey"`
-		TmdbId    string    `gorm:"uniqueIndex"`
+		ID        uuid.UUID
+		TmdbId    string `gorm:"uniqueIndex"`
 		CreatedAt time.Time
 		UpdatedAt time.Time
 		Title     string
@@ -33,17 +33,22 @@ type (
 	}
 
 	// Season represents the information Thea stores about a season
-	// of episodes itself. A season is related to many episodes (however
-	// this model does not contain them).
+	// of episodes itself. A season 'has many' episodes.
 	// Additionally, a series is related to many seasons.
-	Season struct{ Model }
+	Season struct {
+		Model
+		SeasonNumber int
+		Episodes     []Episode
+		SeriesID     uuid.UUID
+	}
 
 	// Series represents the information Thea stores about a series. A one-to-many
 	// relationship exists between series and seasons, although the seasons themselves
 	// are not contained within this model.
 	Series struct {
 		Model
-		Adult bool
+		Adult   bool
+		Seasons []Season
 	}
 
 	// Episode contains all the information unique to an episode, combined
@@ -51,7 +56,7 @@ type (
 	Episode struct {
 		Model
 		Watchable
-		SeasonNumber  int
+		SeasonID      uuid.UUID
 		EpisodeNumber int
 	}
 
@@ -78,7 +83,7 @@ func (store *Store) SaveMovie(db *gorm.DB, movie *Movie) error {
 
 	var existingMovie *Movie
 	db.Where(Movie{Model: Model{TmdbId: movie.TmdbId}}).First(&existingMovie)
-	if existingMovie != nil {
+	if existingMovie.ID != uuid.Nil {
 		movie.ID = existingMovie.ID
 	}
 
@@ -98,9 +103,9 @@ func (store *Store) SaveMovie(db *gorm.DB, movie *Movie) error {
 func (store *Store) SaveSeries(db *gorm.DB, series *Series) error {
 	seriesID := series.ID
 
-	var existingSeries *Series
+	var existingSeries Series
 	db.Where(Series{Model: Model{TmdbId: series.TmdbId}}).First(&existingSeries)
-	if existingSeries != nil {
+	if existingSeries.ID != uuid.Nil {
 		series.ID = existingSeries.ID
 	}
 
@@ -122,7 +127,7 @@ func (store *Store) SaveSeason(db *gorm.DB, season *Season) error {
 
 	var existingSeason *Season
 	db.Where(&Season{Model: Model{TmdbId: season.TmdbId}}).First(&existingSeason)
-	if existingSeason != nil {
+	if existingSeason.ID != uuid.Nil {
 		season.ID = existingSeason.ID
 	}
 
@@ -139,13 +144,13 @@ func (store *Store) SaveSeason(db *gorm.DB, season *Season) error {
 // as this is expected to be a stable identifier.
 //
 // NOTE: the ID of the media(s) may be UPDATED to match existing DB entry (if any)
-func (store *Store) SaveEpisode(db *gorm.DB, episode *Episode, season *Season, series *Series) error {
+func (store *Store) SaveEpisode(db *gorm.DB, episode *Episode) error {
 	// Store old PKs so we can rollback on transaction failure
 	episodeID := episode.ID
 
 	var existingEpisode *Episode
 	db.Where(&Episode{Model: Model{TmdbId: episode.TmdbId}}).First(&existingEpisode)
-	if existingEpisode != nil {
+	if existingEpisode.ID != uuid.Nil {
 		episode.ID = existingEpisode.ID
 	}
 

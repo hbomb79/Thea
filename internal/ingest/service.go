@@ -176,10 +176,10 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 		} else {
 			return false, err
 		}
+	} else {
+		log.Emit(logger.SUCCESS, "Ingestion of item %s complete!\n", item)
+		service.eventBus.Dispatch(event.INGEST_COMPLETE, item.Id)
 	}
-
-	log.Emit(logger.SUCCESS, "Ingestion of item %s complete!\n", item)
-	service.eventBus.Dispatch(event.INGEST_COMPLETE, item.Id)
 
 	return false, nil
 }

@@ -265,6 +265,7 @@ func filterResultsInPlace(results *[]SearchResultItem, metadata *media.FileMedia
 }
 
 func httpGetJsonResponse(urlPath string, targetInterface interface{}) error {
+	fmt.Printf("GET -> %s\n", urlPath)
 	resp, err := http.Get(urlPath)
 	if err != nil {
 		return &UnknownRequestError{fmt.Sprintf("failed to perform GET(%s) to TMDB: %s", urlPath, err.Error())}

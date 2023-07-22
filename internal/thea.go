@@ -16,7 +16,6 @@ import (
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/pkg/docker"
 	"github.com/hbomb79/Thea/pkg/logger"
-	"gorm.io/gorm"
 )
 
 var log = logger.Get("Core")
@@ -32,12 +31,6 @@ type (
 
 	RunnableService interface {
 		Run(context.Context) error
-	}
-
-	DatabaseServer interface {
-		Connect(database.DatabaseConfig) error
-		GetInstance() *gorm.DB
-		RegisterModels(...any)
 	}
 
 	RestGateway interface {
@@ -117,7 +110,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return err
 	}
 
-	log.Emit(logger.NEW, "Connecting to database with GORM...\n")
+	log.Emit(logger.NEW, "Connecting to database...\n")
 	db := database.New()
 	if store, err := NewStoreOrchestrator(db); err == nil {
 		thea.storeOrchestrator = store

@@ -14,7 +14,7 @@ import (
 type (
 	Target struct {
 		ID            uuid.UUID
-		Label         string `gorm:"unique"`
+		Label         string // unique
 		FfmpegOptions *Opts
 		Ext           string
 	}

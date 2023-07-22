@@ -13,9 +13,9 @@ var log = logger.Get("Workflow")
 type Workflow struct {
 	ID       uuid.UUID
 	Enabled  bool
-	Label    string `gorm:"unique"`
+	Label    string // unique
 	Criteria []match.Criteria
-	Targets  []*ffmpeg.Target `gorm:"many2many:workflow_targets"`
+	Targets  []*ffmpeg.Target // join table
 }
 
 func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {

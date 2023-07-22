@@ -112,7 +112,14 @@ func (e LogStatus) Color() *color.Color {
 }
 
 type Logger interface {
-	Emit(LogStatus, string, ...interface{})
+	Emit(LogStatus, string, ...any)
+	VerboseF(string, ...any)
+	Debugf(string, ...any)
+	Infof(string, ...any)
+	Warnf(string, ...any)
+	Printf(string, ...any)
+	Errorf(string, ...any)
+	Fatalf(string, ...any)
 }
 
 type loggerImpl struct {
@@ -122,6 +129,14 @@ type loggerImpl struct {
 func (l *loggerImpl) Emit(status LogStatus, message string, interpolations ...interface{}) {
 	manager.Emit(status, l.name, message, interpolations...)
 }
+
+func (l *loggerImpl) VerboseF(m string, v ...any) { l.Emit(VERBOSE, m, v...) }
+func (l *loggerImpl) Debugf(m string, v ...any)   { l.Emit(DEBUG, m, v...) }
+func (l *loggerImpl) Printf(m string, v ...any)   { l.Emit(INFO, m, v...) }
+func (l *loggerImpl) Infof(m string, v ...any)    { l.Emit(INFO, m, v...) }
+func (l *loggerImpl) Warnf(m string, v ...any)    { l.Emit(WARNING, m, v...) }
+func (l *loggerImpl) Errorf(m string, v ...any)   { l.Emit(ERROR, m, v...) }
+func (l *loggerImpl) Fatalf(m string, v ...any)   { l.Emit(FATAL, m, v...) }
 
 var manager = &loggerMgr{
 	offset:   0,
@@ -133,7 +148,7 @@ type loggerMgr struct {
 	minLevel LogLevel
 }
 
-func (l *loggerMgr) GetLogger(name string) Logger {
+func (l *loggerMgr) GetLogger(name string) *loggerImpl {
 	return &loggerImpl{name: name}
 }
 
@@ -159,7 +174,7 @@ func (l *loggerMgr) setMinLoggingLevel(level LogLevel) {
 	l.minLevel = level
 }
 
-func Get(name string) Logger {
+func Get(name string) *loggerImpl {
 	return manager.GetLogger(name)
 }
 

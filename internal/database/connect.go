@@ -122,6 +122,7 @@ func (db *manager) ExecuteMigrations() error {
 	}
 
 	goose.SetBaseFS(migrations)
+	goose.SetLogger(dbLogger)
 	if err := goose.SetDialect(SqlDialect); err != nil {
 		return fmt.Errorf("failed to set dialect for DB migration: %s", err.Error())
 	}

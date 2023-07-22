@@ -132,7 +132,6 @@ func (db *manager) ExecuteMigrations() error {
 		return fmt.Errorf("failed to migrate DB: %s", err.Error())
 	}
 
-	goose.Status(rawDb, "migrations")
 	dbLogger.Emit(logger.SUCCESS, "DB Goose migration compelte!\n")
 	return nil
 }

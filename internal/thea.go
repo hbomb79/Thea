@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -157,6 +158,7 @@ func (thea *theaImpl) spawnAsyncService(context context.Context, wg *sync.WaitGr
 	go func(wg *sync.WaitGroup, label string, crash func(string, error)) {
 		defer func() {
 			if r := recover(); r != nil {
+				log.Emit(logger.ERROR, "panic of service %s, stack:%s\n", serviceLabel, string(debug.Stack()))
 				crash(label, fmt.Errorf("panic %v", r))
 			}
 		}()

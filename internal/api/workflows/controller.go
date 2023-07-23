@@ -161,7 +161,6 @@ func (controller *Controller) delete(ec echo.Context) error {
 func NewCriteriaModel(workflowID uuid.UUID, dto *CriteriaDto) match.Criteria {
 	return match.Criteria{
 		ID:          uuid.New(),
-		WorkflowID:  workflowID,
 		Key:         dto.Key,
 		Type:        dto.Type,
 		Value:       dto.Value,

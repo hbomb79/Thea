@@ -1,10 +1,8 @@
 package internal
 
 import (
-	"errors"
 	"fmt"
 
-	"github.com/doug-martin/goqu/v9"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
@@ -12,10 +10,15 @@ import (
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
-	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/jmoiron/sqlx"
 )
 
 type (
+	workflowTargetAssoc struct {
+		ID       uuid.UUID
+		TargetID uuid.UUID `db:"target_id"`
+	}
+
 	// storeOrchestrator is responsible for managing all of Thea's resources,
 	// especially highly-relational data. You can think of all
 	// the data stores below this layer being 'dumb', and this store
@@ -110,28 +113,28 @@ func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
 // be fulfilled because of this, then the save will fail. It is recommended to supply all parameters.
 func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, season *media.Season, series *media.Series) error {
 	// Store old PKs so we can rollback on transaction failure
-	episodeId := episode.ID
-	seasonId := season.ID
-	seriesId := series.ID
+	// episodeId := episode.ID
+	// seasonId := season.ID
+	// seriesId := series.ID
 
-	if err := orchestrator.db.GetGoquDb().WithTx(func(tx *goqu.TxDatabase) error {
-		log.Emit(logger.WARNING, "Saving episode (ID=%s), series (ID=%s), season (ID=%s)\n", episode.ID.String(), series.ID.String(), season.ID.String())
-		if err := orchestrator.MediaStore.SaveSeries(tx, series); err != nil {
-			return err
-		}
+	// if err := orchestrator.db.GetGoquDb().WithTx(func(tx *goqu.TxDatabase) error {
+	// 	log.Emit(logger.WARNING, "Saving episode (ID=%s), series (ID=%s), season (ID=%s)\n", episode.ID.String(), series.ID.String(), season.ID.String())
+	// 	if err := orchestrator.MediaStore.SaveSeries(tx, series); err != nil {
+	// 		return err
+	// 	}
 
-		if err := orchestrator.MediaStore.SaveSeason(tx, season); err != nil {
-			return err
-		}
+	// 	if err := orchestrator.MediaStore.SaveSeason(tx, season); err != nil {
+	// 		return err
+	// 	}
 
-		return orchestrator.MediaStore.SaveEpisode(tx, episode)
-	}); err != nil {
-		episode.ID = episodeId
-		season.ID = seasonId
-		series.ID = seriesId
+	// 	return orchestrator.MediaStore.SaveEpisode(tx, episode)
+	// }); err != nil {
+	// 	episode.ID = episodeId
+	// 	season.ID = seasonId
+	// 	series.ID = seriesId
 
-		return err
-	}
+	// 	return err
+	// }
 
 	return nil
 }
@@ -144,76 +147,112 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 // Error will be returned if any of the target IDs provided do not refer to existing Target
 // DB entries, or if the workflow infringes on any uniqueness constraints (label)
 func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID, enabled bool) (*workflow.Workflow, error) {
-	var newWorkflow *workflow.Workflow
-	if txErr := orchestrator.db.GetGoquDb().WithTx(func(tx *goqu.TxDatabase) error {
-		targetModels := orchestrator.TargetStore.GetMany(tx, targetIDs...)
-		if len(targetModels) != len(targetIDs) {
-			return fmt.Errorf("target IDs %v reference one or more missing targets", targetIDs)
-		}
+	// var newWorkflow *workflow.Workflow
+	// if txErr := orchestrator.db.GetGoquDb().WithTx(func(tx *goqu.TxDatabase) error {
+	// 	targetModels := orchestrator.TargetStore.GetMany(tx, targetIDs...)
+	// 	if len(targetModels) != len(targetIDs) {
+	// 		return fmt.Errorf("target IDs %v reference one or more missing targets", targetIDs)
+	// 	}
 
-		newWorkflow = &workflow.Workflow{ID: workflowID, Label: label, Criteria: criteria, Targets: targetModels}
-		if err := orchestrator.WorkflowStore.Create(tx, newWorkflow); err != nil {
-			return err
-		}
+	// 	newWorkflow = &workflow.Workflow{ID: workflowID, Label: label, Criteria: criteria, Targets: targetModels}
+	// 	if err := orchestrator.WorkflowStore.Create(tx, newWorkflow); err != nil {
+	// 		return err
+	// 	}
 
-		return nil
-	}); txErr == nil {
-		return newWorkflow, nil
-	} else {
-		return nil, txErr
-	}
+	// 	return nil
+	// }); txErr == nil {
+	// 	return newWorkflow, nil
+	// } else {
+	// 	return nil, txErr
+	// }
+	return nil, nil
 }
 
 // UpdateWorkflow transactionally updates an existing Workflow model
 // using the optional paramaters provided. If a param is `nil` then the
 // corresponding value in the model is NOT changed.
 func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newLabel *string, newCriteria *[]match.Criteria, newTargetIDs *[]uuid.UUID, newEnabled *bool) (*workflow.Workflow, error) {
-	var outputWorkflow *workflow.Workflow
-	if txErr := orchestrator.db.GetGoquDb().WithTx(func(tx *goqu.TxDatabase) error {
-		// var existingWorkflow *workflow.Workflow = nil
-
-		// if err := tx.Clauses(forUpdateClause).Where(workflow.Workflow{ID: workflowID}).First(&existingWorkflow).Error; err != nil {
-		// 	return fmt.Errorf("failed to find workflow with ID = %s due to error: %s", workflowID, err.Error())
-		// } else if existingWorkflow == nil {
-		// 	return fmt.Errorf("failed to find workflow with ID = %s", workflowID)
-		// }
-
-		// if newTargetIDs != nil {
-		// 	targetModels := orchestrator.TargetStore.GetMany(tx, *newTargetIDs...)
-		// 	if len(targetModels) != len(*newTargetIDs) {
-		// 		return fmt.Errorf("target IDs %v reference one or more missing targets", *newTargetIDs)
-		// 	}
-
-		// 	if err := tx.Debug().Model(&existingWorkflow).Association("Targets").Replace(targetModels); err != nil {
-		// 		return fmt.Errorf("failed to update workflow target associations due to error %s", err.Error())
-		// 	}
-		// }
-
-		// if newCriteria != nil {
-		// 	if err := tx.Debug().Model(&existingWorkflow).Association("Criteria").Unscoped().Replace(newCriteria); err != nil {
-		// 		return fmt.Errorf("failed to update workflow criteria associations due to error %s", err.Error())
-		// 	}
-		// }
-
-		// columnUpdates := make(map[string]any)
-		// if newLabel != nil {
-		// 	columnUpdates["label"] = newLabel
-		// }
-		// if newEnabled != nil {
-		// 	columnUpdates["enabled"] = newEnabled
-		// }
-
-		// if err := tx.Debug().Model(&existingWorkflow).Updates(columnUpdates).Error; err != nil {
-		// 	return fmt.Errorf("failed to update workflow row due to error %s", err.Error())
-		// }
-
-		// outputWorkflow = orchestrator.WorkflowStore.Get(tx, workflowID)
-		return errors.New("not yet implemented")
-	}); txErr == nil {
-		return outputWorkflow, nil
-	} else {
-		return nil, txErr
+	fail := func(desc string, err error) (*workflow.Workflow, error) {
+		return nil, fmt.Errorf("failed to %s due to error: %s", desc, err.Error())
 	}
+
+	tx, err := orchestrator.db.GetGoquDb().Beginx()
+	if err != nil {
+		return fail("open workflow update transaction", err)
+	}
+	defer tx.Rollback()
+
+	if newLabel != nil || newEnabled != nil {
+		var labelToSet string
+		var enabledToSet bool
+		if err := tx.QueryRowx(`SELECT label, enabled FROM workflow WHERE id=$1`, workflowID).Scan(&labelToSet, &enabledToSet); err != nil {
+			return fail("find existing workflow", err)
+		}
+
+		if newLabel != nil {
+			labelToSet = *newLabel
+		}
+		if newEnabled != nil {
+			enabledToSet = *newEnabled
+		}
+
+		if _, err := tx.Exec(`
+			UPDATE workflow
+			WHERE id=$1
+			SET (updated_at, label, enabled) = (current_timestamp, $2, $3)
+			`,
+			workflowID, labelToSet, enabledToSet); err != nil {
+			return fail("update workflow row", err)
+		}
+	}
+
+	if newCriteria != nil {
+		var criteriaIDs []uuid.UUID
+		if newCriteria != nil {
+			criteriaIDs := make([]uuid.UUID, len(*newCriteria))
+			for i, v := range *newCriteria {
+				criteriaIDs[i] = v.ID
+			}
+		}
+
+		// Insert workflow criteria, updating existing criteria
+		tx.NamedExec(`
+			INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_combine_type, match_value, workflow_id)
+			VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, `+workflowID.String()+`)
+			ON CONFLICT DO UPDATE
+				SET (updated_at, match_key, match_type, match_combine_type, match_value) =
+					(current_timestamp, EXCLUDED.match_key, EXCLUDED.match_type, EXCLUDED.match_combine_type, EXCLUDED.match_value)
+		`, *newCriteria)
+
+		// Drop workflow criteria rows which are no longer referenced
+		// by this workflow
+		if err := execDbIn(tx, `--sql
+			DELETE FROM workflow_criteria wc
+			WHERE wc.workflow_id=`+workflowID.String()+`
+				AND wc.id NOT IN (?)
+		`, criteriaIDs); err != nil {
+			return fail("bind criteria SQL", err)
+		}
+	}
+
+	// Drop all workflow targets join table entries and re-create them
+	if newTargetIDs != nil {
+		if _, err := tx.NamedExec(`DELETE FROM workflow_transcode_targets WHERE workflow_id=$1`, workflowID); err != nil {
+			return fail("delete workflow transcode target assocs", err)
+		}
+		if _, err := tx.NamedExec(`
+			INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
+			VALUES(:id, `+workflowID.String()+`, :target_id)
+			`, buildWorkflowTargetAssocs(*newTargetIDs),
+		); err != nil {
+			return fail("create workflow target associations", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fail("commit workflow update transaction", err)
+	}
+	return nil, nil
 }
 
 func (orchestrator *storeOrchestrator) GetWorkflow(id uuid.UUID) *workflow.Workflow {
@@ -263,4 +302,25 @@ func (orchestrator *storeOrchestrator) GetManyTargets(ids ...uuid.UUID) []*ffmpe
 
 func (orchestrator *storeOrchestrator) DeleteTarget(id uuid.UUID) {
 	orchestrator.TargetStore.Delete(orchestrator.db.GetGoquDb(), id)
+}
+
+func execDbIn(db *sqlx.Tx, query string, arg any) error {
+	if q, a, e := sqlx.In(query, arg); e == nil {
+		if _, err := db.Exec(db.Rebind(q), a); err != nil {
+			return err
+		}
+	} else {
+		return e
+	}
+
+	return nil
+}
+
+func buildWorkflowTargetAssocs(targetIDs []uuid.UUID) []workflowTargetAssoc {
+	assocs := make([]workflowTargetAssoc, len(targetIDs))
+	for i, v := range targetIDs {
+		assocs[i] = workflowTargetAssoc{uuid.New(), v}
+	}
+
+	return assocs
 }

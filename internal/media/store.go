@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
+	"github.com/jmoiron/sqlx"
 )
 
 type (
@@ -77,7 +78,7 @@ func (store *Store) RegisterModels(db database.Manager) {
 // identifier.
 //
 // NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
-func (store *Store) SaveMovie(db database.Goqu, movie *Movie) error {
+func (store *Store) SaveMovie(db *sqlx.DB, movie *Movie) error {
 	// movieID := movie.ID
 
 	// var existingMovie *Movie
@@ -100,7 +101,7 @@ func (store *Store) SaveMovie(db database.Goqu, movie *Movie) error {
 // identifier.
 //
 // NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
-func (store *Store) SaveSeries(db database.Goqu, series *Series) error {
+func (store *Store) SaveSeries(db *sqlx.DB, series *Series) error {
 	// seriesID := series.ID
 
 	// var existingSeries Series
@@ -123,7 +124,7 @@ func (store *Store) SaveSeries(db database.Goqu, series *Series) error {
 // identifier.
 //
 // NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
-func (store *Store) SaveSeason(db database.Goqu, season *Season) error {
+func (store *Store) SaveSeason(db *sqlx.DB, season *Season) error {
 	// seasonID := season.ID
 
 	// var existingSeason *Season
@@ -146,7 +147,7 @@ func (store *Store) SaveSeason(db database.Goqu, season *Season) error {
 // as this is expected to be a stable identifier.
 //
 // NOTE: the ID of the media(s) may be UPDATED to match existing DB entry (if any)
-func (store *Store) SaveEpisode(db database.Goqu, episode *Episode) error {
+func (store *Store) SaveEpisode(db *sqlx.DB, episode *Episode) error {
 	// Store old PKs so we can rollback on transaction failure
 	// episodeID := episode.ID
 
@@ -168,7 +169,7 @@ func (store *Store) SaveEpisode(db database.Goqu, episode *Episode) error {
 // GetMedia is a convinience method for requesting either a Movie
 // or an Episode. The ID provided is used to lookup both, and whichever
 // query is successful is used to populate a media Container.
-func (store *Store) GetMedia(db database.Goqu, mediaID uuid.UUID) *Container {
+func (store *Store) GetMedia(db *sqlx.DB, mediaID uuid.UUID) *Container {
 	if _, err := store.GetMovie(db, mediaID); err != nil {
 		if _, err := store.GetEpisode(db, mediaID); err != nil {
 			return nil
@@ -191,19 +192,19 @@ func (store *Store) GetMedia(db database.Goqu, mediaID uuid.UUID) *Container {
 }
 
 // GetMovie searches for an existing movie with the Thea PK ID provided.
-func (store *Store) GetMovie(db database.Goqu, movieID uuid.UUID) (*Movie, error) {
+func (store *Store) GetMovie(db *sqlx.DB, movieID uuid.UUID) (*Movie, error) {
 	return store.getMovie(db, Movie{Model: Model{ID: movieID}})
 }
 
 // GetMovieWithTmdbId searches for an existing movie with the TMDB unique ID provided.
-func (store *Store) GetMovieWithTmdbId(db database.Goqu, movieID string) (*Movie, error) {
+func (store *Store) GetMovieWithTmdbId(db *sqlx.DB, movieID string) (*Movie, error) {
 	return store.getMovie(db, Movie{Model: Model{TmdbId: movieID}})
 }
 
 // getMovie will search the database for a Movie row matching the
 // model provided. No result will cause 'nil' to be returned, failure
 // for any other reason will see 'nil' returned.
-func (store *Store) getMovie(db database.Goqu, searchModel Movie) (*Movie, error) {
+func (store *Store) getMovie(db *sqlx.DB, searchModel Movie) (*Movie, error) {
 	// var result Movie
 	// err := db.Where(searchModel).First(&result).Error
 	// if err != nil {
@@ -215,19 +216,19 @@ func (store *Store) getMovie(db database.Goqu, searchModel Movie) (*Movie, error
 }
 
 // GetSeries searches for an existing series with the Thea PK ID provided.
-func (store *Store) GetSeries(db database.Goqu, movieID uuid.UUID) (*Series, error) {
+func (store *Store) GetSeries(db *sqlx.DB, movieID uuid.UUID) (*Series, error) {
 	return store.getSeries(db, Series{Model: Model{ID: movieID}})
 }
 
 // GetSeriesWithTmdbId searches for an existing series with the TMDB unique ID provided.
-func (store *Store) GetSeriesWithTmdbId(db database.Goqu, movieID string) (*Series, error) {
+func (store *Store) GetSeriesWithTmdbId(db *sqlx.DB, movieID string) (*Series, error) {
 	return store.getSeries(db, Series{Model: Model{TmdbId: movieID}})
 }
 
 // getSeries will search the database for a Series row matching the
 // PK ID provided. No result will cause 'nil' to be returned, failure
 // for any other reason will see 'nil' returned.
-func (store *Store) getSeries(db database.Goqu, searchModel Series) (*Series, error) {
+func (store *Store) getSeries(db *sqlx.DB, searchModel Series) (*Series, error) {
 	// var result Series
 	// err := db.Where(searchModel).First(&result).Error
 	// if err != nil {
@@ -239,19 +240,19 @@ func (store *Store) getSeries(db database.Goqu, searchModel Series) (*Series, er
 }
 
 // GetSeason searches for an existing season with the Thea PK ID provided.
-func (store *Store) GetSeason(db database.Goqu, movieID uuid.UUID) (*Season, error) {
+func (store *Store) GetSeason(db *sqlx.DB, movieID uuid.UUID) (*Season, error) {
 	return store.getSeason(db, Season{Model: Model{ID: movieID}})
 }
 
 // GetSeasonWithTmdbId searches for an existing season with the TMDB unique ID provided.
-func (store *Store) GetSeasonWithTmdbId(db database.Goqu, movieID string) (*Season, error) {
+func (store *Store) GetSeasonWithTmdbId(db *sqlx.DB, movieID string) (*Season, error) {
 	return store.getSeason(db, Season{Model: Model{TmdbId: movieID}})
 }
 
 // getSeason will search the database for a Season row matching the
 // PK ID provided. No result will cause 'nil' to be returned, failure
 // for any other reason will see 'nil' returned.
-func (store *Store) getSeason(db database.Goqu, searchModel Season) (*Season, error) {
+func (store *Store) getSeason(db *sqlx.DB, searchModel Season) (*Season, error) {
 	// var result Season
 	// err := db.Where(searchModel).First(&result).Error
 	// if err != nil {
@@ -263,19 +264,19 @@ func (store *Store) getSeason(db database.Goqu, searchModel Season) (*Season, er
 }
 
 // GetEpisode searches for an existing episode with the Thea PK ID provided.
-func (store *Store) GetEpisode(db database.Goqu, movieID uuid.UUID) (*Episode, error) {
+func (store *Store) GetEpisode(db *sqlx.DB, movieID uuid.UUID) (*Episode, error) {
 	return store.getEpisode(db, Episode{Model: Model{ID: movieID}})
 }
 
 // GetEpisodeWithTmdbId searches for an existing episode with the TMDB unique ID provided.
-func (store *Store) GetEpisodeWithTmdbId(db database.Goqu, movieID string) (*Episode, error) {
+func (store *Store) GetEpisodeWithTmdbId(db *sqlx.DB, movieID string) (*Episode, error) {
 	return store.getEpisode(db, Episode{Model: Model{TmdbId: movieID}})
 }
 
 // getEpisode will search the database for a Episode row matching the
 // PK ID provided. No result will cause 'nil' to be returned, failure
 // for any other reason will see 'nil' returned.
-func (store *Store) getEpisode(db database.Goqu, searchModel Episode) (*Episode, error) {
+func (store *Store) getEpisode(db *sqlx.DB, searchModel Episode) (*Episode, error) {
 	// var result Episode
 	// err := db.Where(searchModel).First(&result).Error
 	// if err != nil {
@@ -288,6 +289,6 @@ func (store *Store) getEpisode(db database.Goqu, searchModel Episode) (*Episode,
 
 // GetAllSourcePaths returns all the source paths related
 // to media that is currently known to Thea by polling the database.
-func (store *Store) GetAllSourcePaths(db database.Goqu) []string {
+func (store *Store) GetAllSourcePaths(db *sqlx.DB) []string {
 	return make([]string, 0)
 }

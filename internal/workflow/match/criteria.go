@@ -17,11 +17,10 @@ import (
 // made up of four terms: the key, type, value and combine type (in order).
 type Criteria struct {
 	ID          uuid.UUID
-	WorkflowID  uuid.UUID
-	Key         Key         `json:"key"`
-	Type        Type        `json:"type"`
-	Value       string      `json:"value"`
-	CombineType CombineType `json:"combine_type"`
+	Key         Key         `json:"key" db:"match_key"`
+	Type        Type        `json:"type" db:"match_type"`
+	Value       string      `json:"value" db:"match_value"`
+	CombineType CombineType `json:"combine_type" db:"match_combine_type"`
 }
 
 // ValidateLegal ensures the criteria is LEGAL:

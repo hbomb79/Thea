@@ -71,9 +71,14 @@ CREATE TABLE workflow_criteria(
     id UUID NOT NULL PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
+    match_key INT NOT NULL,
+    match_type INT NOT NULL,
+    match_combine_type INT NOT NULL,
+    match_value TEXT NOT NULL,
     workflow_id UUID NOT NULL,
 
-    CONSTRAINT workflow_criteria_fk_workflow_id FOREIGN KEY(workflow_id) REFERENCES workflow(id) ON DELETE CASCADE
+    CONSTRAINT workflow_criteria_fk_workflow_id FOREIGN KEY(workflow_id) REFERENCES workflow(id) ON DELETE CASCADE,
+    CONSTRAINT workflow_criteria_uk_workflow_label UNIQUE(workflow_id, label)
 );
 
 CREATE TABLE workflow_transcode_targets(

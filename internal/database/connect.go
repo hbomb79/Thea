@@ -1,14 +1,13 @@
 package database
 
 import (
-	"context"
 	"database/sql"
 	"embed"
 	"fmt"
 	"time"
 
-	"github.com/doug-martin/goqu/v9"
 	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
 )
@@ -26,45 +25,15 @@ var (
 )
 
 type (
-	// Goqu represents the functional union between Goqu's DB and TxDB, which allow
-	// for Thea code to be largely agnostic to whether it's operating as part of a
-	// transaction or not. Code responsible for *creating* transactions need to use
-	// the real goqu.Database struct type.
-	Goqu interface {
-		Delete(table interface{}) *goqu.DeleteDataset
-		Exec(query string, args ...interface{}) (sql.Result, error)
-		ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-		From(from ...interface{}) *goqu.SelectDataset
-		Insert(table interface{}) *goqu.InsertDataset
-		Prepare(query string) (*sql.Stmt, error)
-		PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
-		Query(query string, args ...interface{}) (*sql.Rows, error)
-		QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-		QueryRow(query string, args ...interface{}) *sql.Row
-		QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-		ScanStruct(i interface{}, query string, args ...interface{}) (bool, error)
-		ScanStructContext(ctx context.Context, i interface{}, query string, args ...interface{}) (bool, error)
-		ScanStructs(i interface{}, query string, args ...interface{}) error
-		ScanStructsContext(ctx context.Context, i interface{}, query string, args ...interface{}) error
-		ScanVal(i interface{}, query string, args ...interface{}) (bool, error)
-		ScanValContext(ctx context.Context, i interface{}, query string, args ...interface{}) (bool, error)
-		ScanVals(i interface{}, query string, args ...interface{}) error
-		ScanValsContext(ctx context.Context, i interface{}, query string, args ...interface{}) error
-		Select(cols ...interface{}) *goqu.SelectDataset
-		Trace(op string, sqlString string, args ...interface{})
-		Truncate(table ...interface{}) *goqu.TruncateDataset
-		Update(table interface{}) *goqu.UpdateDataset
-	}
-
 	Manager interface {
 		Connect(DatabaseConfig) error
-		GetGoquDb() *goqu.Database
+		GetGoquDb() *sqlx.DB
 		RegisterModels(...any)
 	}
 
 	manager struct {
 		rawDb  *sql.DB
-		goqu   *goqu.Database
+		db     *sqlx.DB
 		models []interface{}
 	}
 )
@@ -97,7 +66,7 @@ func (db *manager) Connect(config DatabaseConfig) error {
 		}
 
 		db.rawDb = sql
-		db.goqu = goqu.New(SqlDialect, sql)
+		db.db = sqlx.NewDb(sql, SqlDialect)
 
 		break
 	}
@@ -139,12 +108,12 @@ func (db *manager) ExecuteMigrations() error {
 
 // GetInstances returns the Goqu database connection if
 // one has been opened using 'Connect'. Otherwise, nil is returned
-func (db *manager) GetGoquDb() *goqu.Database {
-	return db.goqu
+func (db *manager) GetGoquDb() *sqlx.DB {
+	return db.db
 }
 
 func (db *manager) RegisterModels(models ...any) {
-	if db.goqu != nil {
+	if db.db != nil {
 		panic("cannot register models to a database server that is already connected")
 	}
 

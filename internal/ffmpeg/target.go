@@ -15,7 +15,7 @@ type (
 	Target struct {
 		ID            uuid.UUID
 		Label         string // unique
-		FfmpegOptions *Opts
+		FfmpegOptions *Opts  `db:"ffmpeg_options"`
 		Ext           string
 	}
 

@@ -10,7 +10,6 @@ import (
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
-	"github.com/jmoiron/sqlx"
 )
 
 type (
@@ -165,75 +164,19 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 	defer tx.Rollback()
 
 	if newLabel != nil || newEnabled != nil {
-		var labelToSet string
-		var enabledToSet bool
-		if err := tx.QueryRowx(`SELECT label, enabled FROM workflow WHERE id=$1`, workflowID).Scan(&labelToSet, &enabledToSet); err != nil {
-			return fail("find existing workflow", err)
-		}
-
-		if newLabel != nil {
-			labelToSet = *newLabel
-		}
-		if newEnabled != nil {
-			enabledToSet = *newEnabled
-		}
-
-		if _, err := tx.Exec(`
-			UPDATE workflow
-			WHERE id=$1
-			SET (updated_at, label, enabled) = (current_timestamp, $2, $3)
-			`,
-			workflowID, labelToSet, enabledToSet); err != nil {
-			return fail("update workflow row", err)
-		}
+		orchestrator.WorkflowStore.UpdateWorkflow(tx, workflowID, newLabel, newEnabled)
 	}
-
 	if newCriteria != nil {
-		var criteriaIDs []uuid.UUID
-		if newCriteria != nil {
-			criteriaIDs := make([]uuid.UUID, len(*newCriteria))
-			for i, v := range *newCriteria {
-				criteriaIDs[i] = v.ID
-			}
-		}
-
-		// Insert workflow criteria, updating existing criteria
-		tx.NamedExec(`
-			INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_combine_type, match_value, workflow_id)
-			VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, '`+workflowID.String()+`')
-			ON CONFLICT DO UPDATE
-				SET (updated_at, match_key, match_type, match_combine_type, match_value) =
-					(current_timestamp, EXCLUDED.match_key, EXCLUDED.match_type, EXCLUDED.match_combine_type, EXCLUDED.match_value)
-		`, *newCriteria)
-
-		// Drop workflow criteria rows which are no longer referenced
-		// by this workflow
-		if err := execDbIn(tx, `--sql
-			DELETE FROM workflow_criteria wc
-			WHERE wc.workflow_id=`+workflowID.String()+`
-				AND wc.id NOT IN (?)
-		`, criteriaIDs); err != nil {
-			return fail("bind criteria SQL", err)
-		}
+		orchestrator.WorkflowStore.UpdateWorkflowCriteria(tx, workflowID, *newCriteria)
 	}
-
-	// Drop all workflow targets join table entries and re-create them
 	if newTargetIDs != nil {
-		if _, err := tx.NamedExec(`DELETE FROM workflow_transcode_targets WHERE workflow_id=$1`, workflowID); err != nil {
-			return fail("delete workflow transcode target assocs", err)
-		}
-		if _, err := tx.NamedExec(`
-			INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
-			VALUES(:id, :workflow_id, :target_id)
-			`, workflow.BuildWorkflowTargetAssocs(workflowID, *newTargetIDs),
-		); err != nil {
-			return fail("create workflow target associations", err)
-		}
+		orchestrator.WorkflowStore.UpdateWorkflowTargets(tx, workflowID, *newTargetIDs)
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fail("commit workflow update transaction", err)
 	}
+
 	return nil, nil
 }
 
@@ -284,16 +227,4 @@ func (orchestrator *storeOrchestrator) GetManyTargets(ids ...uuid.UUID) []*ffmpe
 
 func (orchestrator *storeOrchestrator) DeleteTarget(id uuid.UUID) {
 	orchestrator.TargetStore.Delete(orchestrator.db.GetSqlxDb(), id)
-}
-
-func execDbIn(db *sqlx.Tx, query string, arg any) error {
-	if q, a, e := sqlx.In(query, arg); e == nil {
-		if _, err := db.Exec(db.Rebind(q), a); err != nil {
-			return err
-		}
-	} else {
-		return e
-	}
-
-	return nil
 }

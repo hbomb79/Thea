@@ -84,6 +84,71 @@ func (store *Store) Create(db *sqlx.DB, workflowID uuid.UUID, label string, enab
 	return nil
 }
 
+func (store *Store) UpdateWorkflow(tx *sqlx.Tx, workflowID uuid.UUID, newLabel *string, newEnabled *bool) error {
+	var labelToSet string
+	var enabledToSet bool
+	if err := tx.QueryRowx(`SELECT label, enabled FROM workflow WHERE id=$1`, workflowID).Scan(&labelToSet, &enabledToSet); err != nil {
+		return err
+	}
+
+	if newLabel != nil {
+		labelToSet = *newLabel
+	}
+	if newEnabled != nil {
+		enabledToSet = *newEnabled
+	}
+
+	_, err := tx.Exec(`
+		UPDATE workflow
+		WHERE id=$1
+		SET (updated_at, label, enabled) = (current_timestamp, $2, $3)
+	`, workflowID, labelToSet, enabledToSet)
+
+	return err
+}
+
+func (store *Store) UpdateWorkflowCriteria(tx *sqlx.Tx, workflowID uuid.UUID, criteria []match.Criteria) error {
+	criteriaIDs := make([]uuid.UUID, len(criteria))
+	for i, v := range criteria {
+		criteriaIDs[i] = v.ID
+	}
+
+	// Insert workflow criteria, updating existing criteria
+	if _, err := tx.NamedExec(`
+		INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_combine_type, match_value, workflow_id)
+		VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, '`+workflowID.String()+`')
+		ON CONFLICT DO UPDATE
+			SET (updated_at, match_key, match_type, match_combine_type, match_value) =
+				(current_timestamp, EXCLUDED.match_key, EXCLUDED.match_type, EXCLUDED.match_combine_type, EXCLUDED.match_value)
+		`, criteria); err != nil {
+		return err
+	}
+
+	// Drop workflow criteria rows which are no longer referenced
+	// by this workflow
+	if err := execDbIn(tx, `--sql
+		DELETE FROM workflow_criteria wc
+		WHERE wc.workflow_id='`+workflowID.String()+`'
+			AND wc.id NOT IN (?)
+		`, criteriaIDs); err != nil {
+		return err
+	}
+	return nil
+
+}
+func (store *Store) UpdateWorkflowTargets(tx *sqlx.Tx, workflowID uuid.UUID, targetIDs []uuid.UUID) error {
+	if _, err := tx.NamedExec(`DELETE FROM workflow_transcode_targets WHERE workflow_id=$1`, workflowID); err != nil {
+		return err
+	}
+
+	_, err := tx.NamedExec(`
+		INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
+		VALUES(:id, :workflow_id, :target_id)
+		`, BuildWorkflowTargetAssocs(workflowID, targetIDs),
+	)
+	return err
+}
+
 func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Workflow {
 	dest := &workflowModel{}
 	if err := db.Get(dest, `
@@ -158,4 +223,16 @@ func BuildWorkflowTargetAssocs(workflowID uuid.UUID, targetIDs []uuid.UUID) []wo
 	}
 
 	return assocs
+}
+
+func execDbIn(db *sqlx.Tx, query string, arg any) error {
+	if q, a, e := sqlx.In(query, arg); e == nil {
+		if _, err := db.Exec(db.Rebind(q), a); err != nil {
+			return err
+		}
+	} else {
+		return e
+	}
+
+	return nil
 }

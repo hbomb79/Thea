@@ -113,23 +113,29 @@ func (store *Store) UpdateWorkflowCriteriaTx(tx *sqlx.Tx, workflowID uuid.UUID, 
 	}
 
 	// Insert workflow criteria, updating existing criteria
-	if _, err := tx.NamedExec(`
-		INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_combine_type, match_value, workflow_id)
-		VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, '`+workflowID.String()+`')
-		ON CONFLICT(id) DO UPDATE
-			SET (updated_at, match_key, match_type, match_combine_type, match_value) =
-				(current_timestamp, EXCLUDED.match_key, EXCLUDED.match_type, EXCLUDED.match_combine_type, EXCLUDED.match_value)
+	if len(criteria) > 0 {
+		if _, err := tx.NamedExec(`
+			INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_combine_type, match_value, workflow_id)
+			VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, '`+workflowID.String()+`')
+			ON CONFLICT(id) DO UPDATE
+				SET (updated_at, match_key, match_type, match_combine_type, match_value) =
+					(current_timestamp, EXCLUDED.match_key, EXCLUDED.match_type, EXCLUDED.match_combine_type, EXCLUDED.match_value)
 		`, criteria); err != nil {
-		return err
-	}
+			return err
+		}
 
-	// Drop workflow criteria rows which are no longer referenced
-	// by this workflow
-	if err := database.InExec(tx, `--sql
-		DELETE FROM workflow_criteria wc
-		WHERE wc.workflow_id='`+workflowID.String()+`'
-			AND wc.id NOT IN (?)
-		`, criteriaIDs); err != nil {
+		// Drop workflow criteria rows which are no longer referenced
+		// by this workflow
+		if err := database.InExec(tx, `--sql
+			DELETE FROM workflow_criteria wc
+			WHERE wc.workflow_id='`+workflowID.String()+`'
+				AND wc.id NOT IN (?)
+			`, criteriaIDs); err != nil {
+			return err
+		}
+	} else {
+		_, err := tx.Exec(`--sql
+		DELETE FROM workflow_criteria WHERE workflow_id='` + workflowID.String() + `'`)
 		return err
 	}
 
@@ -143,16 +149,21 @@ func (store *Store) UpdateWorkflowCriteriaTx(tx *sqlx.Tx, workflowID uuid.UUID, 
 // NOTE: This DB action is intended to be used as part of an over-arching transaction; user-story
 // for updating a workflow should consider all related data too.
 func (store *Store) UpdateWorkflowTargetsTx(tx *sqlx.Tx, workflowID uuid.UUID, targetIDs []uuid.UUID) error {
-	if _, err := tx.NamedExec(`DELETE FROM workflow_transcode_targets WHERE workflow_id=$1`, workflowID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM workflow_transcode_targets WHERE workflow_id=$1`, workflowID); err != nil {
 		return err
 	}
 
-	_, err := tx.NamedExec(`
-		INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
-		VALUES(:id, :workflow_id, :target_id)
-		`, buildWorkflowTargetAssocs(workflowID, targetIDs),
-	)
-	return err
+	if len(targetIDs) > 0 {
+		_, err := tx.NamedExec(`
+			INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
+			VALUES(:id, :workflow_id, :target_id)
+			`, buildWorkflowTargetAssocs(workflowID, targetIDs),
+		)
+
+		return err
+	}
+
+	return nil
 }
 
 // Get queries the database for a specific workflow, and all it's related information.
@@ -202,8 +213,8 @@ func getWorkflowSql(whereClause string) string {
 	return fmt.Sprintf(`
 		SELECT
 			w.*,
-			COALESCE(JSONB_AGG(wc.*) FILTER (WHERE wc.id IS NOT NULL), '[]') AS criteria,
-			COALESCE(JSONB_AGG(tt.*) FILTER (WHERE tt.id IS NOT NULL), '[]') AS targets
+			COALESCE(JSONB_AGG(DISTINCT wc.*) FILTER (WHERE wc.id IS NOT NULL), '[]') AS criteria,
+			COALESCE(JSONB_AGG(DISTINCT tt.*) FILTER (WHERE tt.id IS NOT NULL), '[]') AS targets
 		FROM workflow w
 		LEFT JOIN workflow_criteria wc
 			ON wc.workflow_id = w.id

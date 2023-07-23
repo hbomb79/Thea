@@ -28,6 +28,10 @@ var (
 )
 
 type (
+	SqlLogger struct {
+		logger logger.Logger
+	}
+
 	Manager interface {
 		Connect(DatabaseConfig) error
 		GetSqlxDb() *sqlx.DB
@@ -44,30 +48,6 @@ type (
 
 func New() *manager {
 	return &manager{models: make([]any, 0)}
-}
-
-type SqlLogger struct {
-	logger logger.Logger
-}
-
-func (l *SqlLogger) Log(_ context.Context, level sqldblogger.Level, msg string, data map[string]any) {
-	template := "%s - %v\n"
-	switch level {
-	case sqldblogger.LevelTrace:
-		l.logger.VerboseF(template, msg, data)
-	case sqldblogger.LevelDebug:
-		fallthrough
-	case sqldblogger.LevelInfo:
-		duration := data["duration"]
-		query, ok := data["query"]
-		if ok {
-			l.logger.Infof("%s [%.2fms] -- %s\n", msg, duration, query)
-		} else {
-			l.logger.Infof("%s [%.2fms]\n", msg, duration)
-		}
-	case sqldblogger.LevelError:
-		l.logger.Errorf(template, msg, data)
-	}
 }
 
 func (db *manager) Connect(config DatabaseConfig) error {
@@ -159,6 +139,26 @@ func (db *manager) RegisterModels(models ...any) {
 
 	dbLogger.Emit(logger.DEBUG, "Registering DB models %#v\n", models)
 	db.models = append(db.models, models...)
+}
+
+func (l *SqlLogger) Log(_ context.Context, level sqldblogger.Level, msg string, data map[string]any) {
+	template := "%s - %v\n"
+	switch level {
+	case sqldblogger.LevelTrace:
+		l.logger.VerboseF(template, msg, data)
+	case sqldblogger.LevelDebug:
+		fallthrough
+	case sqldblogger.LevelInfo:
+		duration := data["duration"]
+		query, ok := data["query"]
+		if ok {
+			l.logger.Infof("%s [%.2fms] -- %s\n", msg, duration, query)
+		} else {
+			l.logger.Infof("%s [%.2fms]\n", msg, duration)
+		}
+	case sqldblogger.LevelError:
+		l.logger.Errorf(template, msg, data)
+	}
 }
 
 // WrapTx starts a transaction against the provided DB, and then calls the user

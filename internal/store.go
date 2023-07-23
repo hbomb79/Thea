@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -11,6 +12,15 @@ import (
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
+)
+
+const (
+	PgFkConstraintViolationCode = "23503"
+)
+
+var (
+	ErrWorkflowTargetIDMissing = errors.New("one or more of the targets provided cannot be found")
 )
 
 type (
@@ -155,7 +165,15 @@ func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, labe
 // corresponding value in the model is NOT changed.
 func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newLabel *string, newCriteria *[]match.Criteria, newTargetIDs *[]uuid.UUID, newEnabled *bool) (*workflow.Workflow, error) {
 	fail := func(desc string, err error) error {
-		return fmt.Errorf("failed to %s due to error: %s", desc, err.Error())
+		if pqErr, ok := err.(*pq.Error); ok {
+			if pqErr.Code == PgFkConstraintViolationCode && pqErr.Table == "workflow_transcode_targets" {
+				log.Debugf("DB query failure; apparent target ID FK violation %#v\n", err)
+				return ErrWorkflowTargetIDMissing
+			}
+		}
+
+		log.Errorf("Unexpected query failure: %#v\n", err)
+		return fmt.Errorf("failed to %s due to unexpected query error: %s", desc, err.Error())
 	}
 
 	err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {

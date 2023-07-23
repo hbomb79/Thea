@@ -17,10 +17,10 @@ import (
 // made up of four terms: the key, type, value and combine type (in order).
 type Criteria struct {
 	ID          uuid.UUID
-	Key         Key         `json:"match_key"`
-	Type        Type        `json:"match_type"`
-	Value       string      `json:"match_value"`
-	CombineType CombineType `json:"match_combine_type"`
+	Key         Key         `json:"match_key" db:"match_key"`
+	Type        Type        `json:"match_type" db:"match_type"`
+	Value       string      `json:"match_value" db:"match_value"`
+	CombineType CombineType `json:"match_combine_type" db:"match_combine_type"`
 }
 
 // ValidateLegal ensures the criteria is LEGAL:

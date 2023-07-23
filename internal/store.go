@@ -160,17 +160,17 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 
 	orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
 		if newLabel != nil || newEnabled != nil {
-			if err := orchestrator.WorkflowStore.UpdateWorkflow(tx, workflowID, newLabel, newEnabled); err != nil {
+			if err := orchestrator.WorkflowStore.UpdateWorkflowTx(tx, workflowID, newLabel, newEnabled); err != nil {
 				return fail("update workflow row", err)
 			}
 		}
 		if newCriteria != nil {
-			if err := orchestrator.WorkflowStore.UpdateWorkflowCriteria(tx, workflowID, *newCriteria); err != nil {
+			if err := orchestrator.WorkflowStore.UpdateWorkflowCriteriaTx(tx, workflowID, *newCriteria); err != nil {
 				return fail("update workflow criteria associations", err)
 			}
 		}
 		if newTargetIDs != nil {
-			if err := orchestrator.WorkflowStore.UpdateWorkflowTargets(tx, workflowID, *newTargetIDs); err != nil {
+			if err := orchestrator.WorkflowStore.UpdateWorkflowTargetsTx(tx, workflowID, *newTargetIDs); err != nil {
 				return fail("update workflow target associations", err)
 			}
 		}
@@ -186,7 +186,8 @@ func (orchestrator *storeOrchestrator) GetWorkflow(id uuid.UUID) *workflow.Workf
 }
 
 func (orchestrator *storeOrchestrator) GetAllWorkflows() []*workflow.Workflow {
-	return orchestrator.WorkflowStore.GetAll(orchestrator.db.GetSqlxDb())
+	all := orchestrator.WorkflowStore.GetAll(orchestrator.db.GetSqlxDb())
+	return all
 }
 
 func (orchestrator *storeOrchestrator) DeleteWorkflow(id uuid.UUID) {

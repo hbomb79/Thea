@@ -96,7 +96,7 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 			return IngestItemTrouble{err, GENERIC_FAILURE}
 		}
 
-		log.Emit(logger.SUCCESS, "Saved newly ingested episode %v", ep)
+		log.Emit(logger.SUCCESS, "Saved newly ingested episode %v\n", ep)
 		eventBus.Dispatch(event.NEW_MEDIA, ep.ID)
 	} else {
 		movie, err := searcher.SearchForMovie(item.ScrapedMetadata)
@@ -104,13 +104,13 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 			return handleSearchError(err)
 		}
 
-		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %v", movie)
+		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %v\n", movie)
 		mov := item.tmdbMovieToMedia(movie)
 		if err := data.SaveMovie(mov); err != nil {
 			return IngestItemTrouble{err, GENERIC_FAILURE}
 		}
 
-		log.Emit(logger.SUCCESS, "Saved newly ingested movie %v", mov)
+		log.Emit(logger.SUCCESS, "Saved newly ingested movie %v\n", mov)
 		eventBus.Dispatch(event.NEW_MEDIA, mov.ID)
 	}
 

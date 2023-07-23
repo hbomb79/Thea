@@ -113,6 +113,8 @@ func (db *manager) GetSqlxDb() *sqlx.DB {
 	return db.db
 }
 
+// WrapTx is a convinience method around the top-level WrapTx, which simply
+// uses the managers DB instance as the first argument.
 func (db *manager) WrapTx(f func(tx *sqlx.Tx) error) error {
 	if db.db == nil {
 		return errors.New("DB manager has not yet connected")
@@ -130,6 +132,9 @@ func (db *manager) RegisterModels(models ...any) {
 	db.models = append(db.models, models...)
 }
 
+// WrapTx starts a transaction against the provided DB, and then calls the user
+// provided function. If this function errors, the transaction is rolled back - otherwise
+// the transaction is committed.
 func WrapTx(db *sqlx.DB, f func(tx *sqlx.Tx) error) error {
 	tx, err := db.Beginx()
 	if err != nil {
@@ -142,4 +147,20 @@ func WrapTx(db *sqlx.DB, f func(tx *sqlx.Tx) error) error {
 	}
 
 	return tx.Commit()
+}
+
+// InExec is a convinience method which combines sqlx's `In` method
+// and the `Exec` of the output query. Rebinding of the
+// query is handled automatically, and errors resulting from
+// either step will be returned.
+func InExec(db *sqlx.Tx, query string, arg any) error {
+	if q, a, e := sqlx.In(query, arg); e == nil {
+		if _, err := db.Exec(db.Rebind(q), a); err != nil {
+			return err
+		}
+	} else {
+		return e
+	}
+
+	return nil
 }

@@ -3,6 +3,7 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
@@ -13,15 +14,17 @@ import (
 
 type (
 	workflowModel struct {
-		ID       uuid.UUID
-		Enabled  bool
-		Label    string
-		Criteria jsonColumn[[]match.Criteria]
-		Targets  jsonColumn[[]*ffmpeg.Target]
+		ID        uuid.UUID                    `db:"id"`
+		UpdatedAt time.Time                    `db:"updated_at"`
+		CreatedAt time.Time                    `db:"created_at"`
+		Enabled   bool                         `db:"enabled"`
+		Label     string                       `db:"label"`
+		Criteria  jsonColumn[[]match.Criteria] `db:"criteria"`
+		Targets   jsonColumn[[]*ffmpeg.Target] `db:"targets"`
 	}
 
 	workflowTargetAssoc struct {
-		ID         uuid.UUID
+		ID         uuid.UUID `db:"id"`
 		WorkflowID uuid.UUID `db:"workflow_id"`
 		TargetID   uuid.UUID `db:"target_id"`
 	}
@@ -70,7 +73,11 @@ func (store *Store) Create(db *sqlx.DB, workflowID uuid.UUID, label string, enab
 	})
 }
 
-func (store *Store) UpdateWorkflow(tx *sqlx.Tx, workflowID uuid.UUID, newLabel *string, newEnabled *bool) error {
+// UpdateWorkflowTx updates only the workflows main data, such as it's label.
+//
+// NOTE: This action is intended to be used as part of an over-arching transaction; user-story
+// for updating a workflow should consider all related data too.
+func (store *Store) UpdateWorkflowTx(tx *sqlx.Tx, workflowID uuid.UUID, newLabel *string, newEnabled *bool) error {
 	var labelToSet string
 	var enabledToSet bool
 	if err := tx.QueryRowx(`SELECT label, enabled FROM workflow WHERE id=$1`, workflowID).Scan(&labelToSet, &enabledToSet); err != nil {
@@ -93,7 +100,13 @@ func (store *Store) UpdateWorkflow(tx *sqlx.Tx, workflowID uuid.UUID, newLabel *
 	return err
 }
 
-func (store *Store) UpdateWorkflowCriteria(tx *sqlx.Tx, workflowID uuid.UUID, criteria []match.Criteria) error {
+// UpdateWorkflowCriteriaTx updates only the workflows related match criteria. The criteria provided
+// *replaces* the existing criteria. That is to say, criteria will be created, updated and deletes
+// as needed.
+//
+// NOTE: This action is intended to be used as part of an over-arching transaction; user-story
+// for updating a workflow should consider all related data too.
+func (store *Store) UpdateWorkflowCriteriaTx(tx *sqlx.Tx, workflowID uuid.UUID, criteria []match.Criteria) error {
 	criteriaIDs := make([]uuid.UUID, len(criteria))
 	for i, v := range criteria {
 		criteriaIDs[i] = v.ID
@@ -112,7 +125,7 @@ func (store *Store) UpdateWorkflowCriteria(tx *sqlx.Tx, workflowID uuid.UUID, cr
 
 	// Drop workflow criteria rows which are no longer referenced
 	// by this workflow
-	if err := execDbIn(tx, `--sql
+	if err := database.InExec(tx, `--sql
 		DELETE FROM workflow_criteria wc
 		WHERE wc.workflow_id='`+workflowID.String()+`'
 			AND wc.id NOT IN (?)
@@ -122,7 +135,14 @@ func (store *Store) UpdateWorkflowCriteria(tx *sqlx.Tx, workflowID uuid.UUID, cr
 	return nil
 
 }
-func (store *Store) UpdateWorkflowTargets(tx *sqlx.Tx, workflowID uuid.UUID, targetIDs []uuid.UUID) error {
+
+// UpdateWorkflowTargetsTx updates a workflows transcode targets by modifying the rows
+// in the join table as needed. For simplicitly, this function will drop all rows
+// for the given workflow and re-create them.
+//
+// NOTE: This DB action is intended to be used as part of an over-arching transaction; user-story
+// for updating a workflow should consider all related data too.
+func (store *Store) UpdateWorkflowTargetsTx(tx *sqlx.Tx, workflowID uuid.UUID, targetIDs []uuid.UUID) error {
 	if _, err := tx.NamedExec(`DELETE FROM workflow_transcode_targets WHERE workflow_id=$1`, workflowID); err != nil {
 		return err
 	}
@@ -135,20 +155,13 @@ func (store *Store) UpdateWorkflowTargets(tx *sqlx.Tx, workflowID uuid.UUID, tar
 	return err
 }
 
+// Get queries the database for a specific workflow, and all it's related information.
+// The workflows criteria/targets are accessed via a join and aggregated in to
+// the result row as a JSONB array, which is then unmarshalled and used to
+// construct a 'Workflow'
 func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Workflow {
 	dest := &workflowModel{}
-	if err := db.Get(dest, `
-		SELECT w.*, JSONB_AGG(wc.*) AS criteria, JSONB_AGG(tt.*) AS targets
-		FROM workflow w
-		LEFT JOIN workflow_criteria wc
-			ON wc.workflow_id = w.id
-		LEFT JOIN workflow_transcode_targets wtt
-			ON wtt.workflow_id = w.id
-		LEFT JOIN transcode_targets tt
-			ON tt.id = wtt.transcode_target_id
-		WHERE w.id=$1
-		GROUP BY w.id
-	`, id); err != nil {
+	if err := db.Get(dest, getWorkflowSql(`WHERE w.id=$1`), id); err != nil {
 		log.Warnf("Failed to find workflow (id=%s): %s\n", id, err.Error())
 		return nil
 	}
@@ -156,19 +169,13 @@ func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Workflow {
 	return &Workflow{dest.ID, dest.Enabled, dest.Label, *dest.Criteria.Get(), *dest.Targets.Get()}
 }
 
+// GetAll queries the database for all workflows, and all the related information.
+// The workflows criteria/targets are accessed via a join and aggregated in to
+// the result row as a JSONB array, which is then unmarshalled and used to
+// construct a 'Workflow'
 func (store *Store) GetAll(db *sqlx.DB) []*Workflow {
 	var dest []*workflowModel
-	if err := db.Select(dest, `
-		SELECT w.*, JSONB_AGG(wc.*) AS criteria, JSONB_AGG(tt.*) AS targets
-		FROM workflow w
-		LEFT JOIN workflow_criteria wc
-			ON wc.workflow_id = w.id
-		LEFT JOIN workflow_transcode_targets wtt
-			ON wtt.workflow_id = w.id
-		LEFT JOIN transcode_targets tt
-			ON tt.id = wtt.transcode_target_id
-		GROUP BY w.id
-	`); err != nil {
+	if err := db.Select(&dest, getWorkflowSql("")); err != nil {
 		log.Warnf("Failed to get all workflows: %s\n", err.Error())
 		return nil
 	}
@@ -180,12 +187,33 @@ func (store *Store) GetAll(db *sqlx.DB) []*Workflow {
 	return output
 }
 
+// Delete will remove a workflow, and all it's related information (by way of cascading deletes)
+// using the workflow ID provided. To delete only the workflows criteria/targets/etc,
+// the relevant update method should be used instead.
 func (store *Store) Delete(db *sqlx.DB, id uuid.UUID) {
 	_, err := db.Exec(`DELETE FROM workflow WHERE id=$1;`, id)
 
 	if err != nil {
 		log.Fatalf("Failed to delete workflow with ID = %v due to error: %s\n", id, err.Error())
 	}
+}
+
+func getWorkflowSql(whereClause string) string {
+	return fmt.Sprintf(`
+		SELECT
+			w.*,
+			COALESCE(JSONB_AGG(wc.*) FILTER (WHERE wc.id IS NOT NULL), '[]') AS criteria,
+			COALESCE(JSONB_AGG(tt.*) FILTER (WHERE tt.id IS NOT NULL), '[]') AS targets
+		FROM workflow w
+		LEFT JOIN workflow_criteria wc
+			ON wc.workflow_id = w.id
+		LEFT JOIN workflow_transcode_targets wtt
+			ON wtt.workflow_id = w.id
+		LEFT JOIN transcode_target tt
+			ON tt.id = wtt.transcode_target_id
+		%s
+		GROUP BY w.id
+	`, whereClause)
 }
 
 func (j *jsonColumn[T]) Scan(src any) error {
@@ -209,16 +237,4 @@ func buildWorkflowTargetAssocs(workflowID uuid.UUID, targetIDs []uuid.UUID) []wo
 	}
 
 	return assocs
-}
-
-func execDbIn(db *sqlx.Tx, query string, arg any) error {
-	if q, a, e := sqlx.In(query, arg); e == nil {
-		if _, err := db.Exec(db.Rebind(q), a); err != nil {
-			return err
-		}
-	} else {
-		return e
-	}
-
-	return nil
 }

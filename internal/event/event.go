@@ -118,7 +118,7 @@ func (handler *eventHandler) registerHandlerMethod(event Event, handle handlerMe
 // handlers are blocked.
 func (handler *eventHandler) Dispatch(event Event, payload Payload) {
 	if err := handler.validatePayload(event, payload); err != nil {
-		log.Emit(logger.FATAL, "Dispatch for event %v FAILED validation: %v", event, err)
+		log.Emit(logger.FATAL, "Dispatch for event %v FAILED validation: %v\n", event, err)
 		return
 	}
 

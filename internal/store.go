@@ -10,6 +10,7 @@ import (
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
+	"github.com/jmoiron/sqlx"
 )
 
 type (
@@ -153,37 +154,31 @@ func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, labe
 // using the optional paramaters provided. If a param is `nil` then the
 // corresponding value in the model is NOT changed.
 func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newLabel *string, newCriteria *[]match.Criteria, newTargetIDs *[]uuid.UUID, newEnabled *bool) (*workflow.Workflow, error) {
-	fail := func(desc string, err error) (*workflow.Workflow, error) {
-		return nil, fmt.Errorf("failed to %s due to error: %s", desc, err.Error())
+	fail := func(desc string, err error) error {
+		return fmt.Errorf("failed to %s due to error: %s", desc, err.Error())
 	}
 
-	tx, err := orchestrator.db.GetSqlxDb().Beginx()
-	if err != nil {
-		return fail("open workflow update transaction", err)
-	}
-	defer tx.Rollback()
-
-	if newLabel != nil || newEnabled != nil {
-		if err := orchestrator.WorkflowStore.UpdateWorkflow(tx, workflowID, newLabel, newEnabled); err != nil {
-			return fail("update workflow row", err)
+	orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+		if newLabel != nil || newEnabled != nil {
+			if err := orchestrator.WorkflowStore.UpdateWorkflow(tx, workflowID, newLabel, newEnabled); err != nil {
+				return fail("update workflow row", err)
+			}
 		}
-	}
-	if newCriteria != nil {
-		if err := orchestrator.WorkflowStore.UpdateWorkflowCriteria(tx, workflowID, *newCriteria); err != nil {
-			return fail("update workflow criteria associations", err)
+		if newCriteria != nil {
+			if err := orchestrator.WorkflowStore.UpdateWorkflowCriteria(tx, workflowID, *newCriteria); err != nil {
+				return fail("update workflow criteria associations", err)
+			}
 		}
-	}
-	if newTargetIDs != nil {
-		if err := orchestrator.WorkflowStore.UpdateWorkflowTargets(tx, workflowID, *newTargetIDs); err != nil {
-			return fail("update workflow target associations", err)
+		if newTargetIDs != nil {
+			if err := orchestrator.WorkflowStore.UpdateWorkflowTargets(tx, workflowID, *newTargetIDs); err != nil {
+				return fail("update workflow target associations", err)
+			}
 		}
-	}
 
-	if err := tx.Commit(); err != nil {
-		return fail("commit workflow update transaction", err)
-	}
+		return nil
+	})
 
-	return nil, nil
+	return orchestrator.WorkflowStore.Get(orchestrator.db.GetSqlxDb(), workflowID), nil
 }
 
 func (orchestrator *storeOrchestrator) GetWorkflow(id uuid.UUID) *workflow.Workflow {

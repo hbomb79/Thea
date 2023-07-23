@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"time"
 
@@ -28,6 +29,7 @@ type (
 	Manager interface {
 		Connect(DatabaseConfig) error
 		GetSqlxDb() *sqlx.DB
+		WrapTx(func(*sqlx.Tx) error) error
 		RegisterModels(...any)
 	}
 
@@ -112,6 +114,14 @@ func (db *manager) GetSqlxDb() *sqlx.DB {
 	return db.db
 }
 
+func (db *manager) WrapTx(f func(tx *sqlx.Tx) error) error {
+	if db.db == nil {
+		return errors.New("DB manager has not yet connected")
+	}
+
+	return WrapTx(db.db, f)
+}
+
 func (db *manager) RegisterModels(models ...any) {
 	if db.db != nil {
 		panic("cannot register models to a database server that is already connected")
@@ -119,4 +129,18 @@ func (db *manager) RegisterModels(models ...any) {
 
 	dbLogger.Emit(logger.DEBUG, "Registering DB models %#v\n", models)
 	db.models = append(db.models, models...)
+}
+
+func WrapTx(db *sqlx.DB, f func(tx *sqlx.Tx) error) error {
+	tx, err := db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := f(tx); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }

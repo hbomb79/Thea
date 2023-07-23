@@ -44,38 +44,30 @@ func (store *Store) Create(db *sqlx.DB, workflowID uuid.UUID, label string, enab
 		return fmt.Errorf("failed to %s due to error: %s", desc, err.Error())
 	}
 
-	tx, err := db.Beginx()
-	if err != nil {
-		return fail("open transaction", err)
-	}
-	defer tx.Rollback()
+	return database.WrapTx(db, func(tx *sqlx.Tx) error {
+		if _, err := tx.Exec(`
+			INSERT INTO workflow(id, created_at, updated_at, enabled, label)
+			VALUES ($1, current_timestamp, current_timestamp, $2, $3)`,
+			workflowID, label, enabled); err != nil {
+			return fail("create workflow row", err)
+		}
 
-	if _, err := tx.Exec(`
-		INSERT INTO workflow(id, created_at, updated_at, enabled, label)
-		VALUES ($1, current_timestamp, current_timestamp, $2, $3)
-	`, workflowID, label, enabled); err != nil {
-		return fail("create workflow row", err)
-	}
+		if _, err := tx.NamedExec(`
+			INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
+			VALUES(:id, :workflow_id, :target_id)`,
+			buildWorkflowTargetAssocs(workflowID, targetIDs)); err != nil {
+			return fail("create workflow target associations", err)
+		}
 
-	if _, err := tx.NamedExec(`
-		INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
-		VALUES(:id, :workflow_id, :target_id)
-	`, buildWorkflowTargetAssocs(workflowID, targetIDs)); err != nil {
-		return fail("create workflow target associations", err)
-	}
+		if _, err := tx.NamedExec(`
+			INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_value, match_combine_type, workflow_id)
+			VALUES (:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_value, :match_combine_type, '`+workflowID.String()+`')`,
+			criteria); err != nil {
+			return fail("create workflow criteria associations", err)
+		}
 
-	if _, err := tx.NamedExec(`
-		INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_value, match_combine_type, workflow_id)
-		VALUES (:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_value, :match_combine_type, '`+workflowID.String()+`')
-	`, criteria); err != nil {
-		return fail("create workflow criteria associations", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fail("commit workflow creation transaction", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 func (store *Store) UpdateWorkflow(tx *sqlx.Tx, workflowID uuid.UUID, newLabel *string, newEnabled *bool) error {

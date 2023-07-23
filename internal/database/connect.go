@@ -49,7 +49,6 @@ func (db *manager) Connect(config DatabaseConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to open postgres connection: %s", err.Error())
 	}
-	defer sql.Close()
 
 	attempt := 1
 	time.Sleep(time.Second * 2)

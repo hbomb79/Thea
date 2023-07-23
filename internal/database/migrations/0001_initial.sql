@@ -52,7 +52,7 @@ CREATE TABLE transcode_target(
     id UUID NOT NULL PRIMARY KEY,
     label TEXT NOT NULL,
     ffmpeg_options JSONB NOT NULL,
-    extension CHAR(5) NOT NULL,
+    extension TEXT NOT NULL,
     
     CONSTRAINT transcode_target_uk_label UNIQUE(label)
 );

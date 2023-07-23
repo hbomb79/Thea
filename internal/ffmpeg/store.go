@@ -20,26 +20,28 @@ func (store *Store) RegisterModels(db database.Manager) {
 func (store *Store) Save(db *sqlx.DB, target *Target) error {
 	_, err := db.NamedExec(`
 		INSERT INTO transcode_target(id, label, ffmpeg_options, extension)
-		VALUES (:id, :label, :ffmpeg_options, :ext);
+		VALUES (:id, :label, :ffmpeg_options, :extension)
+		ON CONFLICT(id) DO UPDATE
+		SET (label, ffmpeg_options, extension) = (EXCLUDED.label, EXCLUDED.ffmpeg_options, EXCLUDED.extension)
 	`, target)
 
 	return err
 }
 
 func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Target {
-	var result *Target
-	err := db.Get(result, `SELECT * FROM transcode_target WHERE id=$1;`, id)
+	var result Target
+	err := db.Get(&result, `SELECT * FROM transcode_target WHERE id=$1;`, id)
 	if err != nil {
 		log.Warnf("Failed to find target (id=%s): %s\n", id, err.Error())
 		return nil
 	}
 
-	return result
+	return &result
 }
 
 func (store *Store) GetAll(db *sqlx.DB) []*Target {
 	var results []*Target
-	err := db.Select(results, `SELECT * FROM transcode_target;`)
+	err := db.Select(&results, `SELECT * FROM transcode_target;`)
 	if err != nil {
 		log.Fatalf("Failed to fetch all targets: %s\n", err.Error())
 		return make([]*Target, 0)

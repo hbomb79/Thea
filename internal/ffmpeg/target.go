@@ -16,7 +16,7 @@ type (
 		ID            uuid.UUID
 		Label         string // unique
 		FfmpegOptions *Opts  `db:"ffmpeg_options"`
-		Ext           string
+		Ext           string `db:"extension"`
 	}
 
 	Opts ffmpeg.Options

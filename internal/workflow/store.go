@@ -93,8 +93,8 @@ func (store *Store) UpdateWorkflowTx(tx *sqlx.Tx, workflowID uuid.UUID, newLabel
 
 	_, err := tx.Exec(`
 		UPDATE workflow
-		WHERE id=$1
 		SET (updated_at, label, enabled) = (current_timestamp, $2, $3)
+		WHERE id=$1
 	`, workflowID, labelToSet, enabledToSet)
 
 	return err
@@ -116,7 +116,7 @@ func (store *Store) UpdateWorkflowCriteriaTx(tx *sqlx.Tx, workflowID uuid.UUID, 
 	if _, err := tx.NamedExec(`
 		INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_combine_type, match_value, workflow_id)
 		VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, '`+workflowID.String()+`')
-		ON CONFLICT DO UPDATE
+		ON CONFLICT(id) DO UPDATE
 			SET (updated_at, match_key, match_type, match_combine_type, match_value) =
 				(current_timestamp, EXCLUDED.match_key, EXCLUDED.match_type, EXCLUDED.match_combine_type, EXCLUDED.match_value)
 		`, criteria); err != nil {
@@ -132,8 +132,8 @@ func (store *Store) UpdateWorkflowCriteriaTx(tx *sqlx.Tx, workflowID uuid.UUID, 
 		`, criteriaIDs); err != nil {
 		return err
 	}
-	return nil
 
+	return nil
 }
 
 // UpdateWorkflowTargetsTx updates a workflows transcode targets by modifying the rows

@@ -158,7 +158,7 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 		return fmt.Errorf("failed to %s due to error: %s", desc, err.Error())
 	}
 
-	orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+	err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
 		if newLabel != nil || newEnabled != nil {
 			if err := orchestrator.WorkflowStore.UpdateWorkflowTx(tx, workflowID, newLabel, newEnabled); err != nil {
 				return fail("update workflow row", err)
@@ -177,6 +177,9 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return orchestrator.WorkflowStore.Get(orchestrator.db.GetSqlxDb(), workflowID), nil
 }

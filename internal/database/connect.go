@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"
+	sqldblogger "github.com/simukti/sqldb-logger"
 )
 
 const (
@@ -44,11 +46,38 @@ func New() *manager {
 	return &manager{models: make([]any, 0)}
 }
 
+type SqlLogger struct {
+	logger logger.Logger
+}
+
+func (l *SqlLogger) Log(_ context.Context, level sqldblogger.Level, msg string, data map[string]any) {
+	template := "%s - %v\n"
+	switch level {
+	case sqldblogger.LevelTrace:
+		l.logger.VerboseF(template, msg, data)
+	case sqldblogger.LevelDebug:
+		fallthrough
+	case sqldblogger.LevelInfo:
+		duration := data["duration"]
+		query, ok := data["query"]
+		if ok {
+			l.logger.Infof("%s [%.2fms] -- %s\n", msg, duration, query)
+		} else {
+			l.logger.Infof("%s [%.2fms]\n", msg, duration)
+		}
+	case sqldblogger.LevelError:
+		l.logger.Errorf(template, msg, data)
+	}
+}
+
 func (db *manager) Connect(config DatabaseConfig) error {
-	sql, err := sql.Open(SqlDialect, fmt.Sprintf(SqlConnectionString, config.Host, config.User, config.Password, config.Name, config.Port))
+	dsn := fmt.Sprintf(SqlConnectionString, config.Host, config.User, config.Password, config.Name, config.Port)
+	sql, err := sql.Open(SqlDialect, dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open postgres connection: %s", err.Error())
 	}
+
+	sql = sqldblogger.OpenDriver(dsn, sql.Driver(), &SqlLogger{dbLogger})
 
 	attempt := 1
 	time.Sleep(time.Second * 2)
@@ -143,6 +172,7 @@ func WrapTx(db *sqlx.DB, f func(tx *sqlx.Tx) error) error {
 	defer tx.Rollback()
 
 	if err := f(tx); err != nil {
+		dbLogger.Errorf("Transaction failed... rolling back. Error: %s\n", err.Error())
 		return err
 	}
 
@@ -155,7 +185,7 @@ func WrapTx(db *sqlx.DB, f func(tx *sqlx.Tx) error) error {
 // either step will be returned.
 func InExec(db *sqlx.Tx, query string, arg any) error {
 	if q, a, e := sqlx.In(query, arg); e == nil {
-		if _, err := db.Exec(db.Rebind(q), a); err != nil {
+		if _, err := db.Exec(db.Rebind(q), a...); err != nil {
 			return err
 		}
 	} else {

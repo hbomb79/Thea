@@ -4,17 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/doug-martin/goqu/v9"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/workflow/match"
 	"github.com/jmoiron/sqlx"
-)
-
-var (
-	WorkflowTable         = goqu.T("workflow")
-	WorkflowCriteriaTable = goqu.T("workflow_criteria")
 )
 
 type (
@@ -66,7 +60,7 @@ func (store *Store) Create(db *sqlx.DB, workflowID uuid.UUID, label string, enab
 	if _, err := tx.NamedExec(`
 		INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
 		VALUES(:id, :workflow_id, :target_id)
-	`, BuildWorkflowTargetAssocs(workflowID, targetIDs)); err != nil {
+	`, buildWorkflowTargetAssocs(workflowID, targetIDs)); err != nil {
 		return fail("create workflow target associations", err)
 	}
 
@@ -144,7 +138,7 @@ func (store *Store) UpdateWorkflowTargets(tx *sqlx.Tx, workflowID uuid.UUID, tar
 	_, err := tx.NamedExec(`
 		INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
 		VALUES(:id, :workflow_id, :target_id)
-		`, BuildWorkflowTargetAssocs(workflowID, targetIDs),
+		`, buildWorkflowTargetAssocs(workflowID, targetIDs),
 	)
 	return err
 }
@@ -216,7 +210,7 @@ func (j *jsonColumn[T]) Get() *T {
 	return j.val
 }
 
-func BuildWorkflowTargetAssocs(workflowID uuid.UUID, targetIDs []uuid.UUID) []workflowTargetAssoc {
+func buildWorkflowTargetAssocs(workflowID uuid.UUID, targetIDs []uuid.UUID) []workflowTargetAssoc {
 	assocs := make([]workflowTargetAssoc, len(targetIDs))
 	for i, v := range targetIDs {
 		assocs[i] = workflowTargetAssoc{uuid.New(), workflowID, v}

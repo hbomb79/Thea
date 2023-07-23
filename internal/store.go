@@ -164,13 +164,19 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 	defer tx.Rollback()
 
 	if newLabel != nil || newEnabled != nil {
-		orchestrator.WorkflowStore.UpdateWorkflow(tx, workflowID, newLabel, newEnabled)
+		if err := orchestrator.WorkflowStore.UpdateWorkflow(tx, workflowID, newLabel, newEnabled); err != nil {
+			return fail("update workflow row", err)
+		}
 	}
 	if newCriteria != nil {
-		orchestrator.WorkflowStore.UpdateWorkflowCriteria(tx, workflowID, *newCriteria)
+		if err := orchestrator.WorkflowStore.UpdateWorkflowCriteria(tx, workflowID, *newCriteria); err != nil {
+			return fail("update workflow criteria associations", err)
+		}
 	}
 	if newTargetIDs != nil {
-		orchestrator.WorkflowStore.UpdateWorkflowTargets(tx, workflowID, *newTargetIDs)
+		if err := orchestrator.WorkflowStore.UpdateWorkflowTargets(tx, workflowID, *newTargetIDs); err != nil {
+			return fail("update workflow target associations", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

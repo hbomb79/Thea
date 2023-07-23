@@ -14,11 +14,6 @@ import (
 )
 
 type (
-	workflowTargetAssoc struct {
-		ID       uuid.UUID
-		TargetID uuid.UUID `db:"target_id"`
-	}
-
 	// storeOrchestrator is responsible for managing all of Thea's resources,
 	// especially highly-relational data. You can think of all
 	// the data stores below this layer being 'dumb', and this store
@@ -37,7 +32,7 @@ type (
 )
 
 func NewStoreOrchestrator(db database.Manager) (*storeOrchestrator, error) {
-	if db.GetGoquDb() != nil {
+	if db.GetSqlxDb() != nil {
 		panic("cannot construct thea data store with an already connected database")
 	}
 
@@ -58,51 +53,51 @@ func NewStoreOrchestrator(db database.Manager) (*storeOrchestrator, error) {
 }
 
 func (orchestrator *storeOrchestrator) GetMedia(mediaId uuid.UUID) *media.Container {
-	return orchestrator.MediaStore.GetMedia(orchestrator.db.GetGoquDb(), mediaId)
+	return orchestrator.MediaStore.GetMedia(orchestrator.db.GetSqlxDb(), mediaId)
 }
 
 func (orchestrator *storeOrchestrator) GetMovie(movieId uuid.UUID) (*media.Movie, error) {
-	return orchestrator.MediaStore.GetMovie(orchestrator.db.GetGoquDb(), movieId)
+	return orchestrator.MediaStore.GetMovie(orchestrator.db.GetSqlxDb(), movieId)
 }
 
 func (orchestrator *storeOrchestrator) GetEpisode(episodeId uuid.UUID) (*media.Episode, error) {
-	return orchestrator.MediaStore.GetEpisode(orchestrator.db.GetGoquDb(), episodeId)
+	return orchestrator.MediaStore.GetEpisode(orchestrator.db.GetSqlxDb(), episodeId)
 }
 
 func (orchestrator *storeOrchestrator) GetEpisodeWithTmdbId(tmdbID string) (*media.Episode, error) {
-	return orchestrator.MediaStore.GetEpisodeWithTmdbId(orchestrator.db.GetGoquDb(), tmdbID)
+	return orchestrator.MediaStore.GetEpisodeWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
 }
 
 func (orchestrator *storeOrchestrator) GetSeason(seasonId uuid.UUID) (*media.Season, error) {
-	return orchestrator.MediaStore.GetSeason(orchestrator.db.GetGoquDb(), seasonId)
+	return orchestrator.MediaStore.GetSeason(orchestrator.db.GetSqlxDb(), seasonId)
 }
 
 func (orchestrator *storeOrchestrator) GetSeasonWithTmdbId(tmdbID string) (*media.Season, error) {
-	return orchestrator.MediaStore.GetSeasonWithTmdbId(orchestrator.db.GetGoquDb(), tmdbID)
+	return orchestrator.MediaStore.GetSeasonWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
 }
 
 func (orchestrator *storeOrchestrator) GetSeries(seriesId uuid.UUID) (*media.Series, error) {
-	return orchestrator.MediaStore.GetSeries(orchestrator.db.GetGoquDb(), seriesId)
+	return orchestrator.MediaStore.GetSeries(orchestrator.db.GetSqlxDb(), seriesId)
 }
 
 func (orchestrator *storeOrchestrator) GetSeriesWithTmdbId(tmdbID string) (*media.Series, error) {
-	return orchestrator.MediaStore.GetSeriesWithTmdbId(orchestrator.db.GetGoquDb(), tmdbID)
+	return orchestrator.MediaStore.GetSeriesWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
 }
 
 func (orchestrator *storeOrchestrator) GetAllMediaSourcePaths() []string {
-	return orchestrator.MediaStore.GetAllSourcePaths(orchestrator.db.GetGoquDb())
+	return orchestrator.MediaStore.GetAllSourcePaths(orchestrator.db.GetSqlxDb())
 }
 
 func (orchestrator *storeOrchestrator) SaveMovie(movie *media.Movie) error {
-	return orchestrator.MediaStore.SaveMovie(orchestrator.db.GetGoquDb(), movie)
+	return orchestrator.MediaStore.SaveMovie(orchestrator.db.GetSqlxDb(), movie)
 }
 
 func (orchestrator *storeOrchestrator) SaveSeries(series *media.Series) error {
-	return orchestrator.MediaStore.SaveSeries(orchestrator.db.GetGoquDb(), series)
+	return orchestrator.MediaStore.SaveSeries(orchestrator.db.GetSqlxDb(), series)
 }
 
 func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
-	return orchestrator.MediaStore.SaveSeason(orchestrator.db.GetGoquDb(), season)
+	return orchestrator.MediaStore.SaveSeason(orchestrator.db.GetSqlxDb(), season)
 }
 
 // SaveEpisode transactoinally saves the episode provided, as well as the season and series
@@ -147,25 +142,12 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 // Error will be returned if any of the target IDs provided do not refer to existing Target
 // DB entries, or if the workflow infringes on any uniqueness constraints (label)
 func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID, enabled bool) (*workflow.Workflow, error) {
-	// var newWorkflow *workflow.Workflow
-	// if txErr := orchestrator.db.GetGoquDb().WithTx(func(tx *goqu.TxDatabase) error {
-	// 	targetModels := orchestrator.TargetStore.GetMany(tx, targetIDs...)
-	// 	if len(targetModels) != len(targetIDs) {
-	// 		return fmt.Errorf("target IDs %v reference one or more missing targets", targetIDs)
-	// 	}
+	db := orchestrator.db.GetSqlxDb()
+	if err := orchestrator.WorkflowStore.Create(db, workflowID, label, enabled, targetIDs, criteria); err != nil {
+		return nil, err
+	}
 
-	// 	newWorkflow = &workflow.Workflow{ID: workflowID, Label: label, Criteria: criteria, Targets: targetModels}
-	// 	if err := orchestrator.WorkflowStore.Create(tx, newWorkflow); err != nil {
-	// 		return err
-	// 	}
-
-	// 	return nil
-	// }); txErr == nil {
-	// 	return newWorkflow, nil
-	// } else {
-	// 	return nil, txErr
-	// }
-	return nil, nil
+	return orchestrator.WorkflowStore.Get(db, workflowID), nil
 }
 
 // UpdateWorkflow transactionally updates an existing Workflow model
@@ -176,7 +158,7 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 		return nil, fmt.Errorf("failed to %s due to error: %s", desc, err.Error())
 	}
 
-	tx, err := orchestrator.db.GetGoquDb().Beginx()
+	tx, err := orchestrator.db.GetSqlxDb().Beginx()
 	if err != nil {
 		return fail("open workflow update transaction", err)
 	}
@@ -218,7 +200,7 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 		// Insert workflow criteria, updating existing criteria
 		tx.NamedExec(`
 			INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_combine_type, match_value, workflow_id)
-			VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, `+workflowID.String()+`)
+			VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, '`+workflowID.String()+`')
 			ON CONFLICT DO UPDATE
 				SET (updated_at, match_key, match_type, match_combine_type, match_value) =
 					(current_timestamp, EXCLUDED.match_key, EXCLUDED.match_type, EXCLUDED.match_combine_type, EXCLUDED.match_value)
@@ -242,8 +224,8 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 		}
 		if _, err := tx.NamedExec(`
 			INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
-			VALUES(:id, `+workflowID.String()+`, :target_id)
-			`, buildWorkflowTargetAssocs(*newTargetIDs),
+			VALUES(:id, :workflow_id, :target_id)
+			`, workflow.BuildWorkflowTargetAssocs(workflowID, *newTargetIDs),
 		); err != nil {
 			return fail("create workflow target associations", err)
 		}
@@ -256,52 +238,52 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 }
 
 func (orchestrator *storeOrchestrator) GetWorkflow(id uuid.UUID) *workflow.Workflow {
-	return orchestrator.WorkflowStore.Get(orchestrator.db.GetGoquDb(), id)
+	return orchestrator.WorkflowStore.Get(orchestrator.db.GetSqlxDb(), id)
 }
 
 func (orchestrator *storeOrchestrator) GetAllWorkflows() []*workflow.Workflow {
-	return orchestrator.WorkflowStore.GetAll(orchestrator.db.GetGoquDb())
+	return orchestrator.WorkflowStore.GetAll(orchestrator.db.GetSqlxDb())
 }
 
 func (orchestrator *storeOrchestrator) DeleteWorkflow(id uuid.UUID) {
-	orchestrator.WorkflowStore.Delete(orchestrator.db.GetGoquDb(), id)
+	orchestrator.WorkflowStore.Delete(orchestrator.db.GetSqlxDb(), id)
 }
 
 // Transcodes
 
 func (orchestrator *storeOrchestrator) SaveTranscode(transcode *transcode.TranscodeTask) error {
-	return orchestrator.TranscodeStore.SaveTranscode(orchestrator.db.GetGoquDb(), transcode)
+	return orchestrator.TranscodeStore.SaveTranscode(orchestrator.db.GetSqlxDb(), transcode)
 }
 func (orchestrator *storeOrchestrator) GetTranscode(id uuid.UUID) *transcode.TranscodeTask {
-	return orchestrator.TranscodeStore.Get(orchestrator.db.GetGoquDb(), id)
+	return orchestrator.TranscodeStore.Get(orchestrator.db.GetSqlxDb(), id)
 }
 func (orchestrator *storeOrchestrator) GetAllTranscodes() ([]*transcode.TranscodeTask, error) {
-	return orchestrator.TranscodeStore.GetAll(orchestrator.db.GetGoquDb())
+	return orchestrator.TranscodeStore.GetAll(orchestrator.db.GetSqlxDb())
 }
 func (orchestrator *storeOrchestrator) GetTranscodesForMedia(mediaId uuid.UUID) ([]*transcode.TranscodeTask, error) {
-	return orchestrator.TranscodeStore.GetForMedia(orchestrator.db.GetGoquDb(), mediaId)
+	return orchestrator.TranscodeStore.GetForMedia(orchestrator.db.GetSqlxDb(), mediaId)
 }
 
 // Targets
 
 func (orchestrator *storeOrchestrator) SaveTarget(target *ffmpeg.Target) error {
-	return orchestrator.TargetStore.Save(orchestrator.db.GetGoquDb(), target)
+	return orchestrator.TargetStore.Save(orchestrator.db.GetSqlxDb(), target)
 }
 
 func (orchestrator *storeOrchestrator) GetTarget(id uuid.UUID) *ffmpeg.Target {
-	return orchestrator.TargetStore.Get(orchestrator.db.GetGoquDb(), id)
+	return orchestrator.TargetStore.Get(orchestrator.db.GetSqlxDb(), id)
 }
 
 func (orchestrator *storeOrchestrator) GetAllTargets() []*ffmpeg.Target {
-	return orchestrator.TargetStore.GetAll(orchestrator.db.GetGoquDb())
+	return orchestrator.TargetStore.GetAll(orchestrator.db.GetSqlxDb())
 }
 
 func (orchestrator *storeOrchestrator) GetManyTargets(ids ...uuid.UUID) []*ffmpeg.Target {
-	return orchestrator.TargetStore.GetMany(orchestrator.db.GetGoquDb(), ids...)
+	return orchestrator.TargetStore.GetMany(orchestrator.db.GetSqlxDb(), ids...)
 }
 
 func (orchestrator *storeOrchestrator) DeleteTarget(id uuid.UUID) {
-	orchestrator.TargetStore.Delete(orchestrator.db.GetGoquDb(), id)
+	orchestrator.TargetStore.Delete(orchestrator.db.GetSqlxDb(), id)
 }
 
 func execDbIn(db *sqlx.Tx, query string, arg any) error {
@@ -314,13 +296,4 @@ func execDbIn(db *sqlx.Tx, query string, arg any) error {
 	}
 
 	return nil
-}
-
-func buildWorkflowTargetAssocs(targetIDs []uuid.UUID) []workflowTargetAssoc {
-	assocs := make([]workflowTargetAssoc, len(targetIDs))
-	for i, v := range targetIDs {
-		assocs[i] = workflowTargetAssoc{uuid.New(), v}
-	}
-
-	return assocs
 }

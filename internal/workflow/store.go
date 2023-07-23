@@ -45,34 +45,35 @@ func (store *Store) RegisterModels(db database.Manager) {
 
 // Create transactionally creates the workflow row, and the accompanying
 // criteria table and workflow_target join table rows as needed.
-func (store *Store) Create(db *sqlx.DB, workflow *Workflow) error {
+func (store *Store) Create(db *sqlx.DB, workflowID uuid.UUID, label string, enabled bool, targetIDs []uuid.UUID, criteria []match.Criteria) error {
 	fail := func(desc string, err error) error {
 		return fmt.Errorf("failed to %s due to error: %s", desc, err.Error())
 	}
+
 	tx, err := db.Beginx()
 	if err != nil {
 		return fail("open transaction", err)
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.NamedExec(`
+	if _, err := tx.Exec(`
 		INSERT INTO workflow(id, created_at, updated_at, enabled, label)
-		VALUES (:id, current_timestamp, current_timestamp, :enabled, :label)
-	`, workflow); err != nil {
+		VALUES ($1, current_timestamp, current_timestamp, $2, $3)
+	`, workflowID, label, enabled); err != nil {
 		return fail("create workflow row", err)
 	}
 
 	if _, err := tx.NamedExec(`
 		INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
 		VALUES(:id, :workflow_id, :target_id)
-	`, buildWorkflowTargetAssocs(workflow)); err != nil {
+	`, BuildWorkflowTargetAssocs(workflowID, targetIDs)); err != nil {
 		return fail("create workflow target associations", err)
 	}
 
 	if _, err := tx.NamedExec(`
 		INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_value, match_combine_type, workflow_id)
-		VALUES (:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_value, :match_combine_type, `+workflow.ID.String()+`)
-	`, workflow.Criteria); err != nil {
+		VALUES (:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_value, :match_combine_type, '`+workflowID.String()+`')
+	`, criteria); err != nil {
 		return fail("create workflow criteria associations", err)
 	}
 
@@ -80,7 +81,7 @@ func (store *Store) Create(db *sqlx.DB, workflow *Workflow) error {
 		return fail("commit workflow creation transaction", err)
 	}
 
-	return err
+	return nil
 }
 
 func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Workflow {
@@ -150,10 +151,10 @@ func (j *jsonColumn[T]) Get() *T {
 	return j.val
 }
 
-func buildWorkflowTargetAssocs(workflow *Workflow) []workflowTargetAssoc {
-	assocs := make([]workflowTargetAssoc, len(workflow.Targets))
-	for i, v := range workflow.Targets {
-		assocs[i] = workflowTargetAssoc{uuid.New(), workflow.ID, v.ID}
+func BuildWorkflowTargetAssocs(workflowID uuid.UUID, targetIDs []uuid.UUID) []workflowTargetAssoc {
+	assocs := make([]workflowTargetAssoc, len(targetIDs))
+	for i, v := range targetIDs {
+		assocs[i] = workflowTargetAssoc{uuid.New(), workflowID, v}
 	}
 
 	return assocs

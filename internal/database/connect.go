@@ -27,7 +27,7 @@ var (
 type (
 	Manager interface {
 		Connect(DatabaseConfig) error
-		GetGoquDb() *sqlx.DB
+		GetSqlxDb() *sqlx.DB
 		RegisterModels(...any)
 	}
 
@@ -108,7 +108,7 @@ func (db *manager) ExecuteMigrations() error {
 
 // GetInstances returns the Goqu database connection if
 // one has been opened using 'Connect'. Otherwise, nil is returned
-func (db *manager) GetGoquDb() *sqlx.DB {
+func (db *manager) GetSqlxDb() *sqlx.DB {
 	return db.db
 }
 

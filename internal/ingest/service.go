@@ -35,7 +35,7 @@ type (
 	}
 
 	dataStore interface {
-		GetAllMediaSourcePaths() []string
+		GetAllMediaSourcePaths() ([]string, error)
 		GetSeasonWithTmdbId(string) (*media.Season, error)
 		GetSeriesWithTmdbId(string) (*media.Series, error)
 		GetEpisodeWithTmdbId(string) (*media.Episode, error)
@@ -196,7 +196,12 @@ func (service *ingestService) DiscoverNewFiles() {
 	service.Lock()
 	defer service.Unlock()
 
-	sourcePaths := service.dataStore.GetAllMediaSourcePaths()
+	sourcePaths, err := service.dataStore.GetAllMediaSourcePaths()
+	if err != nil {
+		log.Fatalf("could not query DB for existing source paths: %s", err.Error())
+		return
+	}
+
 	sourcePathsLookup := make(map[string]bool, len(sourcePaths))
 	for _, path := range sourcePaths {
 		sourcePathsLookup[path] = true

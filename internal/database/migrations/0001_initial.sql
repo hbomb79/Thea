@@ -28,6 +28,7 @@ CREATE TABLE season(
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     tmdb_id TEXT NOT NULL,
+    season_number INT NOT NULL,
     title TEXT NOT NULL,
     series_id UUID NOT NULL,
 
@@ -40,6 +41,7 @@ CREATE TABLE episode(
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     tmdb_id TEXT NOT NULL,
+    episode_number INT NOT NULL,
     title TEXT NOT NULL,
     source_path TEXT NOT NULL,
     season_id UUID NOT NULL,

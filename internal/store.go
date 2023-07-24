@@ -11,6 +11,7 @@ import (
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -94,7 +95,7 @@ func (orchestrator *storeOrchestrator) GetSeriesWithTmdbId(tmdbID string) (*medi
 	return orchestrator.MediaStore.GetSeriesWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
 }
 
-func (orchestrator *storeOrchestrator) GetAllMediaSourcePaths() []string {
+func (orchestrator *storeOrchestrator) GetAllMediaSourcePaths() ([]string, error) {
 	return orchestrator.MediaStore.GetAllSourcePaths(orchestrator.db.GetSqlxDb())
 }
 
@@ -117,29 +118,35 @@ func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
 // Note: If the season/series are not provided, and the FK-constraint of the episode cannot
 // be fulfilled because of this, then the save will fail. It is recommended to supply all parameters.
 func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, season *media.Season, series *media.Series) error {
-	// Store old PKs so we can rollback on transaction failure
-	// episodeId := episode.ID
-	// seasonId := season.ID
-	// seriesId := series.ID
+	// Store old PK/FKs so we can rollback on transaction failure
+	episodeId := episode.ID
+	seasonId := season.ID
+	seriesId := series.ID
+	episodeFk := episode.SeasonID
+	seasonFk := season.SeriesID
 
-	// if err := orchestrator.db.GetGoquDb().WithTx(func(tx *goqu.TxDatabase) error {
-	// 	log.Emit(logger.WARNING, "Saving episode (ID=%s), series (ID=%s), season (ID=%s)\n", episode.ID.String(), series.ID.String(), season.ID.String())
-	// 	if err := orchestrator.MediaStore.SaveSeries(tx, series); err != nil {
-	// 		return err
-	// 	}
+	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+		log.Emit(logger.WARNING, "Saving episode (ID=%s), series (ID=%s), season (ID=%s)\n", episode.ID.String(), series.ID.String(), season.ID.String())
+		if err := orchestrator.MediaStore.SaveSeries(tx, series); err != nil {
+			return err
+		}
 
-	// 	if err := orchestrator.MediaStore.SaveSeason(tx, season); err != nil {
-	// 		return err
-	// 	}
+		season.SeriesID = series.ID
+		if err := orchestrator.MediaStore.SaveSeason(tx, season); err != nil {
+			return err
+		}
 
-	// 	return orchestrator.MediaStore.SaveEpisode(tx, episode)
-	// }); err != nil {
-	// 	episode.ID = episodeId
-	// 	season.ID = seasonId
-	// 	series.ID = seriesId
+		episode.SeasonID = season.ID
+		return orchestrator.MediaStore.SaveEpisode(tx, episode)
+	}); err != nil {
+		episode.ID = episodeId
+		season.ID = seasonId
+		series.ID = seriesId
 
-	// 	return err
-	// }
+		episode.SeasonID = episodeFk
+		season.SeriesID = seasonFk
+		return err
+	}
 
 	return nil
 }

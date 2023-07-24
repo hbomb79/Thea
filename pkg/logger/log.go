@@ -113,7 +113,7 @@ func (e LogStatus) Color() *color.Color {
 
 type Logger interface {
 	Emit(LogStatus, string, ...any)
-	VerboseF(string, ...any)
+	Verbosef(string, ...any)
 	Debugf(string, ...any)
 	Infof(string, ...any)
 	Warnf(string, ...any)
@@ -130,7 +130,7 @@ func (l *loggerImpl) Emit(status LogStatus, message string, interpolations ...in
 	manager.Emit(status, l.name, message, interpolations...)
 }
 
-func (l *loggerImpl) VerboseF(m string, v ...any) { l.Emit(VERBOSE, m, v...) }
+func (l *loggerImpl) Verbosef(m string, v ...any) { l.Emit(VERBOSE, m, v...) }
 func (l *loggerImpl) Debugf(m string, v ...any)   { l.Emit(DEBUG, m, v...) }
 func (l *loggerImpl) Printf(m string, v ...any)   { l.Emit(INFO, m, v...) }
 func (l *loggerImpl) Infof(m string, v ...any)    { l.Emit(INFO, m, v...) }

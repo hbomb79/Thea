@@ -145,10 +145,8 @@ func (l *SqlLogger) Log(_ context.Context, level sqldblogger.Level, msg string, 
 	template := "%s - %v\n"
 	switch level {
 	case sqldblogger.LevelTrace:
-		l.logger.VerboseF(template, msg, data)
-	case sqldblogger.LevelDebug:
-		fallthrough
-	case sqldblogger.LevelInfo:
+		l.logger.Verbosef(template, msg, data)
+	case sqldblogger.LevelDebug, sqldblogger.LevelInfo:
 		duration := data["duration"]
 		query, ok := data["query"]
 		if ok {

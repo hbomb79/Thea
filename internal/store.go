@@ -11,7 +11,6 @@ import (
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
-	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -111,9 +110,10 @@ func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
 	return orchestrator.MediaStore.SaveSeason(orchestrator.db.GetSqlxDb(), season)
 }
 
-// SaveEpisode transactoinally saves the episode provided, as well as the season and series
-// it's associatted with IF they are provided. The relational FK's of the series/season
-// will automatically be set to the new/existing DB models.
+// SaveEpisode transactionally saves the episode provided, as well as the season and series
+// it's associatted with. Existing models are updating ON CONFLICT with the TmdbID unique
+// identifier. The PK's and relational FK's of the models will automatically be
+// set during saving.
 //
 // Note: If the season/series are not provided, and the FK-constraint of the episode cannot
 // be fulfilled because of this, then the save will fail. It is recommended to supply all parameters.
@@ -126,19 +126,26 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 	seasonFk := season.SeriesID
 
 	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
-		log.Emit(logger.WARNING, "Saving episode (ID=%s), series (ID=%s), season (ID=%s)\n", episode.ID.String(), series.ID.String(), season.ID.String())
+		log.Verbosef("Saving series %#v\n", series)
 		if err := orchestrator.MediaStore.SaveSeries(tx, series); err != nil {
 			return err
 		}
 
+		log.Verbosef("Saving season %#v with series_id=%s\n", season, series.ID)
 		season.SeriesID = series.ID
 		if err := orchestrator.MediaStore.SaveSeason(tx, season); err != nil {
 			return err
 		}
 
+		log.Verbosef("Saving episode %#v with season_id=%s\n", episode, seasonId)
 		episode.SeasonID = season.ID
 		return orchestrator.MediaStore.SaveEpisode(tx, episode)
 	}); err != nil {
+		log.Warnf(
+			"Episode save failed, rolling back model keys (epID=%s, epFK=%s, seasonID=%s, seasonFK=%s, seriesID=%s)",
+			episodeId, episodeFk, seasonId, seasonFk, seriesId,
+		)
+
 		episode.ID = episodeId
 		season.ID = seasonId
 		series.ID = seriesId

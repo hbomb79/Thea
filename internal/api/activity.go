@@ -26,14 +26,14 @@ type (
 	broadcaster struct {
 		socketHub     *websocket.SocketHub
 		ingestService ingests.Service
-		dataStore     dataStore
+		dataStore     DataStore
 	}
 )
 
 func newBroadcaster(
 	socketHub *websocket.SocketHub,
 	ingestService ingests.Service,
-	store dataStore,
+	store DataStore,
 ) *broadcaster {
 	return &broadcaster{socketHub, ingestService, store}
 }

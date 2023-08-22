@@ -36,15 +36,11 @@ type (
 	Store struct{}
 )
 
-func (store *Store) RegisterModels(db database.Manager) {
-	db.RegisterModels(Workflow{}, match.Criteria{})
-}
-
 // Create transactionally creates the workflow row, and the accompanying
 // criteria table and workflow_target join table rows as needed.
 func (store *Store) Create(db *sqlx.DB, workflowID uuid.UUID, label string, enabled bool, targetIDs []uuid.UUID, criteria []match.Criteria) error {
 	fail := func(desc string, err error) error {
-		return fmt.Errorf("failed to %s due to error: %s", desc, err.Error())
+		return fmt.Errorf("failed to %s due to error: %w", desc, err)
 	}
 
 	return database.WrapTx(db, func(tx *sqlx.Tx) error {
@@ -173,7 +169,7 @@ func (store *Store) UpdateWorkflowTargetsTx(tx *sqlx.Tx, workflowID uuid.UUID, t
 func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Workflow {
 	dest := &workflowModel{}
 	if err := db.Get(dest, getWorkflowSql(`WHERE w.id=$1`), id); err != nil {
-		log.Warnf("Failed to find workflow (id=%s): %s\n", id, err.Error())
+		log.Warnf("Failed to find workflow (id=%s): %v\n", id, err)
 		return nil
 	}
 
@@ -187,7 +183,7 @@ func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Workflow {
 func (store *Store) GetAll(db *sqlx.DB) []*Workflow {
 	var dest []*workflowModel
 	if err := db.Select(&dest, getWorkflowSql("")); err != nil {
-		log.Warnf("Failed to get all workflows: %s\n", err.Error())
+		log.Warnf("Failed to get all workflows: %v\n", err)
 		return nil
 	}
 
@@ -205,7 +201,7 @@ func (store *Store) Delete(db *sqlx.DB, id uuid.UUID) {
 	_, err := db.Exec(`DELETE FROM workflow WHERE id=$1;`, id)
 
 	if err != nil {
-		log.Fatalf("Failed to delete workflow with ID = %v due to error: %s\n", id, err.Error())
+		log.Fatalf("Failed to delete workflow with ID = %v due to error: %v\n", id, err)
 	}
 }
 

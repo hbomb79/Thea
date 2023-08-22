@@ -58,11 +58,11 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 func (controller *Controller) create(ec echo.Context) error {
 	var createRequest CreateRequest
 	if err := ec.Bind(&createRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
 	if err := controller.validator.Struct(createRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
 	newTarget := ffmpeg.Target{
@@ -73,7 +73,7 @@ func (controller *Controller) create(ec echo.Context) error {
 	}
 
 	if err := controller.Store.SaveTarget(&newTarget); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
 	}
 
 	return ec.NoContent(http.StatusCreated)
@@ -111,10 +111,10 @@ func (controller *Controller) update(ec echo.Context) error {
 
 	var patchRequest UpdateRequest
 	if err := ec.Bind(&patchRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 	if err := controller.validator.Struct(patchRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
 	model := *controller.Store.GetTarget(id)
@@ -129,7 +129,7 @@ func (controller *Controller) update(ec echo.Context) error {
 	}
 
 	if err := controller.Store.SaveTarget(&model); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
 	}
 
 	return ec.NoContent(http.StatusOK)

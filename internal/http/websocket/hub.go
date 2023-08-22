@@ -89,7 +89,7 @@ loop:
 			if message.Target != nil {
 				if _, client := hub.findClient(message.Target); client != nil {
 					if err := client.SendMessage(message); err != nil {
-						socketLogger.Emit(logger.ERROR, "Failed to send message to target {%v}: %v\n", message.Target, err.Error())
+						socketLogger.Emit(logger.ERROR, "Failed to send message to target {%v}: %v\n", message.Target, err)
 					}
 				} else {
 					socketLogger.Emit(logger.WARNING, "Attempted to send message to target {%v}, but no matching client was found.\n", message.Target)
@@ -164,7 +164,7 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	// UUID success, upgrade the connection to a websocket
 	sock, err := hub.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		socketLogger.Emit(logger.ERROR, "Failed to upgrade incoming HTTP request to a websocket: %v\n", err.Error())
+		socketLogger.Emit(logger.ERROR, "Failed to upgrade incoming HTTP request to a websocket: %v\n", err)
 		return
 	}
 
@@ -205,7 +205,7 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Start the read loop for the client
 	if err := client.Read(hub.receiveCh); err != nil {
-		socketLogger.Emit(logger.WARNING, "Client {%v} closed, error: %v\n", client.id, err.Error())
+		socketLogger.Emit(logger.WARNING, "Client {%v} closed, error: %v\n", client.id, err)
 	}
 }
 
@@ -249,7 +249,7 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 
 	if handler, ok := hub.handlers[command.Title]; ok {
 		if err := handler(hub, command); err != nil {
-			socketLogger.Emit(logger.ERROR, "Handler for command '%v' returned error - %v\n", command.Title, err.Error())
+			socketLogger.Emit(logger.ERROR, "Handler for command '%v' returned error - %v\n", command.Title, err)
 			replyWithError(err.Error())
 		} else {
 			socketLogger.Emit(logger.SUCCESS, "Handler for command '%v' executed successfully\n", command.Title)

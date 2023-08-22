@@ -89,7 +89,7 @@ func (criteria *Criteria) IsMediaAcceptable(m *media.Container) (bool, error) {
 
 	isMatch, err := criteria.isValueAcceptable(valueToCheck)
 	if err != nil {
-		return false, fmt.Errorf("media %s is not acceptable for criteria %s: %s", m, criteria, err.Error())
+		return false, fmt.Errorf("media %s is not acceptable for criteria %s: %v", m, criteria, err)
 	}
 
 	return isMatch, nil
@@ -186,12 +186,12 @@ func (criteria *Criteria) performIntComparison(valToTest interface{}) (bool, err
 
 	criteriaIntValue, err := toInt(criteria.Value)
 	if err != nil {
-		return false, fmt.Errorf("criteria value illegal: %s", err.Error())
+		return false, fmt.Errorf("criteria value illegal: %w", err)
 	}
 
 	intToCheck, err := toInt(valToTest)
 	if err != nil {
-		return false, fmt.Errorf("value to check illegal: %s", err.Error())
+		return false, fmt.Errorf("value to check illegal: %w", err)
 	}
 
 	switch criteria.Type {
@@ -234,7 +234,7 @@ func toInt(val any) (int, error) {
 	} else {
 		out, err := strconv.Atoi(str)
 		if err != nil {
-			return -1, fmt.Errorf("value %v cannot be coerced to integer: %s", val, err.Error())
+			return -1, fmt.Errorf("value %v cannot be coerced to integer: %w", val, err)
 		}
 
 		return out, nil

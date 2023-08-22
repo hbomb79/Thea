@@ -30,7 +30,7 @@ func main() {
 
 	level, err := parseLogLevelFromString(*logLevelFlag)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Println(err)
 		flag.Usage()
 
 		return
@@ -56,9 +56,8 @@ func startThea(config *internal.TheaConfig) {
 	go listenForInterrupt(ctxCancel)
 
 	if err := internal.New(*config).Run(ctx); err != nil {
-		log.Emit(logger.FATAL, "Failed to start Thea: %v", err.Error())
-
-		return
+		log.Fatalf("Failed to start Thea: %v\n", err)
+		os.Exit(1)
 	}
 
 	log.Emit(logger.STOP, "Thea shutdown complete\n")

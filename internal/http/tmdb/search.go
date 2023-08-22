@@ -3,7 +3,6 @@ package tmdb
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -218,7 +217,8 @@ func (searcher *tmdbSearcher) handleSearchResults(results []SearchResultItem, me
 	}
 
 	sort.SliceStable(results, func(i, j int) bool { return stringSimilarity[i] < stringSimilarity[j] })
-	if stringSimilarity[0] > stringSimilarity[1]+0.25 {
+	similarityThreshold := 0.25
+	if stringSimilarity[0] > stringSimilarity[1]+similarityThreshold {
 		return &results[0], nil
 	}
 
@@ -237,7 +237,7 @@ func (date *Date) UnmarshalJSON(dateBytes []byte) error {
 	trimmedDateString := string(dateBytes[1 : len(dateBytes)-1])
 	parsed, err := time.Parse(time.DateOnly, trimmedDateString)
 	if err != nil {
-		return fmt.Errorf("cannot unmarshal Date due to error: %s", err.Error())
+		return fmt.Errorf("cannot unmarshal Date: %w", err)
 	}
 
 	*date = Date{parsed}
@@ -268,15 +268,14 @@ func httpGetJsonResponse(urlPath string, targetInterface interface{}) error {
 	fmt.Printf("GET -> %s\n", urlPath)
 	resp, err := http.Get(urlPath)
 	if err != nil {
-		return &UnknownRequestError{fmt.Sprintf("failed to perform GET(%s) to TMDB: %s", urlPath, err.Error())}
+		return &UnknownRequestError{fmt.Sprintf("failed to perform GET(%s) to TMDB: %v", urlPath, err)}
 	}
 
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		var tmdbError tmdbError
-		if err := json.Unmarshal(respBody, &tmdbError); err != nil {
+		if err := json.NewDecoder(resp.Body).Decode(&tmdbError); err != nil {
 			return &FailedRequestError{httpCode: resp.StatusCode, message: "non-OK response could not be unmarshalled", tmdbCode: -1}
 		}
 
@@ -284,11 +283,11 @@ func httpGetJsonResponse(urlPath string, targetInterface interface{}) error {
 	}
 
 	if err != nil {
-		return &UnknownRequestError{fmt.Sprintf("failed to read response body: %s", err.Error())}
+		return &UnknownRequestError{fmt.Sprintf("failed to read response body: %v", err)}
 	}
 
-	if err := json.Unmarshal(respBody, targetInterface); err != nil {
-		return &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %s", err.Error())}
+	if err := json.NewDecoder(resp.Body).Decode(targetInterface); err != nil {
+		return &UnknownRequestError{fmt.Sprintf("response JSON could not be unmarshalled: %v", err)}
 	}
 
 	return nil

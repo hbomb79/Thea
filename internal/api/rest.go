@@ -32,12 +32,12 @@ type (
 		HostAddr string `toml:"host_address" env:"API_HOST_ADDR" env-default:"0.0.0.0:8080"`
 	}
 
-	controller interface {
+	Controller interface {
 		SetRoutes(*echo.Group)
 	}
 
-	// dataStore represents a union of all the controller store requirements
-	dataStore interface {
+	// DataStore represents a union of all the controller store requirements
+	DataStore interface {
 		targets.Store
 		workflows.Store
 		transcodes.Store
@@ -51,11 +51,11 @@ type (
 		config              *RestConfig
 		ec                  *echo.Echo
 		socket              *websocket.SocketHub
-		ingestController    controller
-		transcodeController controller
-		targetsController   controller
-		workflowController  controller
-		mediaController     controller
+		ingestController    Controller
+		transcodeController Controller
+		targetsController   Controller
+		workflowController  Controller
+		mediaController     Controller
 	}
 )
 
@@ -66,10 +66,10 @@ func NewRestGateway(
 	config *RestConfig,
 	ingestService ingests.Service,
 	transcodeService transcodes.Service,
-	store dataStore,
+	store DataStore,
 ) *RestGateway {
 	ec := echo.New()
-	ec.OnAddRouteHandler = func(host string, route echo.Route, handler echo.HandlerFunc, middleware []echo.MiddlewareFunc) {
+	ec.OnAddRouteHandler = func(_ string, route echo.Route, _ echo.HandlerFunc, _ []echo.MiddlewareFunc) {
 		log.Emit(logger.DEBUG, "Registered new route %s %s\n", route.Method, route.Path)
 	}
 	ec.HidePort = true

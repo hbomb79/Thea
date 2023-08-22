@@ -62,11 +62,11 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 func (controller *Controller) create(ec echo.Context) error {
 	var createRequest CreateRequest
 	if err := ec.Bind(&createRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
 	if err := controller.Service.NewTask(createRequest.MediaID, createRequest.TargetID); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Task creation failed: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Task creation failed: %v", err))
 	}
 
 	return ec.NoContent(http.StatusCreated)

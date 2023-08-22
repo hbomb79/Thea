@@ -54,17 +54,11 @@ func (worker *taskWorker) Start() {
 	workerLogger.Emit(logger.NEW, "Starting worker with label %v\n", worker.label)
 	worker.currentStatus = ALIVE
 
-	for {
-		if worker.currentStatus != ALIVE {
-			// Stop the task being executed if we're killing
-			// the worker
-			break
-		}
-
+	for worker.currentStatus == ALIVE {
 		shouldSleep, err := worker.task(worker)
 		workerLogger.Emit(logger.VERBOSE, "%s task complete. Should sleep: %v. Has error: %v\n", worker, shouldSleep, err)
 		if err != nil {
-			workerLogger.Emit(logger.ERROR, "%s has reported an error(%T): %v\n", worker, err, err.Error())
+			workerLogger.Emit(logger.ERROR, "%s has reported an error(%T): %v\n", worker, err, err)
 			break
 		}
 

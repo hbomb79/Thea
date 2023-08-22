@@ -54,7 +54,7 @@ func (item *IngestItem) ResolveTrouble(method string, context map[string]string)
 // - Saves the episode/movie to the database
 // Any of the above can encounter an error - if the error can be cast to the
 // IngestItemTrouble type then it should be raised as a TROUBLE on the item.
-func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper, searcher searcher, data dataStore) error {
+func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper, searcher searcher, data DataStore) error {
 	log.Emit(logger.NEW, "Beginning ingestion of item %s\n", item)
 	if item.ScrapedMetadata == nil {
 		log.Emit(logger.DEBUG, "Performing file system metadata scrape\n")

@@ -57,7 +57,7 @@ func (service *activityManager) Run(ctx context.Context) error {
 		select {
 		case ev := <-messageChan:
 			if err := service.handleEvent(ev); err != nil {
-				log.Emit(logger.ERROR, "Handling of event %v failed: %s\n", ev, err.Error())
+				log.Emit(logger.ERROR, "Handling of event %v failed: %v\n", ev, err)
 			}
 		case <-ctx.Done():
 			return nil

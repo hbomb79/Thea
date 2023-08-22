@@ -71,7 +71,7 @@ func (task *TranscodeTask) Run(ctx context.Context, updateHandler func(*ffmpeg.P
 	err := task.command.Run(ctx, task.target.FfmpegOptions, updateHandler)
 	if err != nil {
 		task.status = TROUBLED
-		return fmt.Errorf("transcode task failed due to command error: %s", err.Error())
+		return fmt.Errorf("transcode task failed due to command error: %v", err)
 	}
 
 	if ctx.Err() != nil {

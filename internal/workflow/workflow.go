@@ -37,7 +37,7 @@ func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
 
 		isMatch, err := condition.IsMediaAcceptable(media)
 		if err != nil {
-			log.Emit(logger.ERROR, "media %v is not eligible for workflow %v: %s\n", media, workflow, err.Error())
+			log.Emit(logger.ERROR, "media %v is not eligible for workflow %v: %v\n", media, workflow, err)
 		}
 
 		if !isMatch {

@@ -2,7 +2,7 @@ package file
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -95,7 +95,7 @@ func (cache *Cache) IterItems(cb func(*Cache, string, interface{}) bool) {
 // as a public wrapper
 func (cache *Cache) Save() {
 	if err := cache.save(); err != nil {
-		cacheLogger.Emit(logger.ERROR, "Failed to save cache! %s\n", err.Error())
+		cacheLogger.Emit(logger.ERROR, "Failed to save cache! %v\n", err)
 	}
 }
 
@@ -104,11 +104,11 @@ func (cache *Cache) Save() {
 // constructed which is then saved to the filesystem with 'save'
 func (cache *Cache) Load() {
 	if err := cache.load(); err != nil {
-		cacheLogger.Emit(logger.WARNING, "Unable to load cache file(%s): %s. Using empty cache!\n", cache.filePath, err.Error())
+		cacheLogger.Emit(logger.WARNING, "Unable to load cache file(%s): %v. Using empty cache!\n", cache.filePath, err)
 
 		cache.content = make(map[string]interface{})
 		if err = cache.save(); err != nil {
-			cacheLogger.Emit(logger.ERROR, "Cache cannot be saved! %v\n", err.Error())
+			cacheLogger.Emit(logger.ERROR, "Cache cannot be saved! %v\n", err)
 		}
 	}
 }
@@ -123,7 +123,7 @@ func (cache *Cache) load() error {
 	}
 	defer handle.Close()
 
-	fileCnt, _ := ioutil.ReadAll(handle)
+	fileCnt, _ := io.ReadAll(handle)
 	json.Unmarshal(fileCnt, &cache.content)
 	return nil
 }

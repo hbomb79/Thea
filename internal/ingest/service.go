@@ -34,7 +34,7 @@ type (
 		GetEpisode(string, int, int) (*tmdb.Episode, error)
 	}
 
-	dataStore interface {
+	DataStore interface {
 		GetAllMediaSourcePaths() ([]string, error)
 		GetSeasonWithTmdbId(string) (*media.Season, error)
 		GetSeriesWithTmdbId(string) (*media.Series, error)
@@ -57,7 +57,7 @@ type (
 		*sync.Mutex
 		scraper   scraper
 		searcher  searcher
-		dataStore dataStore
+		dataStore DataStore
 		eventBus  event.EventCoordinator
 
 		config           Config
@@ -73,7 +73,7 @@ type (
 // The configs 'IngestPath' is validated to be an existing directory.
 // If the directory is missing it will be created, if the path
 // provided points to an existing FILE, an error is returned.
-func New(config Config, searcher searcher, scraper scraper, store dataStore, eventBus event.EventCoordinator) (*ingestService, error) {
+func New(config Config, searcher searcher, scraper scraper, store DataStore, eventBus event.EventCoordinator) (*ingestService, error) {
 	// Ensure config ingest path is a valid directory, create it
 	// if it's missing.
 	if info, err := os.Stat(config.IngestPath); err == nil {
@@ -83,7 +83,7 @@ func New(config Config, searcher searcher, scraper scraper, store dataStore, eve
 	} else if errors.Is(err, os.ErrNotExist) {
 		os.MkdirAll(config.IngestPath, os.ModeDir|os.ModePerm)
 	} else {
-		return nil, fmt.Errorf("ingestion path '%s' could not be accessed: %s", config.IngestPath, err.Error())
+		return nil, fmt.Errorf("ingestion path '%s' could not be accessed: %w", config.IngestPath, err)
 	}
 
 	service := &ingestService{
@@ -102,7 +102,9 @@ func New(config Config, searcher searcher, scraper scraper, store dataStore, eve
 		label := fmt.Sprintf("ingest-worker-%d", i)
 		worker := worker.NewWorker(label, service.PerformItemIngest)
 
-		service.workerPool.PushWorker(worker)
+		if err := service.workerPool.PushWorker(worker); err != nil {
+			return nil, fmt.Errorf("failed to push worker to pool: %w", err)
+		}
 	}
 
 	return service, nil
@@ -121,7 +123,9 @@ func (service *ingestService) Run(ctx context.Context) error {
 
 	defer service.clearAllImportHoldTimers()
 
-	service.workerPool.Start()
+	if err := service.workerPool.Start(); err != nil {
+		return fmt.Errorf("failed to construct worker pool: %w", err)
+	}
 	defer service.workerPool.Close()
 
 	ev := make(event.HandlerChannel, 10)
@@ -198,7 +202,7 @@ func (service *ingestService) DiscoverNewFiles() {
 
 	sourcePaths, err := service.dataStore.GetAllMediaSourcePaths()
 	if err != nil {
-		log.Fatalf("could not query DB for existing source paths: %s", err.Error())
+		log.Fatalf("could not query DB for existing source paths: %v", err)
 		return
 	}
 
@@ -212,7 +216,7 @@ func (service *ingestService) DiscoverNewFiles() {
 
 	newItems, err := recursivelyWalkFileSystem(service.config.IngestPath, sourcePathsLookup)
 	if err != nil {
-		log.Emit(logger.FATAL, "file system polling failed: %s\n", err.Error())
+		log.Emit(logger.FATAL, "file system polling failed: %v\n", err)
 		return
 	}
 
@@ -381,7 +385,9 @@ func (service *ingestService) claimIdleItem() *IngestItem {
 }
 
 func (service *ingestService) wakeupWorkerPool() {
-	service.workerPool.WakeupWorkers()
+	if err := service.workerPool.WakeupWorkers(); err != nil {
+		log.Warnf("failed to wakeup workers in pool: %v\n", err)
+	}
 }
 
 // recursivelyWalkFileSystem will walk the file system, starting at the directory provided,
@@ -410,7 +416,7 @@ func recursivelyWalkFileSystem(rootDirPath string, known map[string]bool) (map[s
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to walk file system: %s", err.Error())
+		return nil, fmt.Errorf("failed to walk file system: %w", err)
 	}
 
 	return foundItems, nil

@@ -120,7 +120,7 @@ func (c *dockerContainer) Start(ctx context.Context, cli client.APIClient) error
 
 	out, err := cli.ImagePull(ctx, c.imageID, types.ImagePullOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to pull image %v for container %s: %v", c.imageID, c, err.Error())
+		return fmt.Errorf("failed to pull image %v for container %s: %v", c.imageID, c, err)
 	}
 	defer out.Close()
 
@@ -142,13 +142,13 @@ func (c *dockerContainer) Start(ctx context.Context, cli client.APIClient) error
 
 	resp, err := cli.ContainerCreate(ctx, c.containerConf, c.containerHostConf, nil, nil, c.label)
 	if err != nil {
-		return fmt.Errorf("failed to create container for %s: %v", c, err.Error())
+		return fmt.Errorf("failed to create container for %s: %v", c, err)
 	}
 	c.containerID = resp.ID
 	c.setStatus(CREATED)
 
 	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		return fmt.Errorf("failed to start container for %s: %v", c, err.Error())
+		return fmt.Errorf("failed to start container for %s: %v", c, err)
 	}
 	c.setStatus(UP)
 
@@ -163,9 +163,9 @@ func (c *dockerContainer) Close(ctx context.Context, cli client.APIClient, timeo
 
 	if c.canStop() {
 		c.setStatus(CLOSING)
-		var timeoutSeconds int = int(timeout.Seconds())
+		timeoutSeconds := int(timeout.Seconds())
 		if err := cli.ContainerStop(ctx, c.containerID, dCont.StopOptions{Timeout: &timeoutSeconds}); err != nil {
-			return fmt.Errorf("failed to stop container %s: %v", c, err.Error())
+			return fmt.Errorf("failed to stop container %s: %v", c, err)
 		}
 
 		c.setStatus(DOWN)
@@ -173,7 +173,7 @@ func (c *dockerContainer) Close(ctx context.Context, cli client.APIClient, timeo
 
 	if c.canRemove() {
 		if err := cli.ContainerRemove(ctx, c.containerID, types.ContainerRemoveOptions{}); err != nil {
-			return fmt.Errorf("failed to remove container %s: %v", c, err.Error())
+			return fmt.Errorf("failed to remove container %s: %v", c, err)
 		}
 	}
 	c.setStatus(DEAD)

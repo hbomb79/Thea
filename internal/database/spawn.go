@@ -25,7 +25,7 @@ func InitialiseDockerDatabase(dockerManager docker.DockerManager, config Databas
 	// Setup container cofiguration
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		panic(fmt.Sprintf("Cannot initialize docker db volume mount as cannot find user home dir: %s", err.Error()))
+		panic(fmt.Sprintf("Cannot initialize docker db volume mount as cannot find user home dir: %v", err))
 	}
 
 	dbDataPath := filepath.Join(homeDir, "thea_db.dat")

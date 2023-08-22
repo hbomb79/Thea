@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"sync"
 )
 
@@ -29,9 +30,9 @@ func NewWorkerPool() *WorkerPool {
 // Start does NOT block, however consumers
 // can wait on the WaitGroup in the pool if they
 // wish.
-func (pool *WorkerPool) Start() {
+func (pool *WorkerPool) Start() error {
 	if pool.started {
-		panic("cannot start an already started worker pool")
+		return errors.New("cannot start an already started worker pool")
 	}
 
 	pool.started = true
@@ -42,24 +43,27 @@ func (pool *WorkerPool) Start() {
 			w.Start()
 		}(&pool.Wg, worker)
 	}
+
+	return nil
 }
 
 // PushWorker inserts the worker provided in to the worker pool,
 // this method will first lock the mutex to ensure mutually exclusive
 // access to the worker pool slice.
-func (pool *WorkerPool) PushWorker(workers ...Worker) {
+func (pool *WorkerPool) PushWorker(workers ...Worker) error {
 	if pool.started {
-		panic("cannot push worker to already started worker pool")
+		return errors.New("cannot push worker to already started worker pool")
 	}
 
 	pool.workers = append(pool.workers, workers...)
+	return nil
 }
 
 // WakeupWorkers will search for sleeping workers in the pool
 // and will send on their WakeupChannel to wake up sleeping workers
-func (pool *WorkerPool) WakeupWorkers() {
+func (pool *WorkerPool) WakeupWorkers() error {
 	if !pool.started {
-		panic("cannot wakeup workers on worker pool that is not started")
+		return errors.New("cannot wakeup workers on worker pool that is not started")
 	}
 
 	for _, w := range pool.workers {
@@ -70,6 +74,8 @@ func (pool *WorkerPool) WakeupWorkers() {
 			}
 		}
 	}
+
+	return nil
 }
 
 // Close will cycle through all the workers inside this

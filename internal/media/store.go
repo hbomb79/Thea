@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hbomb79/Thea/internal/database"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -82,10 +81,6 @@ const (
 	SeasonTable  = "season"
 	EpisodeTable = "episode"
 )
-
-func (store *Store) RegisterModels(db database.Manager) {
-	db.RegisterModels(Movie{}, Episode{}, Series{}, Season{})
-}
 
 // SaveMovie upserts the provided Movie model to the database. Existing models
 // to update are found using the 'TmdbId' as this is expected to be a stable

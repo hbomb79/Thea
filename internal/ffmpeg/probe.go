@@ -11,7 +11,7 @@ func ProbeFile(path string, probePath string) (transcoder.Metadata, error) {
 	transcoder := ffmpeg.New(&ffmpeg.Config{FfprobeBinPath: probePath}).Input(path)
 	metadata, err := transcoder.GetMetadata()
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract file metadata information using ffprobe: %s", err.Error())
+		return nil, fmt.Errorf("failed to extract file metadata information using ffprobe: %v", err)
 	}
 
 	return metadata, nil

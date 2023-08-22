@@ -34,80 +34,75 @@ type (
 	// obligation to take care of relational data (which is the orchestrator's job)
 	storeOrchestrator struct {
 		db             database.Manager
-		MediaStore     *media.Store
-		TranscodeStore *transcode.Store
-		WorkflowStore  *workflow.Store
-		TargetStore    *ffmpeg.Store
+		mediaStore     *media.Store
+		transcodeStore *transcode.Store
+		workflowStore  *workflow.Store
+		targetStore    *ffmpeg.Store
 	}
 )
 
 func NewStoreOrchestrator(db database.Manager) (*storeOrchestrator, error) {
-	if db.GetSqlxDb() != nil {
-		panic("cannot construct thea data store with an already connected database")
+	if db.GetSqlxDb() == nil {
+		return nil, errors.New("cannot construct thea data store with a disconnected database")
 	}
 
 	store := &storeOrchestrator{
 		db:             db,
-		MediaStore:     &media.Store{},
-		TranscodeStore: &transcode.Store{},
-		WorkflowStore:  &workflow.Store{},
-		TargetStore:    &ffmpeg.Store{},
+		mediaStore:     &media.Store{},
+		transcodeStore: &transcode.Store{},
+		workflowStore:  &workflow.Store{},
+		targetStore:    &ffmpeg.Store{},
 	}
-
-	store.MediaStore.RegisterModels(db)
-	store.TranscodeStore.RegisterModels(db)
-	store.WorkflowStore.RegisterModels(db)
-	store.TargetStore.RegisterModels(db)
 
 	return store, nil
 }
 
 func (orchestrator *storeOrchestrator) GetMedia(mediaId uuid.UUID) *media.Container {
-	return orchestrator.MediaStore.GetMedia(orchestrator.db.GetSqlxDb(), mediaId)
+	return orchestrator.mediaStore.GetMedia(orchestrator.db.GetSqlxDb(), mediaId)
 }
 
 func (orchestrator *storeOrchestrator) GetMovie(movieId uuid.UUID) (*media.Movie, error) {
-	return orchestrator.MediaStore.GetMovie(orchestrator.db.GetSqlxDb(), movieId)
+	return orchestrator.mediaStore.GetMovie(orchestrator.db.GetSqlxDb(), movieId)
 }
 
 func (orchestrator *storeOrchestrator) GetEpisode(episodeId uuid.UUID) (*media.Episode, error) {
-	return orchestrator.MediaStore.GetEpisode(orchestrator.db.GetSqlxDb(), episodeId)
+	return orchestrator.mediaStore.GetEpisode(orchestrator.db.GetSqlxDb(), episodeId)
 }
 
 func (orchestrator *storeOrchestrator) GetEpisodeWithTmdbId(tmdbID string) (*media.Episode, error) {
-	return orchestrator.MediaStore.GetEpisodeWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
+	return orchestrator.mediaStore.GetEpisodeWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
 }
 
 func (orchestrator *storeOrchestrator) GetSeason(seasonId uuid.UUID) (*media.Season, error) {
-	return orchestrator.MediaStore.GetSeason(orchestrator.db.GetSqlxDb(), seasonId)
+	return orchestrator.mediaStore.GetSeason(orchestrator.db.GetSqlxDb(), seasonId)
 }
 
 func (orchestrator *storeOrchestrator) GetSeasonWithTmdbId(tmdbID string) (*media.Season, error) {
-	return orchestrator.MediaStore.GetSeasonWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
+	return orchestrator.mediaStore.GetSeasonWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
 }
 
 func (orchestrator *storeOrchestrator) GetSeries(seriesId uuid.UUID) (*media.Series, error) {
-	return orchestrator.MediaStore.GetSeries(orchestrator.db.GetSqlxDb(), seriesId)
+	return orchestrator.mediaStore.GetSeries(orchestrator.db.GetSqlxDb(), seriesId)
 }
 
 func (orchestrator *storeOrchestrator) GetSeriesWithTmdbId(tmdbID string) (*media.Series, error) {
-	return orchestrator.MediaStore.GetSeriesWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
+	return orchestrator.mediaStore.GetSeriesWithTmdbId(orchestrator.db.GetSqlxDb(), tmdbID)
 }
 
 func (orchestrator *storeOrchestrator) GetAllMediaSourcePaths() ([]string, error) {
-	return orchestrator.MediaStore.GetAllSourcePaths(orchestrator.db.GetSqlxDb())
+	return orchestrator.mediaStore.GetAllSourcePaths(orchestrator.db.GetSqlxDb())
 }
 
 func (orchestrator *storeOrchestrator) SaveMovie(movie *media.Movie) error {
-	return orchestrator.MediaStore.SaveMovie(orchestrator.db.GetSqlxDb(), movie)
+	return orchestrator.mediaStore.SaveMovie(orchestrator.db.GetSqlxDb(), movie)
 }
 
 func (orchestrator *storeOrchestrator) SaveSeries(series *media.Series) error {
-	return orchestrator.MediaStore.SaveSeries(orchestrator.db.GetSqlxDb(), series)
+	return orchestrator.mediaStore.SaveSeries(orchestrator.db.GetSqlxDb(), series)
 }
 
 func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
-	return orchestrator.MediaStore.SaveSeason(orchestrator.db.GetSqlxDb(), season)
+	return orchestrator.mediaStore.SaveSeason(orchestrator.db.GetSqlxDb(), season)
 }
 
 // SaveEpisode transactionally saves the episode provided, as well as the season and series
@@ -127,19 +122,19 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 
 	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
 		log.Verbosef("Saving series %#v\n", series)
-		if err := orchestrator.MediaStore.SaveSeries(tx, series); err != nil {
+		if err := orchestrator.mediaStore.SaveSeries(tx, series); err != nil {
 			return err
 		}
 
 		log.Verbosef("Saving season %#v with series_id=%s\n", season, series.ID)
 		season.SeriesID = series.ID
-		if err := orchestrator.MediaStore.SaveSeason(tx, season); err != nil {
+		if err := orchestrator.mediaStore.SaveSeason(tx, season); err != nil {
 			return err
 		}
 
 		log.Verbosef("Saving episode %#v with season_id=%s\n", episode, seasonId)
 		episode.SeasonID = season.ID
-		return orchestrator.MediaStore.SaveEpisode(tx, episode)
+		return orchestrator.mediaStore.SaveEpisode(tx, episode)
 	}); err != nil {
 		log.Warnf(
 			"Episode save failed, rolling back model keys (epID=%s, epFK=%s, seasonID=%s, seasonFK=%s, seriesID=%s)",
@@ -167,11 +162,11 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 // DB entries, or if the workflow infringes on any uniqueness constraints (label)
 func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID, enabled bool) (*workflow.Workflow, error) {
 	db := orchestrator.db.GetSqlxDb()
-	if err := orchestrator.WorkflowStore.Create(db, workflowID, label, enabled, targetIDs, criteria); err != nil {
+	if err := orchestrator.workflowStore.Create(db, workflowID, label, enabled, targetIDs, criteria); err != nil {
 		return nil, err
 	}
 
-	return orchestrator.WorkflowStore.Get(db, workflowID), nil
+	return orchestrator.workflowStore.Get(db, workflowID), nil
 }
 
 // UpdateWorkflow transactionally updates an existing Workflow model
@@ -187,22 +182,22 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 		}
 
 		log.Errorf("Unexpected query failure: %#v\n", err)
-		return fmt.Errorf("failed to %s due to unexpected query error: %s", desc, err.Error())
+		return fmt.Errorf("failed to %s due to unexpected query error: %v", desc, err)
 	}
 
 	err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
 		if newLabel != nil || newEnabled != nil {
-			if err := orchestrator.WorkflowStore.UpdateWorkflowTx(tx, workflowID, newLabel, newEnabled); err != nil {
+			if err := orchestrator.workflowStore.UpdateWorkflowTx(tx, workflowID, newLabel, newEnabled); err != nil {
 				return fail("update workflow row", err)
 			}
 		}
 		if newCriteria != nil {
-			if err := orchestrator.WorkflowStore.UpdateWorkflowCriteriaTx(tx, workflowID, *newCriteria); err != nil {
+			if err := orchestrator.workflowStore.UpdateWorkflowCriteriaTx(tx, workflowID, *newCriteria); err != nil {
 				return fail("update workflow criteria associations", err)
 			}
 		}
 		if newTargetIDs != nil {
-			if err := orchestrator.WorkflowStore.UpdateWorkflowTargetsTx(tx, workflowID, *newTargetIDs); err != nil {
+			if err := orchestrator.workflowStore.UpdateWorkflowTargetsTx(tx, workflowID, *newTargetIDs); err != nil {
 				return fail("update workflow target associations", err)
 			}
 		}
@@ -213,55 +208,55 @@ func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newL
 		return nil, err
 	}
 
-	return orchestrator.WorkflowStore.Get(orchestrator.db.GetSqlxDb(), workflowID), nil
+	return orchestrator.workflowStore.Get(orchestrator.db.GetSqlxDb(), workflowID), nil
 }
 
 func (orchestrator *storeOrchestrator) GetWorkflow(id uuid.UUID) *workflow.Workflow {
-	return orchestrator.WorkflowStore.Get(orchestrator.db.GetSqlxDb(), id)
+	return orchestrator.workflowStore.Get(orchestrator.db.GetSqlxDb(), id)
 }
 
 func (orchestrator *storeOrchestrator) GetAllWorkflows() []*workflow.Workflow {
-	all := orchestrator.WorkflowStore.GetAll(orchestrator.db.GetSqlxDb())
+	all := orchestrator.workflowStore.GetAll(orchestrator.db.GetSqlxDb())
 	return all
 }
 
 func (orchestrator *storeOrchestrator) DeleteWorkflow(id uuid.UUID) {
-	orchestrator.WorkflowStore.Delete(orchestrator.db.GetSqlxDb(), id)
+	orchestrator.workflowStore.Delete(orchestrator.db.GetSqlxDb(), id)
 }
 
 // Transcodes
 
 func (orchestrator *storeOrchestrator) SaveTranscode(transcode *transcode.TranscodeTask) error {
-	return orchestrator.TranscodeStore.SaveTranscode(orchestrator.db.GetSqlxDb(), transcode)
+	return orchestrator.transcodeStore.SaveTranscode(orchestrator.db.GetSqlxDb(), transcode)
 }
 func (orchestrator *storeOrchestrator) GetTranscode(id uuid.UUID) *transcode.TranscodeTask {
-	return orchestrator.TranscodeStore.Get(orchestrator.db.GetSqlxDb(), id)
+	return orchestrator.transcodeStore.Get(orchestrator.db.GetSqlxDb(), id)
 }
 func (orchestrator *storeOrchestrator) GetAllTranscodes() ([]*transcode.TranscodeTask, error) {
-	return orchestrator.TranscodeStore.GetAll(orchestrator.db.GetSqlxDb())
+	return orchestrator.transcodeStore.GetAll(orchestrator.db.GetSqlxDb())
 }
 func (orchestrator *storeOrchestrator) GetTranscodesForMedia(mediaId uuid.UUID) ([]*transcode.TranscodeTask, error) {
-	return orchestrator.TranscodeStore.GetForMedia(orchestrator.db.GetSqlxDb(), mediaId)
+	return orchestrator.transcodeStore.GetForMedia(orchestrator.db.GetSqlxDb(), mediaId)
 }
 
 // Targets
 
 func (orchestrator *storeOrchestrator) SaveTarget(target *ffmpeg.Target) error {
-	return orchestrator.TargetStore.Save(orchestrator.db.GetSqlxDb(), target)
+	return orchestrator.targetStore.Save(orchestrator.db.GetSqlxDb(), target)
 }
 
 func (orchestrator *storeOrchestrator) GetTarget(id uuid.UUID) *ffmpeg.Target {
-	return orchestrator.TargetStore.Get(orchestrator.db.GetSqlxDb(), id)
+	return orchestrator.targetStore.Get(orchestrator.db.GetSqlxDb(), id)
 }
 
 func (orchestrator *storeOrchestrator) GetAllTargets() []*ffmpeg.Target {
-	return orchestrator.TargetStore.GetAll(orchestrator.db.GetSqlxDb())
+	return orchestrator.targetStore.GetAll(orchestrator.db.GetSqlxDb())
 }
 
 func (orchestrator *storeOrchestrator) GetManyTargets(ids ...uuid.UUID) []*ffmpeg.Target {
-	return orchestrator.TargetStore.GetMany(orchestrator.db.GetSqlxDb(), ids...)
+	return orchestrator.targetStore.GetMany(orchestrator.db.GetSqlxDb(), ids...)
 }
 
 func (orchestrator *storeOrchestrator) DeleteTarget(id uuid.UUID) {
-	orchestrator.TargetStore.Delete(orchestrator.db.GetSqlxDb(), id)
+	orchestrator.targetStore.Delete(orchestrator.db.GetSqlxDb(), id)
 }

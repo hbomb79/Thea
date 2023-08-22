@@ -36,27 +36,27 @@ type (
 
 	RestGateway interface {
 		RunnableService
-		BroadcastTaskUpdate(uuid.UUID) error
-		BroadcastTaskProgressUpdate(uuid.UUID) error
-		BroadcastWorkflowUpdate(uuid.UUID) error
-		BroadcastMediaUpdate(uuid.UUID) error
-		BroadcastIngestUpdate(uuid.UUID) error
+		BroadcastTaskUpdate(taskID uuid.UUID) error
+		BroadcastTaskProgressUpdate(taskID uuid.UUID) error
+		BroadcastWorkflowUpdate(workflowID uuid.UUID) error
+		BroadcastMediaUpdate(mediaID uuid.UUID) error
+		BroadcastIngestUpdate(ingestID uuid.UUID) error
 	}
 
 	TranscodeService interface {
 		RunnableService
 		EventParticipator
-		NewTask(uuid.UUID, uuid.UUID) error
-		CancelTask(uuid.UUID)
+		NewTask(mediaID uuid.UUID, targetID uuid.UUID) error
+		CancelTask(taskID uuid.UUID)
 		AllTasks() []*transcode.TranscodeTask
-		Task(uuid.UUID) *transcode.TranscodeTask
-		TaskForMediaAndTarget(uuid.UUID, uuid.UUID) *transcode.TranscodeTask
+		Task(taskID uuid.UUID) *transcode.TranscodeTask
+		TaskForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) *transcode.TranscodeTask
 	}
 
 	IngestService interface {
 		RunnableService
-		RemoveIngest(uuid.UUID) error
-		GetIngest(uuid.UUID) *ingest.IngestItem
+		RemoveIngest(ingestID uuid.UUID) error
+		GetIngest(ingestID uuid.UUID) *ingest.IngestItem
 		GetAllIngests() []*ingest.IngestItem
 		DiscoverNewFiles()
 	}
@@ -102,72 +102,71 @@ func (thea *theaImpl) Run(parent context.Context) error {
 
 	ctx, cancel := context.WithCancel(parent)
 	crashHandler := func(label string, err error) {
-		log.Emit(logger.FATAL, "Service crash (%s)! %s\n", label, err.Error())
+		log.Emit(logger.FATAL, "Service crash (%s)! %v\n", label, err)
 		cancel()
 	}
 
 	log.Emit(logger.NEW, "Initialising Docker services...\n")
 	if err := thea.initialiseDockerServices(thea.config, crashHandler); err != nil {
-		return err
+		return fmt.Errorf("failed to initialise docker services: %w", err)
 	}
 
 	log.Emit(logger.NEW, "Connecting to database...\n")
 	db := database.New()
-	if store, err := NewStoreOrchestrator(db); err == nil {
-		thea.storeOrchestrator = store
-	} else {
-		return err
+	if err := db.Connect(thea.config.Database); err != nil {
+		return fmt.Errorf("failed to initialise connection to DB: %w", err)
 	}
 
-	if err := db.Connect(thea.config.Database); err != nil {
-		return err
+	store, err := NewStoreOrchestrator(db)
+	if err != nil {
+		return fmt.Errorf("failed to construct data orchestrator: %w", err)
 	}
+	thea.storeOrchestrator = store
+
 	searcher := tmdb.NewSearcher(tmdb.Config{ApiKey: thea.config.OmdbKey})
 	scraper := media.NewScraper(media.ScraperConfig{FfprobeBinPath: thea.config.Format.FfprobeBinaryPath})
 	if serv, err := ingest.New(thea.config.IngestService, searcher, scraper, thea.storeOrchestrator, thea.eventBus); err == nil {
 		thea.ingestService = serv
 	} else {
-		panic(fmt.Sprintf("failed to construct ingestion service due to error: %s", err.Error()))
+		panic(fmt.Sprintf("failed to construct ingestion service due to error: %v", err))
 	}
 
 	if serv, err := transcode.New(thea.config.Format, thea.eventBus, thea.storeOrchestrator); err == nil {
 		thea.transcodeService = serv
 	} else {
-		panic(fmt.Sprintf("failed to construct transcode service due to error: %s", err.Error()))
+		panic(fmt.Sprintf("failed to construct transcode service due to error: %v", err))
 	}
 
 	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.storeOrchestrator)
 	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	wg := &sync.WaitGroup{}
-	thea.spawnAsyncService(ctx, wg, thea.ingestService, "ingest-service", crashHandler)
-	thea.spawnAsyncService(ctx, wg, thea.transcodeService, "transcode-service", crashHandler)
-	thea.spawnAsyncService(ctx, wg, thea.restGateway, "rest-gateway", crashHandler)
+	wg.Add(3)
+	go thea.spawnService(ctx, wg, thea.ingestService, "ingest-service", crashHandler)
+	go thea.spawnService(ctx, wg, thea.transcodeService, "transcode-service", crashHandler)
+	go thea.spawnService(ctx, wg, thea.restGateway, "rest-gateway", crashHandler)
 	log.Emit(logger.SUCCESS, "Thea services spawned!\n")
 
 	wg.Wait()
 	return nil
 }
 
-// spawnAsyncService will run the provided function/service as it's own
+// spawnService will run the provided function/service as it's own
 // go-routine, ensuring that the Thea service waitgroup is updated correctly
-func (thea *theaImpl) spawnAsyncService(context context.Context, wg *sync.WaitGroup, service RunnableService, serviceLabel string, crashHandler func(string, error)) {
+func (thea *theaImpl) spawnService(context context.Context, wg *sync.WaitGroup, service RunnableService, serviceLabel string, crashHandler func(string, error)) {
 	log.Emit(logger.NEW, "Spawning %s\n", serviceLabel)
-	wg.Add(1)
 
-	go func(wg *sync.WaitGroup, label string, crash func(string, error)) {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Emit(logger.ERROR, "panic of service %s, stack:%s\n", serviceLabel, string(debug.Stack()))
-				crash(label, fmt.Errorf("panic %v", r))
-			}
-		}()
-
-		defer wg.Done()
-		if err := service.Run(context); err != nil {
-			crash(label, err)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Emit(logger.ERROR, "panic of service %s, stack:%s\n", serviceLabel, string(debug.Stack()))
+			crashHandler(serviceLabel, fmt.Errorf("panic %v", r))
 		}
-	}(wg, serviceLabel, crashHandler)
+	}()
+
+	defer wg.Done()
+	if err := service.Run(context); err != nil {
+		crashHandler(serviceLabel, err)
+	}
 }
 
 // initialiseDockerServices will initialise all supporting services

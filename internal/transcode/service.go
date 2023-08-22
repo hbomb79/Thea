@@ -16,7 +16,7 @@ import (
 var log = logger.Get("TranscodeServ")
 
 type (
-	dataStore interface {
+	DataStore interface {
 		SaveTranscode(*TranscodeTask) error
 		GetAllWorkflows() []*workflow.Workflow
 		GetMedia(uuid.UUID) *media.Container
@@ -37,7 +37,7 @@ type (
 		consumedThreads int
 
 		eventBus  event.EventCoordinator
-		dataStore dataStore
+		dataStore DataStore
 
 		queueChange chan bool
 		taskChange  chan uuid.UUID
@@ -46,7 +46,7 @@ type (
 
 // New creates a new transcodeService, injecting all required stores. Error is returned
 // in the configuration provided is not valid (e.g., ffmpeg path is wrong)
-func New(config Config, eventBus event.EventCoordinator, dataStore dataStore) (*transcodeService, error) {
+func New(config Config, eventBus event.EventCoordinator, dataStore DataStore) (*transcodeService, error) {
 	// Check for output path dir, create if not found
 
 	// Ensure ffmpeg/ffprobe available at the bin path provided
@@ -221,7 +221,7 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 		if err := service.dataStore.SaveTranscode(task); err != nil {
 			// Failed to save
 			// TODO: implement a retry logic here because otherwise this transcode is lost
-			log.Emit(logger.ERROR, "failed to save transcode %s due to error: %s\n", task, err.Error())
+			log.Emit(logger.ERROR, "failed to save transcode %s due to error: %v\n", task, err)
 		}
 	}
 
@@ -246,7 +246,7 @@ func (service *transcodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) 
 		if workflow.IsMediaEligible(media) {
 			for _, target := range workflow.Targets {
 				if err := service.spawnFfmpegTarget(media, target); err != nil {
-					log.Emit(logger.ERROR, "failed to spawn ffmpeg target %s for media %s: %s\n", target, media.Id(), err.Error())
+					log.Emit(logger.ERROR, "failed to spawn ffmpeg target %s for media %s: %v\n", target, media.Id(), err)
 				}
 			}
 

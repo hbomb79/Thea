@@ -72,11 +72,11 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 func (controller *Controller) create(ec echo.Context) error {
 	var createRequest CreateRequest
 	if err := ec.Bind(&createRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
 	if err := controller.validate.Struct(createRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
 	workflowID := uuid.New()
@@ -86,7 +86,7 @@ func (controller *Controller) create(ec echo.Context) error {
 	}
 
 	if model, err := controller.Store.CreateWorkflow(workflowID, createRequest.Label, criteria, createRequest.TargetIDs, createRequest.Enabled); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create new workflow: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create new workflow: %v", err))
 	} else {
 		return ec.JSON(http.StatusCreated, NewWorkflowDto(model))
 	}
@@ -124,11 +124,11 @@ func (controller *Controller) update(ec echo.Context) error {
 
 	var updateRequest UpdateRequest
 	if err := ec.Bind(&updateRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
 	if err := controller.validate.Struct(updateRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
 	var criteriaToUpdate *[]match.Criteria = nil
@@ -142,7 +142,7 @@ func (controller *Controller) update(ec echo.Context) error {
 	}
 
 	if model, err := controller.Store.UpdateWorkflow(workflowID, updateRequest.Label, criteriaToUpdate, updateRequest.TargetIDs, updateRequest.Enabled); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to update workflow: %s", err.Error()))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to update workflow: %v", err))
 	} else {
 		return ec.JSON(http.StatusOK, NewWorkflowDto(model))
 	}

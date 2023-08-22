@@ -36,25 +36,23 @@ type (
 		Connect(DatabaseConfig) error
 		GetSqlxDb() *sqlx.DB
 		WrapTx(func(*sqlx.Tx) error) error
-		RegisterModels(...any)
 	}
 
 	manager struct {
-		rawDb  *sql.DB
-		db     *sqlx.DB
-		models []interface{}
+		rawDb *sql.DB
+		db    *sqlx.DB
 	}
 )
 
 func New() *manager {
-	return &manager{models: make([]any, 0)}
+	return &manager{}
 }
 
 func (db *manager) Connect(config DatabaseConfig) error {
 	dsn := fmt.Sprintf(SqlConnectionString, config.Host, config.User, config.Password, config.Name, config.Port)
 	sql, err := sql.Open(SqlDialect, dsn)
 	if err != nil {
-		return fmt.Errorf("failed to open postgres connection: %s", err.Error())
+		return fmt.Errorf("failed to open postgres connection: %w", err)
 	}
 
 	sql = sqldblogger.OpenDriver(dsn, sql.Driver(), &SqlLogger{dbLogger})
@@ -103,13 +101,13 @@ func (db *manager) ExecuteMigrations() error {
 	goose.SetBaseFS(migrations)
 	goose.SetLogger(dbLogger)
 	if err := goose.SetDialect(SqlDialect); err != nil {
-		return fmt.Errorf("failed to set dialect for DB migration: %s", err.Error())
+		return fmt.Errorf("failed to set dialect for DB migration: %w", err)
 	}
 
 	dbLogger.Emit(logger.INFO, "Checking for pending DB migrations...\n")
 	goose.Status(rawDb, "migrations")
 	if err := goose.Up(rawDb, "migrations"); err != nil {
-		return fmt.Errorf("failed to migrate DB: %s", err.Error())
+		return fmt.Errorf("failed to migrate DB: %w", err)
 	}
 
 	dbLogger.Emit(logger.SUCCESS, "DB Goose migration compelte!\n")
@@ -130,15 +128,6 @@ func (db *manager) WrapTx(f func(tx *sqlx.Tx) error) error {
 	}
 
 	return WrapTx(db.db, f)
-}
-
-func (db *manager) RegisterModels(models ...any) {
-	if db.db != nil {
-		panic("cannot register models to a database server that is already connected")
-	}
-
-	dbLogger.Emit(logger.DEBUG, "Registering DB models %#v\n", models)
-	db.models = append(db.models, models...)
 }
 
 func (l *SqlLogger) Log(_ context.Context, level sqldblogger.Level, msg string, data map[string]any) {
@@ -170,8 +159,8 @@ func WrapTx(db *sqlx.DB, f func(tx *sqlx.Tx) error) error {
 	defer tx.Rollback()
 
 	if err := f(tx); err != nil {
-		dbLogger.Errorf("Transaction failed... rolling back. Error: %s\n", err.Error())
-		return err
+		dbLogger.Errorf("Transaction failed... rolling back. Error: %v\n", err)
+		return fmt.Errorf("wrapped DB transaction failed: %w", err)
 	}
 
 	return tx.Commit()

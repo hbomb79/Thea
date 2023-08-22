@@ -40,7 +40,7 @@ type DockerConfig struct {
 func (config *TheaConfig) LoadFromFile(configPath string) error {
 	err := cleanenv.ReadConfig(configPath, config)
 	if err != nil {
-		return fmt.Errorf("failed to load configuration for ProcessorConfig - %v", err.Error())
+		return fmt.Errorf("failed to load configuration for ProcessorConfig - %v", err)
 	}
 
 	return nil

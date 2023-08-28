@@ -20,6 +20,7 @@ type (
 		Year          *int
 		FrameW        *int
 		FrameH        *int
+		Path          string
 	}
 
 	ScraperConfig struct {
@@ -46,6 +47,7 @@ func (scraper *MetadataScraper) ScrapeFileForMediaInfo(path string) (*FileMediaM
 	output := FileMediaMetadata{
 		SeasonNumber:  -1,
 		EpisodeNumber: -1,
+		Path:          path,
 	}
 
 	// Extract information from title

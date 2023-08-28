@@ -87,11 +87,11 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 		}
 
 		log.Emit(logger.DEBUG, "Saving TMDB EPISODE: %v\nSEASON: %v\nSERIES: %v\n", episode, season, series)
-		ep := item.tmdbEpisodeToMedia(episode)
+		ep := tmdb.TmdbEpisodeToMedia(episode, item.ScrapedMetadata)
 		if err := data.SaveEpisode(
 			ep,
-			item.tmdbSeasonToMedia(season),
-			item.tmdbSeriesToMedia(series),
+			tmdb.TmdbSeasonToMedia(season),
+			tmdb.TmdbSeriesToMedia(series),
 		); err != nil {
 			return IngestItemTrouble{err, GENERIC_FAILURE}
 		}
@@ -105,7 +105,7 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 		}
 
 		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %v\n", movie)
-		mov := item.tmdbMovieToMedia(movie)
+		mov := tmdb.TmdbMovieToMedia(movie, meta)
 		if err := data.SaveMovie(mov); err != nil {
 			return IngestItemTrouble{err, GENERIC_FAILURE}
 		}
@@ -115,47 +115,6 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 	}
 
 	return nil
-}
-
-func (item *IngestItem) tmdbEpisodeToMedia(ep *tmdb.Episode) *media.Episode {
-	scrapedMetadata := item.ScrapedMetadata
-	return &media.Episode{
-		Model: media.Model{ID: uuid.New(), TmdbId: ep.Id.String(), Title: ep.Name},
-		Watchable: media.Watchable{
-			MediaResolution: media.MediaResolution{
-				Width:  *scrapedMetadata.FrameW,
-				Height: *scrapedMetadata.FrameH,
-			},
-			SourcePath: item.Path,
-		},
-		EpisodeNumber: scrapedMetadata.EpisodeNumber,
-	}
-}
-
-func (item *IngestItem) tmdbSeriesToMedia(series *tmdb.Series) *media.Series {
-	return &media.Series{
-		Model: media.Model{ID: uuid.New(), TmdbId: series.Id.String(), Title: series.Name},
-		Adult: series.Adult,
-	}
-}
-
-func (item *IngestItem) tmdbSeasonToMedia(season *tmdb.Season) *media.Season {
-	return &media.Season{
-		Model: media.Model{ID: uuid.New(), TmdbId: season.Id.String(), Title: season.Name},
-	}
-
-}
-
-func (item *IngestItem) tmdbMovieToMedia(movie *tmdb.Movie) *media.Movie {
-	scrapedMetadata := item.ScrapedMetadata
-	return &media.Movie{
-		Model: media.Model{ID: uuid.New(), TmdbId: movie.Id.String(), Title: movie.Name},
-		Watchable: media.Watchable{
-			MediaResolution: media.MediaResolution{Width: *scrapedMetadata.FrameW, Height: *scrapedMetadata.FrameH},
-			SourcePath:      item.Path,
-		},
-		Adult: movie.Adult,
-	}
 }
 
 func handleSearchError(err error) error {

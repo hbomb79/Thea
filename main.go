@@ -1,143 +1,91 @@
 package main
 
 import (
-	"log"
+	"context"
+	"flag"
+	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
-	"sync"
+	"strings"
+	"syscall"
 
 	"github.com/hbomb79/Thea/internal"
-	"github.com/hbomb79/Thea/internal/api"
-	"github.com/hbomb79/Thea/internal/ffmpeg"
-	"github.com/hbomb79/Thea/internal/profile"
 	"github.com/hbomb79/Thea/pkg/logger"
-	"github.com/hbomb79/Thea/pkg/socket"
 )
 
-var mainLogger = logger.Get("Main")
+const VERSION = 1.0
 
-const VERSION = 0.7
+var (
+	log = logger.Get("Bootstrap")
 
-type services struct {
-	thea        internal.Thea
-	socketHub   *socket.SocketHub
-	wsGateway   *api.WsGateway
-	httpGateway *api.HttpGateway
-	httpRouter  *api.Router
-}
+	conf         *internal.TheaConfig = &internal.TheaConfig{}
+	logLevelFlag                      = flag.String("log-level", "info", "Define logging level from one of [verbose, debug, info, important, warning, error]")
+	helpFlag                          = flag.Bool("help", false, "Whether to display help information")
+	configFlag                        = flag.String("config", filepath.Join(conf.GetConfigDir(), "/config.toml"), "The path to the config file that Thea will load")
+)
 
-func NewTpa(config internal.TheaConfig) *services {
-	services := &services{
-		httpRouter: api.NewRouter(),
-		socketHub:  socket.NewSocketHub(),
+func main() {
+	flag.Parse()
+
+	level, err := parseLogLevelFromString(*logLevelFlag)
+	if err != nil {
+		fmt.Println(err)
+		flag.Usage()
+
+		return
 	}
+	logger.SetMinLoggingLevel(level)
 
-	thea := internal.NewThea(config, services.handleTheaUpdate)
-	services.thea = thea
-	services.wsGateway = api.NewWsGateway(thea)
-	services.httpGateway = api.NewHttpGateway(thea)
-	return services
-
-}
-
-func (serv *services) newClientConnection() map[string]interface{} {
-	return map[string]interface{}{
-		"ffmpegOptions":          serv.thea.GetKnownFfmpegOptions(),
-		"ffmpegMatchKeys":        ffmpeg.FFMPEG_COMMAND_SUBSTITUTIONS,
-		"profileAcceptableTypes": profile.MatchKeyAcceptableTypes(),
-	}
-}
-
-func (serv *services) Start() {
-	mainLogger.Emit(logger.INFO, " --- Starting Thea (version %v) ---\n", VERSION)
-
-	serv.setupRoutes()
-	serv.socketHub.WithConnectionCallback(serv.newClientConnection)
-
-	// Start websocket, router and Thea
-	wg := &sync.WaitGroup{}
-	wg.Add(3)
-	go func() {
-		defer wg.Done()
-		serv.socketHub.Start()
-	}()
-	go func() {
-		defer wg.Done()
-		serv.httpRouter.Start(&api.RouterOptions{
-			ApiPort: 8080,
-			ApiHost: "0.0.0.0",
-			ApiRoot: "/api/thea",
-		})
-	}()
-	go func() {
-		defer wg.Done()
-		if err := serv.thea.Start(); err != nil {
-			mainLogger.Emit(logger.FATAL, "Failed to start Processor: %v", err.Error())
+	if *helpFlag {
+		flag.Usage()
+	} else {
+		log.Emit(logger.DEBUG, "Loading configuration from '%s'\n", *configFlag)
+		if err := conf.LoadFromFile(*configFlag); err != nil {
+			panic(err)
 		}
 
-		mainLogger.Emit(logger.STOP, "Processor shutdown, cleaning up supporting services...\n")
-		serv.socketHub.Close()
-		serv.httpRouter.Stop()
-	}()
-
-	// Wait for all processes to finish
-	wg.Wait()
+		startThea(conf)
+	}
 }
 
-// setupRoutes initialises the routes and commands for the HTTP
-// REST router, and the websocket hub
-func (serv *services) setupRoutes() {
-	serv.httpRouter.CreateRoute("v0/queue", "GET", serv.httpGateway.HttpQueueIndex)
-	serv.httpRouter.CreateRoute("v0/queue/{id}", "GET", serv.httpGateway.HttpQueueGet)
-	serv.httpRouter.CreateRoute("v0/queue/promote/{id}", "POST", serv.httpGateway.HttpQueueUpdate)
-	serv.httpRouter.CreateRoute("v0/ws", "GET", serv.socketHub.UpgradeToSocket)
+func startThea(config *internal.TheaConfig) {
+	log.Emit(logger.INFO, " --- Starting Thea (version %.1f) ---\n", VERSION)
 
-	serv.socketHub.BindCommand("QUEUE_INDEX", serv.wsGateway.WsQueueIndex)
-	serv.socketHub.BindCommand("QUEUE_DETAILS", serv.wsGateway.WsQueueDetails)
-	serv.socketHub.BindCommand("QUEUE_REORDER", serv.wsGateway.WsQueueReorder)
-	serv.socketHub.BindCommand("TROUBLE_RESOLVE", serv.wsGateway.WsTroubleResolve)
-	serv.socketHub.BindCommand("TROUBLE_DETAILS", serv.wsGateway.WsTroubleDetails)
-	serv.socketHub.BindCommand("PROMOTE_ITEM", serv.wsGateway.WsItemPromote)
-	serv.socketHub.BindCommand("PAUSE_ITEM", serv.wsGateway.WsItemPause)
-	serv.socketHub.BindCommand("CANCEL_ITEM", serv.wsGateway.WsItemCancel)
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	go listenForInterrupt(ctxCancel)
 
-	serv.socketHub.BindCommand("PROFILE_INDEX", serv.wsGateway.WsProfileIndex)
-	serv.socketHub.BindCommand("PROFILE_CREATE", serv.wsGateway.WsProfileCreate)
-	serv.socketHub.BindCommand("PROFILE_REMOVE", serv.wsGateway.WsProfileRemove)
-	serv.socketHub.BindCommand("PROFILE_MOVE", serv.wsGateway.WsProfileMove)
-	serv.socketHub.BindCommand("PROFILE_SET_MATCH_CONDITIONS", serv.wsGateway.WsProfileSetMatchConditions)
-	serv.socketHub.BindCommand("PROFILE_UPDATE_COMMAND", serv.wsGateway.WsProfileUpdateCommand)
+	if err := internal.New(*config).Run(ctx); err != nil {
+		log.Fatalf("Failed to start Thea: %v\n", err)
+		os.Exit(1)
+	}
+
+	log.Emit(logger.STOP, "Thea shutdown complete\n")
 }
 
-func (serv *services) handleTheaUpdate(update *internal.Update) {
-	body := map[string]interface{}{"context": update}
-	if update.UpdateType == internal.PROFILE_UPDATE {
-		body["profiles"] = serv.thea.GetAllProfiles()
-		body["targetOpts"] = serv.thea.GetKnownFfmpegOptions()
-	}
+func listenForInterrupt(ctxCancel context.CancelFunc) {
+	exitChannel := make(chan os.Signal, 1)
+	signal.Notify(exitChannel, os.Interrupt, syscall.SIGTERM)
 
-	mainLogger.Emit(logger.VERBOSE, "Emitting UPDATE message %#v\n", body)
-	serv.socketHub.Send(&socket.SocketMessage{
-		Title: "UPDATE",
-		Body:  body,
-		Type:  socket.Update,
-	})
+	<-exitChannel
+	ctxCancel()
 }
 
-// main() is the entry point to the program, from here will
-// we load the users Thea configuration from their home directory,
-// merging the configuration with the default config
-func main() {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Panicf(err.Error())
+func parseLogLevelFromString(l string) (logger.LogLevel, error) {
+	switch strings.ToLower(l) {
+	case "verbose":
+		return logger.VERBOSE.Level(), nil
+	case "debug":
+		return logger.DEBUG.Level(), nil
+	case "info":
+		return logger.INFO.Level(), nil
+	case "important":
+		return logger.SUCCESS.Level(), nil
+	case "warning":
+		return logger.WARNING.Level(), nil
+	case "error":
+		return logger.ERROR.Level(), nil
+	default:
+		return logger.INFO.Level(), fmt.Errorf("logging level %s is not recognized", l)
 	}
-
-	procCfg := new(internal.TheaConfig)
-	if err := procCfg.LoadFromFile(filepath.Join(homeDir, ".config/thea/config.yaml")); err != nil {
-		panic(err)
-	}
-
-	servs := NewTpa(*procCfg)
-	servs.Start()
 }

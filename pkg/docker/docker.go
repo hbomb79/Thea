@@ -9,7 +9,6 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/hbomb79/Thea/pkg/broker"
-	pkg "github.com/hbomb79/Thea/pkg/broker"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
@@ -43,10 +42,9 @@ type docker struct {
 	broker     *broker.Broker[*dockerContainerStatus]
 }
 
-var DockerMgr = newDockerManager()
-
-func newDockerManager() DockerManager {
-	ctx, ctxCancel := context.WithCancel(context.Background())
+func NewDockerManager() DockerManager {
+	// TODO Proper context handling!
+	ctx, ctxCancel := context.WithCancel(context.TODO())
 	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		panic(err)
@@ -60,7 +58,7 @@ func newDockerManager() DockerManager {
 		panic(err)
 	}
 
-	broker := pkg.NewBroker[*dockerContainerStatus]()
+	broker := broker.NewBroker[*dockerContainerStatus]()
 	go broker.Start()
 	return &docker{
 		containers: make(map[string]DockerContainer),
@@ -87,14 +85,14 @@ func (docker *docker) SpawnContainer(container DockerContainer) error {
 	}
 
 	if err := docker.cli.NetworkConnect(docker.ctx, DOCKER_NETWORK, container.ID(), nil); err != nil {
-		dockerLogger.Emit(logger.ERROR, "Failed to connect container %s to network: %s\n", container, err.Error())
+		dockerLogger.Emit(logger.ERROR, "Failed to connect container %s to network: %v\n", container, err)
 	}
 
 	go docker.monitorContainer(container, docker.wg)
 
 	dockerLogger.Emit(logger.INFO, "Waiting for container %s to come UP\n", container)
 	if _, err := docker.WaitForContainer(container, UP); err != nil {
-		dockerLogger.Emit(logger.ERROR, "Container %s failed to come online: %v\n", container, err.Error())
+		dockerLogger.Emit(logger.ERROR, "Container %s failed to come online: %v\n", container, err)
 		return err
 	}
 

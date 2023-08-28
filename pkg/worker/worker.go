@@ -1,26 +1,33 @@
 package worker
 
-import "github.com/hbomb79/Thea/pkg/logger"
+import (
+	"fmt"
+
+	"github.com/hbomb79/Thea/pkg/logger"
+)
 
 var workerLogger = logger.Get("Worker")
 
 type WorkerWakeupChan chan int
 type WorkerStatus int
 
-type WorkerTaskMeta interface {
-	Execute(Worker) error
-}
+// WorkerTask is the function containing the task that this
+// worker should execute. It is called repeatedly until 'true'
+// is returned (indicating the worker should Sleep as there is
+// no more work to do), OR an error is returned (indicating
+// the worker should close)
+type WorkerTask func(Worker) (bool, error)
 
 const (
-	Sleeping WorkerStatus = iota
-	Working
-	Finished
+	SLEEPING WorkerStatus = iota
+	ALIVE
+	KILLING
+	DEAD
 )
 
 type Worker interface {
 	Start()
 	Status() WorkerStatus
-	Stage() int
 	WakeupChan() WorkerWakeupChan
 	Label() string
 	Sleep() bool
@@ -29,31 +36,42 @@ type Worker interface {
 
 type taskWorker struct {
 	label         string
-	task          WorkerTaskMeta
+	task          WorkerTask
 	wakeupChan    WorkerWakeupChan
 	currentStatus WorkerStatus
-	stage         int
 }
 
-func NewWorker(label string, task WorkerTaskMeta, pipelineStage int) *taskWorker {
+func NewWorker(label string, task WorkerTask) *taskWorker {
 	return &taskWorker{
 		label,
 		task,
 		make(WorkerWakeupChan),
-		Sleeping,
-		pipelineStage,
+		SLEEPING,
 	}
 }
 
 func (worker *taskWorker) Start() {
-	workerLogger.Emit(logger.NEW, "Starting worker for stage %v with label %v\n", worker.stage, worker.label)
-	worker.currentStatus = Working
-	if err := worker.task.Execute(worker); err != nil {
-		workerLogger.Emit(logger.ERROR, "Worker for stage %v with label %v has reported an error(%T): %v\n", worker.stage, worker.label, err, err.Error())
+	workerLogger.Emit(logger.NEW, "Starting worker with label %v\n", worker.label)
+	worker.currentStatus = ALIVE
+
+	for worker.currentStatus == ALIVE {
+		shouldSleep, err := worker.task(worker)
+		workerLogger.Emit(logger.VERBOSE, "%s task complete. Should sleep: %v. Has error: %v\n", worker, shouldSleep, err)
+		if err != nil {
+			workerLogger.Emit(logger.ERROR, "%s has reported an error(%T): %v\n", worker, err, err)
+			break
+		}
+
+		if shouldSleep && worker.currentStatus == ALIVE {
+			if !worker.Sleep() {
+				// Worker was sleeping, but is being killed now
+				break
+			}
+		}
 	}
 
-	worker.currentStatus = Finished
-	workerLogger.Emit(logger.STOP, "Worker for stage %v with label %v has stopped\n", worker.stage, worker.label)
+	worker.currentStatus = DEAD
+	workerLogger.Emit(logger.STOP, "Worker %s has stopped\n", worker.label)
 }
 
 // Status returns the current status of this worker
@@ -61,11 +79,8 @@ func (worker *taskWorker) Status() WorkerStatus {
 	return worker.currentStatus
 }
 
-// Stage returns the stage of this worker
-func (worker *taskWorker) Stage() int {
-	return worker.stage
-}
-
+// WakeupChan returns the channel that should be used to
+// awken this worker from a SLEEPING state.
 func (worker *taskWorker) WakeupChan() WorkerWakeupChan {
 	return worker.wakeupChan
 }
@@ -74,6 +89,7 @@ func (worker *taskWorker) WakeupChan() WorkerWakeupChan {
 // Note that this does not interupt currently running
 // goroutines.
 func (worker *taskWorker) Close() {
+	worker.currentStatus = KILLING
 	close(worker.wakeupChan)
 }
 
@@ -85,16 +101,20 @@ func (worker *taskWorker) Label() string {
 // Sleep puts a worker to sleep until it's wakeupChan is
 // signalled from another goroutine. Returns a boolean that
 // is 'false' if the wakeup channel was closed - indicating
-// the worker should quit.
+// the worker is being killed.
 func (worker *taskWorker) Sleep() (isAlive bool) {
-	worker.currentStatus = Sleeping
+	worker.currentStatus = SLEEPING
 
 	if _, isAlive = <-worker.wakeupChan; isAlive {
-		worker.currentStatus = Working
+		worker.currentStatus = ALIVE
 	} else {
 		workerLogger.Emit(logger.STOP, "Wakeup channel for worker '%v' has been closed - worker is exiting\n", worker.label)
-		worker.currentStatus = Finished
+		worker.currentStatus = DEAD
 	}
 
 	return isAlive
+}
+
+func (worker *taskWorker) String() string {
+	return fmt.Sprintf("Worker{label=%s state=%d}", worker.label, worker.currentStatus)
 }

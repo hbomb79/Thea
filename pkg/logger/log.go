@@ -2,7 +2,6 @@ package logger
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -39,31 +38,6 @@ const (
 	ERROR
 	FATAL
 )
-
-const DEFAULT_MIN_STATUS = info
-
-func getMinLogLevelFromEnv() LogLevel {
-	if value, ok := os.LookupEnv("THEA_LOG_LEVEL"); ok {
-		switch strings.ToLower(value) {
-		case "verbose":
-			return verbose
-		case "debug":
-			return debug
-		case "info":
-			return info
-		case "important":
-			return important
-		case "warning":
-			return warning
-		case "error":
-			return err
-		default:
-			fmt.Printf("ERR: logging level %v is not recognized, falling back to default\n", value)
-		}
-	}
-
-	return DEFAULT_MIN_STATUS
-}
 
 type LogLevel int
 
@@ -138,7 +112,14 @@ func (e LogStatus) Color() *color.Color {
 }
 
 type Logger interface {
-	Emit(LogStatus, string, ...interface{})
+	Emit(LogStatus, string, ...any)
+	Verbosef(string, ...any)
+	Debugf(string, ...any)
+	Infof(string, ...any)
+	Warnf(string, ...any)
+	Printf(string, ...any)
+	Errorf(string, ...any)
+	Fatalf(string, ...any)
 }
 
 type loggerImpl struct {
@@ -146,17 +127,20 @@ type loggerImpl struct {
 }
 
 func (l *loggerImpl) Emit(status LogStatus, message string, interpolations ...interface{}) {
-	Log.Emit(status, l.name, message, interpolations...)
+	manager.Emit(status, l.name, message, interpolations...)
 }
 
-type LoggerManager interface {
-	GetLogger(string) Logger
-	Emit(LogStatus, string, string, ...interface{})
-}
+func (l *loggerImpl) Verbosef(m string, v ...any) { l.Emit(VERBOSE, m, v...) }
+func (l *loggerImpl) Debugf(m string, v ...any)   { l.Emit(DEBUG, m, v...) }
+func (l *loggerImpl) Printf(m string, v ...any)   { l.Emit(INFO, m, v...) }
+func (l *loggerImpl) Infof(m string, v ...any)    { l.Emit(INFO, m, v...) }
+func (l *loggerImpl) Warnf(m string, v ...any)    { l.Emit(WARNING, m, v...) }
+func (l *loggerImpl) Errorf(m string, v ...any)   { l.Emit(ERROR, m, v...) }
+func (l *loggerImpl) Fatalf(m string, v ...any)   { l.Emit(FATAL, m, v...) }
 
-var Log LoggerManager = &loggerMgr{
+var manager = &loggerMgr{
 	offset:   0,
-	minLevel: getMinLogLevelFromEnv(),
+	minLevel: info,
 }
 
 type loggerMgr struct {
@@ -164,7 +148,7 @@ type loggerMgr struct {
 	minLevel LogLevel
 }
 
-func (l *loggerMgr) GetLogger(name string) Logger {
+func (l *loggerMgr) GetLogger(name string) *loggerImpl {
 	return &loggerImpl{name: name}
 }
 
@@ -186,6 +170,14 @@ func (l *loggerMgr) setNameOffset(offset int) {
 	}
 }
 
-func Get(name string) Logger {
-	return Log.GetLogger(name)
+func (l *loggerMgr) setMinLoggingLevel(level LogLevel) {
+	l.minLevel = level
+}
+
+func Get(name string) *loggerImpl {
+	return manager.GetLogger(name)
+}
+
+func SetMinLoggingLevel(level LogLevel) {
+	manager.setMinLoggingLevel(level)
 }

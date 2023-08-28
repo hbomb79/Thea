@@ -3,96 +3,122 @@
 package event
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
+	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
-var log = logger.Log.GetLogger("Event")
+var log = logger.Get("Activity")
 
 // Events emitted by various parts of Thea that should be handled by another, silo'd part
 // of Theas' architecture.
 // Each silo/service of Thea's architecture listens for a specific event, which indicates
 // an item is ready for processing by that service
-type TheaEvent string
+type (
+	Event         string
+	Payload       any
+	HandlerMethod func(Event, Payload)
 
-type TheaPayload any
+	HandlerChannel chan HandlerEvent
+	HandlerEvent   struct {
+		Event   Event
+		Payload Payload
+	}
 
-const (
-	// Server is shutting down
-	THEA_SHUTDOWN_EVENT  TheaEvent = "thea:shutdown"
-	PROFILE_UPDATE_EVENT TheaEvent = "thea:profile:update"
+	EventDispatcher interface {
+		Dispatch(Event, Payload)
+	}
 
-	// A QueueItem has been updated, this includes any changes to it's state, trouble changes, or including trouble updates.
-	ITEM_UPDATE_EVENT        TheaEvent = "item:update"
-	ITEM_FFMPEG_UPDATE_EVENT TheaEvent = "item:ffmpeg:update"
-	QUEUE_UPDATE_EVENT       TheaEvent = "queue:update"
+	EventHandler interface {
+		RegisterAsyncHandlerFunction(Event, HandlerMethod)
+		RegisterHandlerFunction(Event, HandlerMethod)
+		RegisterHandlerChannel(HandlerChannel, ...Event)
+	}
+
+	EventCoordinator interface {
+		EventDispatcher
+		EventHandler
+	}
+
+	eventHandler struct {
+		fnHandlers   map[Event][]handlerMethod
+		chanHandlers map[Event][]HandlerChannel
+	}
+
+	handlerMethod struct {
+		handle HandlerMethod
+		async  bool
+	}
 )
 
-type HandlerMethod func(TheaEvent, TheaPayload)
+const (
+	INGEST_UPDATE   Event = "ingest:update"
+	INGEST_COMPLETE Event = "ingest:complete"
 
-type HandlerChannel chan HandlerEvent
-type HandlerEvent struct {
-	Event   TheaEvent
-	Payload TheaPayload
-}
+	NEW_MEDIA Event = "media:new"
 
-type EventDispatcher interface {
-	Dispatch(TheaEvent, TheaPayload)
-}
+	TRANSCODE_UPDATE        Event = "transcode:task:update"
+	TRANSCODE_COMPLETE      Event = "transcode:task:complete"
+	TRANSCODE_TASK_PROGRESS Event = "transcode:task:update:progress"
 
-type EventHandler interface {
-	RegisterAsyncHandlerFunction(TheaEvent, HandlerMethod)
-	RegisterHandlerFunction(TheaEvent, HandlerMethod)
-	RegisterHandlerChannel(TheaEvent, HandlerChannel)
-}
+	WORKFLOW_UPDATE Event = "workflow:update"
 
-type EventCoordinator interface {
-	EventDispatcher
-	EventHandler
-}
+	DOWNLOAD_UPDATE   Event = "download:update"
+	DOWNLOAD_COMPLETE Event = "download:complete"
+	DOWNLOAD_PROGRESS Event = "download:update:progress"
+)
 
-type eventHandler struct {
-	fnHandlers   map[TheaEvent][]handlerMethod
-	chanHandlers map[TheaEvent][]HandlerChannel
-}
-
-type handlerMethod struct {
-	handle HandlerMethod
-	async  bool
-}
-
-func NewEventHandler() EventCoordinator {
+func New() EventCoordinator {
 	return &eventHandler{
-		fnHandlers:   make(map[TheaEvent][]handlerMethod),
-		chanHandlers: make(map[TheaEvent][]HandlerChannel),
+		fnHandlers:   make(map[Event][]handlerMethod),
+		chanHandlers: make(map[Event][]HandlerChannel),
 	}
 }
 
-func (handler *eventHandler) RegisterHandlerChannel(event TheaEvent, handle HandlerChannel) {
-	handler.chanHandlers[event] = append(handler.chanHandlers[event], handle)
+// RegisterHandlerChannel takes an event type and a channel and will send Event messages on
+// the channel any time a Dispatch for the provided event occurs.
+// This method can be used multiple times for different events on the same channel.
+//
+// If the channel is BLOCKED when the event bus attempts to send the message on the handler channel,
+// then the thread dispatching the event will also be BLOCKED. It is recomended to buffer the handler channels
+// appropiately to avoid dispatcher-side blocking.
+func (handler *eventHandler) RegisterHandlerChannel(handle HandlerChannel, events ...Event) {
+	for _, event := range events {
+		handler.chanHandlers[event] = append(handler.chanHandlers[event], handle)
+	}
 }
 
 // RegisterHandler takes an event type and a handler method which will be stored
 // and called with the payload for the event whenever it is provided to the 'Handle' method.
-func (handler *eventHandler) RegisterHandlerFunction(event TheaEvent, handle HandlerMethod) {
+// The handle provided should be guaranteed to return quickly, else other threads calling
+// Dispatch on this event bus will be blocked.
+func (handler *eventHandler) RegisterHandlerFunction(event Event, handle HandlerMethod) {
 	handler.registerHandlerMethod(event, handlerMethod{handle, false})
 }
 
-func (handler *eventHandler) RegisterAsyncHandlerFunction(event TheaEvent, handle HandlerMethod) {
+// RegisterAsyncHandlerFunction accepts a TheaEvent and a HandlerMethod which will be stored and
+// called inside of a goroutine when the event is handled.
+// The speed at which this handle runs is not important to the event bus, unlike RegisterHandlerFunction.
+func (handler *eventHandler) RegisterAsyncHandlerFunction(event Event, handle HandlerMethod) {
 	handler.registerHandlerMethod(event, handlerMethod{handle, true})
 }
 
-func (handler *eventHandler) registerHandlerMethod(event TheaEvent, handle handlerMethod) {
+// registerHandlerMethod is the internal implementation for both RegisterHandlerFunction and
+// RegisterAsyncHandlerFunction.
+func (handler *eventHandler) registerHandlerMethod(event Event, handle handlerMethod) {
 	handler.fnHandlers[event] = append(handler.fnHandlers[event], handle)
 }
 
 // Handle takes an event type and a payload and dispatches the payload to the handler specified
 // for the event type provided.
-func (handler *eventHandler) Dispatch(event TheaEvent, payload TheaPayload) {
+// Note that this method WILL block if a synchronous handler function is blocking, or if channel
+// handlers are blocked.
+func (handler *eventHandler) Dispatch(event Event, payload Payload) {
 	if err := handler.validatePayload(event, payload); err != nil {
-		log.Emit(logger.FATAL, "Dispatch for event %v FAILED validation: %v", event, err)
+		log.Emit(logger.FATAL, "Dispatch for event %v FAILED validation: %v\n", event, err)
 		return
 	}
 
@@ -114,9 +140,10 @@ func (handler *eventHandler) Dispatch(event TheaEvent, payload TheaPayload) {
 	}
 }
 
-func (handler *eventHandler) validatePayload(event TheaEvent, payload TheaPayload) error {
-	log.Emit(logger.VERBOSE, "Validating payload %#v for event %v\n", payload, event)
-
+// validatePayload ensures that the payload provided is valid for the event specified. An error
+// will be returned if the payload is not valid, and the event should not be sent to the registered
+// handlers in this case.
+func (handler *eventHandler) validatePayload(event Event, payload Payload) error {
 	var payloadTypeName string
 	if t := reflect.TypeOf(payload); t != nil {
 		payloadTypeName = t.Name()
@@ -125,24 +152,29 @@ func (handler *eventHandler) validatePayload(event TheaEvent, payload TheaPayloa
 	}
 
 	switch event {
-	case QUEUE_UPDATE_EVENT:
+	case INGEST_UPDATE:
 		fallthrough
-	case THEA_SHUTDOWN_EVENT:
-		if payload != nil {
-			return fmt.Errorf("event does not accept any payload, found %v", payloadTypeName)
-		}
-
-		return nil
-	case ITEM_UPDATE_EVENT:
+	case INGEST_COMPLETE:
 		fallthrough
-	case ITEM_FFMPEG_UPDATE_EVENT:
-		_, ok := payload.(int)
-		if !ok {
-			return fmt.Errorf("ITEM events require int representing QueueItem ID, found %v", payloadTypeName)
+	case TRANSCODE_COMPLETE:
+		fallthrough
+	case TRANSCODE_TASK_PROGRESS:
+		fallthrough
+	case WORKFLOW_UPDATE:
+		fallthrough
+	case DOWNLOAD_UPDATE:
+		fallthrough
+	case DOWNLOAD_COMPLETE:
+		fallthrough
+	case DOWNLOAD_PROGRESS:
+		fallthrough
+	case TRANSCODE_UPDATE:
+		if _, ok := payload.(uuid.UUID); !ok {
+			return fmt.Errorf("illegal payload (type %s) for %s event. Expected uuid.UUID payload", payloadTypeName, event)
 		}
 
 		return nil
 	}
 
-	return fmt.Errorf("TheaEvent type not recognized for validation")
+	return errors.New("event type not recognized for validation")
 }

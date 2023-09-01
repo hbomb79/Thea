@@ -63,12 +63,11 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 		} else if meta == nil {
 			return IngestItemTrouble{errors.New("metadata scraping returned no error, but also returned nil"), METADATA_FAILURE}
 		} else {
-			log.Emit(logger.DEBUG, "Scrape for item %s complete:\n%#v\n", item, meta)
+			log.Emit(logger.DEBUG, "Scraped metadata for item %s:\n%#v\n", item, meta)
 			item.ScrapedMetadata = meta
 		}
 	}
 
-	log.Emit(logger.DEBUG, "Performing TMDB search\n")
 	meta := item.ScrapedMetadata
 	if item.ScrapedMetadata.Episodic {
 		series, err := searcher.SearchForSeries(meta)
@@ -87,7 +86,7 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 		}
 
 		log.Emit(logger.DEBUG, "Saving TMDB EPISODE: %v\nSEASON: %v\nSERIES: %v\n", episode, season, series)
-		ep := tmdb.TmdbEpisodeToMedia(episode, item.ScrapedMetadata)
+		ep := tmdb.TmdbEpisodeToMedia(episode, series.Adult, item.ScrapedMetadata)
 		if err := data.SaveEpisode(
 			ep,
 			tmdb.TmdbSeasonToMedia(season),

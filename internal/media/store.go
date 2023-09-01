@@ -28,6 +28,7 @@ type (
 	Watchable struct {
 		MediaResolution
 		SourcePath string `db:"source_path"`
+		Adult      bool   `db:"adult"`
 	}
 
 	MediaResolution struct {
@@ -50,7 +51,6 @@ type (
 	// are not contained within this model.
 	Series struct {
 		Model
-		Adult   bool
 		Seasons []Season `db:"-"`
 	}
 
@@ -66,7 +66,6 @@ type (
 	Movie struct {
 		Model
 		Watchable
-		Adult bool
 	}
 
 	Store struct{}
@@ -76,10 +75,9 @@ const (
 	IDCol     = "id"
 	TmdbIDCol = "tmdb_id"
 
-	MovieTable   = "movie"
-	SeriesTable  = "series"
-	SeasonTable  = "season"
-	EpisodeTable = "episode"
+	MediaTable  = "media"
+	SeriesTable = "series"
+	SeasonTable = "season"
 )
 
 // SaveMovie upserts the provided Movie model to the database. Existing models
@@ -90,12 +88,12 @@ const (
 func (store *Store) SaveMovie(db *sqlx.DB, movie *Movie) error {
 	var updatedMovie Movie
 	if err := db.QueryRowx(`
-		INSERT INTO movie(id, tmdb_id, title, adult, source_path, created_at, updated_at)
-		VALUES($1, $2, $3, $4, $5, current_timestamp, current_timestamp)
+		INSERT INTO media(id, type, tmdb_id, title, adult, source_path, created_at, updated_at)
+		VALUES($1, $2, $3, $4, $5, $6, current_timestamp, current_timestamp)
 		ON CONFLICT(tmdb_id) DO UPDATE
-			SET (updated_at, title, adult, source_path) = (current_timestamp, EXCLUDED.title, EXCLUDED.adult, EXCLUDED.source_path)
-		RETURNING *
-	`, movie.ID, movie.TmdbId, movie.Title, movie.Adult, movie.SourcePath).StructScan(&updatedMovie); err != nil {
+			SET (updated_at, title, adult, source_path, type) = (current_timestamp, EXCLUDED.title, EXCLUDED.adult, EXCLUDED.source_path, 'movie')
+		RETURNING id, tmdb_id, title, adult, source_path, created_at, updated_at;
+	`, movie.ID, "movie", movie.TmdbId, movie.Title, movie.Adult, movie.SourcePath).StructScan(&updatedMovie); err != nil {
 		return err
 	}
 
@@ -113,12 +111,12 @@ func (store *Store) SaveMovie(db *sqlx.DB, movie *Movie) error {
 func (store *Store) SaveSeries(db dbOrTx, series *Series) error {
 	var updatedSeries Series
 	if err := db.QueryRowx(`
-		INSERT INTO series(id, tmdb_id, title, adult, created_at, updated_at)
-		VALUES($1, $2, $3, $4, current_timestamp, current_timestamp)
+		INSERT INTO series(id, tmdb_id, title, created_at, updated_at)
+		VALUES($1, $2, $3, current_timestamp, current_timestamp)
 		ON CONFLICT(tmdb_id) DO UPDATE
-			SET (title, adult, updated_at) = (EXCLUDED.title, EXCLUDED.adult, current_timestamp)
+			SET (title, updated_at) = (EXCLUDED.title, current_timestamp)
 		RETURNING *
-	`, series.ID, series.TmdbId, series.Title, series.Adult).StructScan(&updatedSeries); err != nil {
+	`, series.ID, series.TmdbId, series.Title).StructScan(&updatedSeries); err != nil {
 		return err
 	}
 
@@ -160,12 +158,13 @@ func (store *Store) SaveSeason(db dbOrTx, season *Season) error {
 func (store *Store) SaveEpisode(db dbOrTx, episode *Episode) error {
 	var updatedEpisode Episode
 	if err := db.QueryRowx(`
-		INSERT INTO episode(id, tmdb_id, episode_number, title, source_path, season_id, created_at, updated_at)
-		VALUES($1, $2, $3, $4, $5, $6, current_timestamp, current_timestamp)
+		INSERT INTO media(id, type, tmdb_id, episode_number, title, source_path, season_id, adult, created_at, updated_at)
+		VALUES($1, $2, $3, $4, $5, $6, $7, $8, current_timestamp, current_timestamp)
 		ON CONFLICT(tmdb_id) DO UPDATE
-			SET (episode_number, title, source_path, season_id, updated_at) = (EXCLUDED.episode_number, EXCLUDED.title, EXCLUDED.source_path, EXCLUDED.season_id, current_timestamp)
-		RETURNING *
-	`, episode.ID, episode.TmdbId, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.SeasonID).StructScan(&updatedEpisode); err != nil {
+			SET (episode_number, title, source_path, season_id, updated_at, type, adult) =
+				(EXCLUDED.episode_number, EXCLUDED.title, EXCLUDED.source_path, EXCLUDED.season_id, current_timestamp, 'episode', EXCLUDED.adult)
+		RETURNING id, tmdb_id, episode_number, title, source_path, season_id, adult, created_at, updated_at;
+	`, episode.ID, "episode", episode.TmdbId, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.SeasonID, episode.Adult).StructScan(&updatedEpisode); err != nil {
 		return err
 	}
 
@@ -201,12 +200,12 @@ func (store *Store) GetMedia(db *sqlx.DB, mediaID uuid.UUID) *Container {
 
 // GetMovie searches for an existing movie with the Thea PK ID provided.
 func (store *Store) GetMovie(db *sqlx.DB, movieID uuid.UUID) (*Movie, error) {
-	return queryRow[Movie](db, MovieTable, IDCol, movieID)
+	return queryRow[Movie](db, MediaTable, IDCol, movieID)
 }
 
 // GetMovieWithTmdbId searches for an existing movie with the TMDB unique ID provided.
 func (store *Store) GetMovieWithTmdbId(db *sqlx.DB, tmdbID string) (*Movie, error) {
-	return queryRow[Movie](db, MovieTable, TmdbIDCol, tmdbID)
+	return queryRow[Movie](db, MediaTable, TmdbIDCol, tmdbID)
 }
 
 // GetSeries searches for an existing series with the Thea PK ID provided.
@@ -231,23 +230,19 @@ func (store *Store) GetSeasonWithTmdbId(db *sqlx.DB, tmdbID string) (*Season, er
 
 // GetEpisode searches for an existing episode with the Thea PK ID provided.
 func (store *Store) GetEpisode(db *sqlx.DB, episodeID uuid.UUID) (*Episode, error) {
-	return queryRow[Episode](db, EpisodeTable, IDCol, episodeID)
+	return queryRow[Episode](db, MediaTable, IDCol, episodeID)
 }
 
 // GetEpisodeWithTmdbId searches for an existing episode with the TMDB unique ID provided.
 func (store *Store) GetEpisodeWithTmdbId(db *sqlx.DB, tmdbID string) (*Episode, error) {
-	return queryRow[Episode](db, EpisodeTable, TmdbIDCol, tmdbID)
+	return queryRow[Episode](db, MediaTable, TmdbIDCol, tmdbID)
 }
 
 // GetAllSourcePaths returns all the source paths related
 // to media that is currently known to Thea by polling the database.
 func (store *Store) GetAllSourcePaths(db *sqlx.DB) ([]string, error) {
 	var paths []string
-	if err := db.Select(&paths, `
-		SELECT source_path FROM movie
-		UNION
-		SELECT source_path FROM episode
-	`); err != nil {
+	if err := db.Select(&paths, `SELECT source_path FROM media`); err != nil {
 		return nil, err
 	}
 

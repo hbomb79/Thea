@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/floostack/transcoder"
 	"github.com/google/uuid"
@@ -43,14 +44,12 @@ type TranscodeTask struct {
 }
 
 func NewTranscodeTask(outputPath string, m *media.Container, t *ffmpeg.Target) *TranscodeTask {
-	out := fmt.Sprintf("%s/%s.%s", outputPath, t.Label, t.Ext)
-
 	return &TranscodeTask{
 		id:           uuid.New(),
 		media:        m,
 		target:       t,
 		lastProgress: nil,
-		outputPath:   out,
+		outputPath:   fmt.Sprintf("%s/%s.%s", outputPath, t.Label, t.Ext),
 		command:      nil,
 		status:       WAITING,
 	}
@@ -86,9 +85,13 @@ func (task *TranscodeTask) Run(ctx context.Context, updateHandler func(*ffmpeg.P
 
 // Cancel will interrupt any running transcode, cleaning up any partially transcoded output
 // if applicable.
-func (task *TranscodeTask) Cancel() {
+func (task *TranscodeTask) Cancel() error {
 	task.status = CANCELLED
-	// TODO cleanup
+	if task.outputPath == "" {
+		return nil
+	}
+
+	return os.RemoveAll(task.outputPath)
 }
 
 // LastKnownProgress is an accessor function to the latest ffmpeg progress

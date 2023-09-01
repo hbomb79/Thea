@@ -112,7 +112,7 @@ func (cmd *TranscodeCmd) OutputPath() string {
 }
 
 func (cmd *TranscodeCmd) String() string {
-	var pid int = -1
+	pid := -1
 	if cmd.runningCommand != nil {
 		pid = cmd.runningCommand.Process.Pid
 	}

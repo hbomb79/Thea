@@ -1,16 +1,16 @@
 -- +goose Up
 
-CREATE TABLE movie (
-    id UUID NOT NULL PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    tmdb_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    adult BOOLEAN NOT NULL,
-    source_path TEXT NOT NULL,
+--CREATE TABLE movie (
+--    id UUID NOT NULL PRIMARY KEY,
+--    created_at TIMESTAMPTZ NOT NULL,
+--    updated_at TIMESTAMPTZ NOT NULL,
+--    tmdb_id TEXT NOT NULL,
+--    title TEXT NOT NULL,
+--    adult BOOLEAN NOT NULL,
+--    source_path TEXT NOT NULL,
 
-    CONSTRAINT movie_uk_tmdb_id UNIQUE(tmdb_id)
-);
+--    CONSTRAINT movie_uk_tmdb_id UNIQUE(tmdb_id)
+--);
 
 CREATE TABLE series(
     id UUID NOT NULL PRIMARY KEY,
@@ -18,7 +18,6 @@ CREATE TABLE series(
     updated_at TIMESTAMPTZ NOT NULL,
     tmdb_id TEXT NOT NULL,
     title TEXT NOT NULL,
-    adult BOOLEAN NOT NULL,
 
     CONSTRAINT series_uk_tmdb_id UNIQUE(tmdb_id)
 );
@@ -36,19 +35,42 @@ CREATE TABLE season(
     CONSTRAINT season_fk_series_id FOREIGN KEY(series_id) REFERENCES series(id) ON DELETE CASCADE
 );
 
-CREATE TABLE episode(
+--CREATE TABLE episode(
+--    id UUID NOT NULL PRIMARY KEY,
+--    created_at TIMESTAMPTZ NOT NULL,
+--    updated_at TIMESTAMPTZ NOT NULL,
+--    tmdb_id TEXT NOT NULL,
+--    episode_number INT NOT NULL,
+--    title TEXT NOT NULL,
+--    source_path TEXT NOT NULL,
+--    season_id UUID NOT NULL,
+--
+--    CONSTRAINT episode_uk_tmdb_id UNIQUE(tmdb_id),
+--    CONSTRAINT episode_fk_season_id FOREIGN KEY(season_id) REFERENCES season(id) ON DELETE CASCADE
+--);
+
+CREATE TYPE media_type AS ENUM ('movie', 'episode');
+CREATE TABLE media(
     id UUID NOT NULL PRIMARY KEY,
+    type media_type NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
-    tmdb_id TEXT NOT NULL,
-    episode_number INT NOT NULL,
+    tmdb_id TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
+    adult BOOLEAN NOT NULL,
     source_path TEXT NOT NULL,
-    season_id UUID NOT NULL,
 
-    CONSTRAINT episode_uk_tmdb_id UNIQUE(tmdb_id),
-    CONSTRAINT episode_fk_season_id FOREIGN KEY(season_id) REFERENCES season(id) ON DELETE CASCADE
+    -- Nullable columns which must be specified if the media t is episode
+    episode_number INT CHECK (episode_number IS NULL OR episode_number >= 0),
+    season_id UUID,
+
+    CONSTRAINT media_fk_season_id FOREIGN KEY(season_id) REFERENCES season(id) ON DELETE CASCADE,
+    CONSTRAINT valid_media CHECK(
+        type = 'movie' OR
+        type = 'episode' AND episode_number IS NOT NULL AND season_id IS NOT NULL
+    )
 );
+
 
 CREATE TABLE transcode_target(
     id UUID NOT NULL PRIMARY KEY,
@@ -78,6 +100,7 @@ CREATE TABLE workflow_criteria(
     match_combine_type INT NOT NULL,
     match_value TEXT NOT NULL,
     workflow_id UUID NOT NULL,
+    label TEXT NOT NULL,
 
     CONSTRAINT workflow_criteria_fk_workflow_id FOREIGN KEY(workflow_id) REFERENCES workflow(id) ON DELETE CASCADE,
     CONSTRAINT workflow_criteria_uk_workflow_label UNIQUE(workflow_id, label)
@@ -90,4 +113,14 @@ CREATE TABLE workflow_transcode_targets(
 
     CONSTRAINT workflow_transcode_targets_fk_workflow_id FOREIGN KEY(workflow_id) REFERENCES workflow(id) ON DELETE CASCADE,
     CONSTRAINT workflow_transcode_targets_fk_transcode_target_id FOREIGN KEY(transcode_target_id) REFERENCES transcode_target(id) ON DELETE CASCADE
+);
+
+CREATE TABLE media_transcodes(
+    id UUID NOT NULL PRIMARY KEY,
+    media_id UUID NOT NULL,
+    transcode_target_id UUID NOT NULL,
+    path TEXT NOT NULL,
+
+    CONSTRAINT media_transcodes_fk_media_id FOREIGN KEY(media_id) REFERENCES media(id),
+    CONSTRAINT media_transcodes_fk_transcode_target_id FOREIGN KEY(transcode_target_id) REFERENCES workflow_transcode_targets(id)
 );

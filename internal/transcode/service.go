@@ -219,9 +219,8 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 
 	if task.status == COMPLETE {
 		if err := service.dataStore.SaveTranscode(task); err != nil {
-			// Failed to save
 			// TODO: implement a retry logic here because otherwise this transcode is lost
-			log.Emit(logger.ERROR, "failed to save transcode %s due to error: %v\n", task, err)
+			log.Errorf("failed to save transcode %s due to error: %v\n", task, err)
 		}
 	}
 

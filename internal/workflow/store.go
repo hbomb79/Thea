@@ -40,7 +40,7 @@ type (
 // criteria table and workflow_target join table rows as needed.
 func (store *Store) Create(db *sqlx.DB, workflowID uuid.UUID, label string, enabled bool, targetIDs []uuid.UUID, criteria []match.Criteria) error {
 	fail := func(desc string, err error) error {
-		return fmt.Errorf("failed to %s due to error: %w", desc, err)
+		return fmt.Errorf("failed to %s: %w", desc, err)
 	}
 
 	return database.WrapTx(db, func(tx *sqlx.Tx) error {

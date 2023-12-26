@@ -59,6 +59,7 @@ type (
 		GetIngest(ingestID uuid.UUID) *ingest.IngestItem
 		GetAllIngests() []*ingest.IngestItem
 		DiscoverNewFiles()
+		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
 	}
 
 	// Thea represents the top-level object for the server, and is responsible

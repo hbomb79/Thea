@@ -148,7 +148,9 @@ func (service *ingestService) Run(ctx context.Context) error {
 
 			if injestID, ok := message.Payload.(uuid.UUID); ok {
 				log.Emit(logger.DEBUG, "ingest with ID %s has completed - removing\n", injestID)
-				service.RemoveIngest(injestID)
+				if err := service.RemoveIngest(injestID); err != nil {
+					log.Errorf("Unable to remove ingest (id: %s): %s\n", injestID, err)
+				}
 			} else {
 				log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
 			}
@@ -172,17 +174,19 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 	log.Emit(logger.DEBUG, "Item %s claimed by worker %s for ingestion\n", item, w)
 	time.Sleep(time.Second * 1)
 	if err := item.ingest(service.eventBus, service.scraper, service.searcher, service.dataStore); err != nil {
-		if trbl, ok := err.(IngestItemTrouble); ok {
+		if trbl, ok := err.(Trouble); ok {
 			item.Trouble = &trbl
 			item.State = TROUBLED
 
-			log.Emit(logger.ERROR, "Ingestion of item %s failed due to error %s - Trouble (%s) raised!\n", item, trbl.Error(), trbl.Type)
+			log.Emit(logger.ERROR, "Ingestion of item %s failed due to error %s - Trouble (%T) raised!\n", item, trbl.Error(), trbl)
 		} else {
+			log.Emit(logger.FATAL, "Ingestion of item %s returned an unexpected error (%#v) (not a trouble)! Worker will crash\n", item, err)
 			return false, err
 		}
 	} else {
 		log.Emit(logger.SUCCESS, "Ingestion of item %s complete!\n", item)
-		service.eventBus.Dispatch(event.INGEST_COMPLETE, item.Id)
+		item.State = COMPLETE
+		service.eventBus.Dispatch(event.INGEST_COMPLETE, item.ID)
 	}
 
 	return false, nil
@@ -233,7 +237,7 @@ func (service *ingestService) DiscoverNewFiles() {
 		}
 
 		ingestItem := &IngestItem{
-			Id:    itemID,
+			ID:    itemID,
 			Path:  itemPath,
 			State: itemState,
 		}
@@ -261,7 +265,7 @@ func (service *ingestService) RemoveIngest(itemID uuid.UUID) error {
 	defer service.Unlock()
 
 	for k, v := range service.items {
-		if v.Id == itemID {
+		if v.ID == itemID {
 			// Remove item from service
 			if v.State == INGESTING {
 				return fmt.Errorf("cannot remove item %v as a worker is currently ingesting it", itemID)
@@ -278,7 +282,7 @@ func (service *ingestService) RemoveIngest(itemID uuid.UUID) error {
 // in the services queue. If it cannot be found, nil is returned.
 func (service *ingestService) GetIngest(itemID uuid.UUID) *IngestItem {
 	for _, item := range service.items {
-		if item.Id == itemID {
+		if item.ID == itemID {
 			return item
 		}
 	}
@@ -286,13 +290,37 @@ func (service *ingestService) GetIngest(itemID uuid.UUID) *IngestItem {
 	return nil
 }
 
-func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method string, context map[string]string) error {
+func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method ResolutionType, context map[string]string) error {
 	item := service.GetIngest(itemID)
 	if item == nil {
 		return errors.New("ingest with ID provided does not exist")
 	}
 
-	return item.ResolveTrouble(method, context)
+	if item.Trouble == nil || item.State != IDLE {
+		return ErrNoTrouble
+	}
+
+	res, err := item.Trouble.GenerateResolution(method, context)
+	if res == nil || err != nil {
+		return ErrResolutionIncompatible
+	}
+
+	// TODO think about thread safety
+	switch v := res.(type) {
+	case *AbortResolution:
+		service.RemoveIngest(item.ID)
+	case *RetryResolution:
+		item.State = IDLE
+		item.Trouble = nil
+	case *TmdbIDResolution:
+		item.State = IDLE
+		item.Trouble = nil
+		item.OverrideTmdbID = &v.tmdbID
+	default:
+		return fmt.Errorf("trouble resolution type of %T was not expected. This is likely a bug/should be unreachable", res)
+	}
+
+	return nil
 }
 
 // AllItems returns a pointer to the array containing all

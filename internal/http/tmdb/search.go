@@ -276,10 +276,10 @@ func httpGetJsonResponse(urlPath string, targetInterface interface{}) error {
 	if resp.StatusCode != http.StatusOK {
 		var tmdbError tmdbError
 		if err := json.NewDecoder(resp.Body).Decode(&tmdbError); err != nil {
-			return &FailedRequestError{httpCode: resp.StatusCode, message: "non-OK response could not be unmarshalled", tmdbCode: -1}
+			return &FailedRequestError{HttpCode: resp.StatusCode, Message: "non-OK response could not be unmarshalled", TmdbCode: -1}
 		}
 
-		return &FailedRequestError{httpCode: resp.StatusCode, message: tmdbError.StatusMessage, tmdbCode: tmdbError.StatusCode}
+		return &FailedRequestError{HttpCode: resp.StatusCode, Message: tmdbError.StatusMessage, TmdbCode: tmdbError.StatusCode}
 	}
 
 	if err != nil {
@@ -299,24 +299,24 @@ type (
 		StatusMessage string `json:"status_message"`
 	}
 	FailedRequestError struct {
-		httpCode int
-		tmdbCode int
-		message  string
+		HttpCode int
+		TmdbCode int
+		Message  string
 	}
 	NoResultError       struct{}
-	MultipleResultError struct{ results []SearchResultItem }
-	UnknownRequestError struct{ reason string }
-	IllegalRequestError struct{ reason string }
+	MultipleResultError struct{ Results []SearchResultItem }
+	UnknownRequestError struct{ Reason string }
+	IllegalRequestError struct{ Reason string }
 )
 
 func (err *UnknownRequestError) Error() string {
-	return fmt.Sprintf("unknown error occurred while communicating with TMDB: %s", err.reason)
+	return fmt.Sprintf("unknown error occurred while communicating with TMDB: %s", err.Reason)
 }
 func (err *IllegalRequestError) Error() string {
-	return fmt.Sprintf("illegal search request because %s", err.reason)
+	return fmt.Sprintf("illegal search request because %s", err.Reason)
 }
 func (err *FailedRequestError) Error() string {
-	return fmt.Sprintf("Request failure (HTTP %d): %s", err.httpCode, err.message)
+	return fmt.Sprintf("Request failure (HTTP %d): %s", err.HttpCode, err.Message)
 }
 func (err *NoResultError) Error() string       { return "no results returned from TMDB" }
 func (err *MultipleResultError) Error() string { return "too many results returned from TMDB" }

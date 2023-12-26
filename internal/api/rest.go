@@ -82,7 +82,7 @@ func NewRestGateway(
 		config:              config,
 		ec:                  ec,
 		socket:              socket,
-		ingestController:    ingests.New(validate, ingestService),
+		ingestController:    ingests.New(validate, ingestService, log),
 		transcodeController: transcodes.New(validate, transcodeService, store),
 		targetsController:   targets.New(validate, store),
 		workflowController:  workflows.New(validate, store),

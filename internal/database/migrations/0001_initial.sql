@@ -1,17 +1,5 @@
 -- +goose Up
 
---CREATE TABLE movie (
---    id UUID NOT NULL PRIMARY KEY,
---    created_at TIMESTAMPTZ NOT NULL,
---    updated_at TIMESTAMPTZ NOT NULL,
---    tmdb_id TEXT NOT NULL,
---    title TEXT NOT NULL,
---    adult BOOLEAN NOT NULL,
---    source_path TEXT NOT NULL,
-
---    CONSTRAINT movie_uk_tmdb_id UNIQUE(tmdb_id)
---);
-
 CREATE TABLE series(
     id UUID NOT NULL PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL,
@@ -34,20 +22,6 @@ CREATE TABLE season(
     CONSTRAINT season_uk_tmdb_id UNIQUE(tmdb_id),
     CONSTRAINT season_fk_series_id FOREIGN KEY(series_id) REFERENCES series(id) ON DELETE CASCADE
 );
-
---CREATE TABLE episode(
---    id UUID NOT NULL PRIMARY KEY,
---    created_at TIMESTAMPTZ NOT NULL,
---    updated_at TIMESTAMPTZ NOT NULL,
---    tmdb_id TEXT NOT NULL,
---    episode_number INT NOT NULL,
---    title TEXT NOT NULL,
---    source_path TEXT NOT NULL,
---    season_id UUID NOT NULL,
---
---    CONSTRAINT episode_uk_tmdb_id UNIQUE(tmdb_id),
---    CONSTRAINT episode_fk_season_id FOREIGN KEY(season_id) REFERENCES season(id) ON DELETE CASCADE
---);
 
 CREATE TYPE media_type AS ENUM ('movie', 'episode');
 CREATE TABLE media(

@@ -122,5 +122,5 @@ CREATE TABLE media_transcodes(
     path TEXT NOT NULL,
 
     CONSTRAINT media_transcodes_fk_media_id FOREIGN KEY(media_id) REFERENCES media(id),
-    CONSTRAINT media_transcodes_fk_transcode_target_id FOREIGN KEY(transcode_target_id) REFERENCES workflow_transcode_targets(id)
+    CONSTRAINT media_transcodes_fk_transcode_target_id FOREIGN KEY(transcode_target_id) REFERENCES transcode_target(id)
 );

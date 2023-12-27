@@ -61,7 +61,7 @@ func New(config Config, eventBus event.EventCoordinator, dataStore DataStore) (*
 		tasks:       make([]*TranscodeTask, 0),
 		eventBus:    eventBus,
 		dataStore:   dataStore,
-		queueChange: make(chan bool),
+		queueChange: make(chan bool, 2),
 		taskChange:  make(chan uuid.UUID),
 	}, nil
 }
@@ -165,7 +165,7 @@ func (service *transcodeService) CancelTask(id uuid.UUID) error {
 	}
 
 	if err := task.Cancel(); err != nil {
-		return err
+		return fmt.Errorf("failed to cancel task %s: %w", task, err)
 	}
 
 	if !isBeingMonitored {
@@ -213,13 +213,15 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 			}
 
 			taskToStart.status = WORKING
-			service.taskChange <- taskToStart.id
 			log.Emit(logger.DEBUG, "Starting task %s, consuming %d threads\n", taskToStart, threadCost)
 			if err := taskToStart.Run(ctx, updateHandler); err != nil {
-				log.Emit(logger.ERROR, "Task %s has concluded with error: %v\n", err)
+				log.Emit(logger.WARNING, "Task %s has concluded with error: %v\n", taskToStart, err)
 			} else {
 				log.Emit(logger.DEBUG, "Task %s has concluded nominally\n", taskToStart)
 			}
+
+			// Submit an update to ensure completed/cancelled tasks are correctly dealt with
+			service.taskChange <- taskToStart.id
 
 			service.Lock()
 			defer service.Unlock()
@@ -240,13 +242,13 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 		if err := service.dataStore.SaveTranscode(task); err != nil {
 			// TODO: implement a retry logic here because otherwise this transcode is lost
 			log.Errorf("failed to save transcode %s due to error: %v\n", task, err)
+		} else {
+			service.eventBus.Dispatch(event.TRANSCODE_COMPLETE, taskId)
 		}
 	}
 
 	if task.status == CANCELLED || task.status == COMPLETE {
 		service.removeTaskFromQueue(task.id)
-		service.eventBus.Dispatch(event.TRANSCODE_COMPLETE, taskId)
-
 		return
 	}
 

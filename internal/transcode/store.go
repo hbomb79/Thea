@@ -29,9 +29,9 @@ type (
 func (store *Store) SaveTranscode(db *sqlx.DB, task *TranscodeTask) error {
 	// TODO timestamp columns (created_at, updated_at)
 	if _, err := db.Exec(`
-		INSERT INTO media_transcodes(id, media_id, target_id, path)
+		INSERT INTO media_transcodes(id, media_id, transcode_target_id, path)
 		VALUES ($1, $2, $3, $4)`,
-		task.id, task.media.Id(), task.target.ID,
+		task.id, task.media.Id(), task.target.ID, task.OutputPath(),
 	); err != nil {
 		return fmt.Errorf("failed to create transcode row: %w", err)
 	}
@@ -54,7 +54,7 @@ func (store *Store) GetAll(db *sqlx.DB) ([]*Transcode, error) {
 // Get ...
 func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Transcode {
 	dest := &Transcode{}
-	if err := db.Get(dest, `SELECT * FROM media_transcodes WHERE w.id=$1`, id); err != nil {
+	if err := db.Get(dest, `SELECT * FROM media_transcodes WHERE id=$1`, id); err != nil {
 		log.Warnf("Failed to find transcode with id=%s: %v\n", id, err)
 		return nil
 	}

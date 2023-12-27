@@ -29,7 +29,7 @@ CREATE TABLE media(
     type media_type NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
-    tmdb_id TEXT NOT NULL UNIQUE,
+    tmdb_id TEXT NOT NULL,
     title TEXT NOT NULL,
     adult BOOLEAN NOT NULL,
     source_path TEXT NOT NULL,
@@ -38,10 +38,13 @@ CREATE TABLE media(
     episode_number INT CHECK (episode_number IS NULL OR episode_number >= 0),
     season_id UUID,
 
+    -- TMDB IDs are only unique in their category (movie/tv), so only enforce uniqueness
+    -- when the type matches too
+    CONSTRAINT media_uk_tmdb_id_type UNIQUE(tmdb_id, type),
     CONSTRAINT media_fk_season_id FOREIGN KEY(season_id) REFERENCES season(id) ON DELETE CASCADE,
     CONSTRAINT valid_media CHECK(
-        type = 'movie' OR
-        type = 'episode' AND episode_number IS NOT NULL AND season_id IS NOT NULL
+        (type = 'movie' AND episode_number IS NULL AND season_id IS NULL) OR
+        (type = 'episode' AND episode_number IS NOT NULL AND season_id IS NOT NULL)
     )
 );
 
@@ -74,10 +77,8 @@ CREATE TABLE workflow_criteria(
     match_combine_type INT NOT NULL,
     match_value TEXT NOT NULL,
     workflow_id UUID NOT NULL,
-    label TEXT NOT NULL,
 
-    CONSTRAINT workflow_criteria_fk_workflow_id FOREIGN KEY(workflow_id) REFERENCES workflow(id) ON DELETE CASCADE,
-    CONSTRAINT workflow_criteria_uk_workflow_label UNIQUE(workflow_id, label)
+    CONSTRAINT workflow_criteria_fk_workflow_id FOREIGN KEY(workflow_id) REFERENCES workflow(id) ON DELETE CASCADE
 );
 
 CREATE TABLE workflow_transcode_targets(

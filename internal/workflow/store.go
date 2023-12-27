@@ -47,7 +47,7 @@ func (store *Store) Create(db *sqlx.DB, workflowID uuid.UUID, label string, enab
 		if _, err := tx.Exec(`
 			INSERT INTO workflow(id, created_at, updated_at, enabled, label)
 			VALUES ($1, current_timestamp, current_timestamp, $2, $3)`,
-			workflowID, label, enabled); err != nil {
+			workflowID, enabled, label); err != nil {
 			return fail("create workflow row", err)
 		}
 

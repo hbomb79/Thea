@@ -51,7 +51,7 @@ func newTrouble(err error) Trouble {
 	case *tmdb.NoResultError:
 		return Trouble{error: err, tType: TMDB_FAILURE_NONE}
 	case *tmdb.MultipleResultError:
-		return Trouble{error: err, tType: TMDB_FAILURE_MULTI, choices: &err.Results}
+		return Trouble{error: err, tType: TMDB_FAILURE_MULTI, choices: err.Choices()}
 	case *tmdb.IllegalRequestError:
 		return Trouble{error: err, tType: TMDB_FAILURE_UNKNOWN}
 	}

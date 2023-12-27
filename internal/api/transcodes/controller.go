@@ -23,7 +23,7 @@ type (
 		TargetId     uuid.UUID                     `json:"target_id"`
 		OutputPath   string                        `json:"output_path"`
 		Status       transcode.TranscodeTaskStatus `json:"status"`
-		LastProgress *ffmpeg.Progress              `json:"last_progress"`
+		LastProgress *ffmpeg.Progress              `json:"last_progress,omitempty"`
 	}
 
 	Service interface {
@@ -142,11 +142,12 @@ func (controller *Controller) stream(ec echo.Context) error {
 
 func NewDtoFromModel(model *transcode.Transcode) transcodeDto {
 	return transcodeDto{
-		ID:         model.Id,
-		MediaID:    model.MediaID,
-		TargetId:   model.TargetID,
-		OutputPath: model.MediaPath,
-		Status:     transcode.COMPLETE,
+		ID:           model.Id,
+		MediaID:      model.MediaID,
+		TargetId:     model.TargetID,
+		OutputPath:   model.MediaPath,
+		Status:       transcode.COMPLETE,
+		LastProgress: nil,
 	}
 }
 

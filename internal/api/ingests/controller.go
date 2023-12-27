@@ -73,7 +73,7 @@ const (
 	GENERIC_FAILURE      TroubleTypeDto = "GENERIC_FAILURE"
 )
 
-func New(validate *validator.Validate, serv Service, logger logger.Logger) *Controller {
+func New(validate *validator.Validate, serv Service) *Controller {
 	return &Controller{Service: serv}
 }
 

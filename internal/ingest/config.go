@@ -1,6 +1,11 @@
 package ingest
 
-import "time"
+import (
+	"time"
+
+	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/mitchellh/go-homedir"
+)
 
 // Config contains configuration options that allow
 // customization of how Thea detects files to auto-ingest.
@@ -34,4 +39,14 @@ type Config struct {
 
 func (config *Config) RequiredModTimeAgeDuration() time.Duration {
 	return time.Duration(config.RequiredModTimeAgeSeconds) * time.Second
+}
+
+func (config *Config) GetIngestPath() string {
+	out, err := homedir.Expand(config.IngestPath)
+	if err != nil {
+		logger.Get("Config").Emit(logger.ERROR, "Failed to expand ingestion path (%s): %v {will use provided path un-expanded}\n", config.IngestPath, err)
+		return config.IngestPath
+	}
+
+	return out
 }

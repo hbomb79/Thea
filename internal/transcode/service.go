@@ -21,6 +21,7 @@ type (
 		GetAllWorkflows() []*workflow.Workflow
 		GetMedia(uuid.UUID) *media.Container
 		GetTarget(uuid.UUID) *ffmpeg.Target
+		GetForMediaAndTarget(uuid.UUID, uuid.UUID) (*Transcode, error)
 	}
 
 	// transcodeService is Thea's solution to pre-transcoding of user media.
@@ -60,7 +61,7 @@ func New(config Config, eventBus event.EventCoordinator, dataStore DataStore) (*
 		tasks:       make([]*TranscodeTask, 0),
 		eventBus:    eventBus,
 		dataStore:   dataStore,
-		queueChange: make(chan bool),
+		queueChange: make(chan bool, 2),
 		taskChange:  make(chan uuid.UUID),
 	}, nil
 }
@@ -125,7 +126,7 @@ func (service *transcodeService) Task(id uuid.UUID) *TranscodeTask {
 // TaskForMediaAndTarget searches through all the tasks in this service and looks for one
 // which was created for the media and target matching the IDs provided. If no such task exists
 // then nil is returned.
-func (service *transcodeService) TaskForMediaAndTarget(mediaId uuid.UUID, targetId uuid.UUID) *TranscodeTask {
+func (service *transcodeService) ActiveTaskForMediaAndTarget(mediaId uuid.UUID, targetId uuid.UUID) *TranscodeTask {
 	for _, t := range service.tasks {
 		if t.media.Id() == mediaId && t.target.ID == targetId {
 			return t
@@ -155,16 +156,26 @@ func (service *transcodeService) NewTask(mediaId uuid.UUID, targetId uuid.UUID) 
 
 // CancelTask will find the transcode task with the ID provided and cancel it. If the task
 // is not in a cancellable state, it will simply be removed from the service.
-func (service *transcodeService) CancelTask(id uuid.UUID) {
+func (service *transcodeService) CancelTask(id uuid.UUID) error {
 	task := service.Task(id)
 	isBeingMonitored := task.Status() == WORKING
 
-	task.Cancel()
+	if task == nil {
+		return fmt.Errorf("no task with ID %s", id)
+	}
+
+	if err := task.Cancel(); err != nil {
+		return fmt.Errorf("failed to cancel task %s: %w", task, err)
+	}
+
 	if !isBeingMonitored {
 		// Manually remove from the queue because the task was not being
 		// monitored by the service at the time of it's cancellation.
 		service.removeTaskFromQueue(id)
 	}
+
+	log.Emit(logger.STOP, "Task %s cancelled and cleaned up\n", task)
+	return nil
 }
 
 // startWaitingTasks finds any transcode items that are waiting to be started will be started, and any that are
@@ -192,19 +203,29 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 
 		service.consumedThreads += requiredBudget
 		service.taskWg.Add(1)
-		go func(taskToStart *TranscodeTask, wg *sync.WaitGroup, budget int) {
+		go func(taskToStart *TranscodeTask, wg *sync.WaitGroup, threadCost int) {
 			defer wg.Done()
 
-			updateHandler := func(_ *ffmpeg.Progress) {
+			updateHandler := func(prog *ffmpeg.Progress) {
+				taskToStart.lastProgress = prog
 				service.taskChange <- taskToStart.id
+				fmt.Printf("\rTask %s transcode progress: %d%%", taskToStart.Id(), int(prog.Progress))
 			}
 
+			taskToStart.status = WORKING
+			log.Emit(logger.DEBUG, "Starting task %s, consuming %d threads\n", taskToStart, threadCost)
+			if err := taskToStart.Run(ctx, updateHandler); err != nil {
+				log.Emit(logger.WARNING, "Task %s has concluded with error: %v\n", taskToStart, err)
+			} else {
+				log.Emit(logger.DEBUG, "Task %s has concluded nominally\n", taskToStart)
+			}
+
+			// Submit an update to ensure completed/cancelled tasks are correctly dealt with
 			service.taskChange <- taskToStart.id
-			taskToStart.Run(ctx, updateHandler)
 
 			service.Lock()
 			defer service.Unlock()
-			service.consumedThreads -= budget
+			service.consumedThreads -= threadCost
 		}(task, service.taskWg, requiredBudget)
 	}
 }
@@ -219,16 +240,15 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 
 	if task.status == COMPLETE {
 		if err := service.dataStore.SaveTranscode(task); err != nil {
-			// Failed to save
 			// TODO: implement a retry logic here because otherwise this transcode is lost
-			log.Emit(logger.ERROR, "failed to save transcode %s due to error: %v\n", task, err)
+			log.Errorf("failed to save transcode %s due to error: %v\n", task, err)
+		} else {
+			service.eventBus.Dispatch(event.TRANSCODE_COMPLETE, taskId)
 		}
 	}
 
 	if task.status == CANCELLED || task.status == COMPLETE {
 		service.removeTaskFromQueue(task.id)
-		service.eventBus.Dispatch(event.TRANSCODE_COMPLETE, taskId)
-
 		return
 	}
 
@@ -250,30 +270,43 @@ func (service *transcodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) 
 				}
 			}
 
+			log.Emit(logger.NEW, "Media %s met the conditions of workflow %s. Automated transcodes queued\n", mediaId)
 			return
 		}
 	}
 
-	// TODO: Maybe we log a notification or something about not being able to find an eligible
+	// TODO: Maybe we create some sort of a notification or something about not being able to find an eligible
 	//		 workflow? I could see that being useful.
+	log.Emit(logger.WARNING, "Media %s did not meet the conditions of any known workflows. No automated transcoding will occur\n", mediaId)
 }
 
 // spawnFfmpegTarget will create a new transcode task assigned to the media and target provided,
 // and add the task to the services queue in an 'IDLE' state.
-// An error is returned if a task for this media+target already exists.
+// An error is returned if a task for this media+target already exists, whether completed (in DB) or active
 // Note: This function does not START the transcoding, it only creates the task and adds it to the
 // processing queue.
 func (service *transcodeService) spawnFfmpegTarget(m *media.Container, target *ffmpeg.Target) error {
 	service.Lock()
 	defer service.Unlock()
 
-	if existing := service.TaskForMediaAndTarget(m.Id(), target.ID); existing != nil {
-		return fmt.Errorf("task for media %s and target %s already exists", m.Id(), target.ID)
+	if existing := service.ActiveTaskForMediaAndTarget(m.Id(), target.ID); existing != nil {
+		return fmt.Errorf("an active task for media %s and target %s already exists", m.Id(), target.ID)
 	}
 
-	newTask := NewTranscodeTask(service.config.OutputPath, m, target)
-	service.tasks = append(service.tasks, newTask)
+	if existing, _ := service.dataStore.GetForMediaAndTarget(m.Id(), target.ID); existing != nil {
+		return fmt.Errorf("a completed task for media %s and target %s already exists", m.Id(), target.ID)
+	}
 
+	newTask, err := NewTranscodeTask(service.config.OutputPath, m, target, ffmpeg.Config{
+		FfmpegBinPath:       service.config.FfmpegBinaryPath,
+		FfprobeBinPath:      service.config.FfprobeBinaryPath,
+		OutputBaseDirectory: service.config.OutputPath,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create new transcode task: %w", err)
+	}
+
+	service.tasks = append(service.tasks, newTask)
 	service.queueChange <- true
 	return nil
 }

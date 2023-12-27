@@ -15,19 +15,19 @@ type (
 		Id    uuid.UUID    `json:"id"`
 		Label string       `json:"label"`
 		Ext   string       `json:"extension"`
-		Opts  *ffmpeg.Opts `json:"ffmpeg_opts"`
+		Opts  *ffmpeg.Opts `json:"ffmpeg_options"`
 	}
 
 	CreateRequest struct {
 		Label string      `json:"label" validate:"required,alphaNumericWhitespaceTrimmed"`
 		Ext   string      `json:"extension" validate:"required,alphanum"`
-		Opts  ffmpeg.Opts `json:"ffmpeg_opts" validate:"required"`
+		Opts  ffmpeg.Opts `json:"ffmpeg_options" validate:"required"`
 	}
 
 	UpdateRequest struct {
 		Label *string      `json:"label" validate:"omitempty,alphaNumericWhitespaceTrimmed"`
 		Ext   *string      `json:"extension" validate:"omitempty,alphanum"`
-		Opts  *ffmpeg.Opts `json:"ffmpeg_opts"`
+		Opts  *ffmpeg.Opts `json:"ffmpeg_options"`
 	}
 
 	Store interface {

@@ -55,7 +55,7 @@ func NewDockerManager() DockerManager {
 		Driver:         "bridge",
 	})
 	if err != nil {
-		panic(err)
+		dockerLogger.Emit(logger.WARNING, "Failed to create docker container network: %v. This is usually safe to ignore if the error is due to the network already existing, however other errors should be investigated\n", err)
 	}
 
 	broker := broker.NewBroker[*dockerContainerStatus]()

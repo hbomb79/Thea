@@ -5,10 +5,14 @@ import (
 	"github.com/hbomb79/Thea/internal/media"
 )
 
-func TmdbEpisodeToMedia(ep *Episode, metadata *media.FileMediaMetadata) *media.Episode {
+func TmdbEpisodeToMedia(ep *Episode, isSeasonAdult bool, metadata *media.FileMediaMetadata) *media.Episode {
 	return &media.Episode{
-		Model:         media.Model{ID: uuid.New(), TmdbId: ep.Id.String(), Title: ep.Name},
-		Watchable:     mediaMetadataToWatchable(metadata),
+		Model: media.Model{ID: uuid.New(), TmdbId: ep.Id.String(), Title: ep.Name},
+		Watchable: media.Watchable{
+			MediaResolution: media.MediaResolution{Width: *metadata.FrameW, Height: *metadata.FrameH},
+			SourcePath:      metadata.Path,
+			Adult:           isSeasonAdult,
+		},
 		EpisodeNumber: metadata.EpisodeNumber,
 	}
 }
@@ -16,7 +20,6 @@ func TmdbEpisodeToMedia(ep *Episode, metadata *media.FileMediaMetadata) *media.E
 func TmdbSeriesToMedia(series *Series) *media.Series {
 	return &media.Series{
 		Model: media.Model{ID: uuid.New(), TmdbId: series.Id.String(), Title: series.Name},
-		Adult: series.Adult,
 	}
 }
 
@@ -28,15 +31,11 @@ func TmdbSeasonToMedia(season *Season) *media.Season {
 
 func TmdbMovieToMedia(movie *Movie, metadata *media.FileMediaMetadata) *media.Movie {
 	return &media.Movie{
-		Model:     media.Model{ID: uuid.New(), TmdbId: movie.Id.String(), Title: movie.Name},
-		Watchable: mediaMetadataToWatchable(metadata),
-		Adult:     movie.Adult,
-	}
-}
-
-func mediaMetadataToWatchable(metadata *media.FileMediaMetadata) media.Watchable {
-	return media.Watchable{
-		MediaResolution: media.MediaResolution{Width: *metadata.FrameW, Height: *metadata.FrameH},
-		SourcePath:      metadata.Path,
+		Model: media.Model{ID: uuid.New(), TmdbId: movie.Id.String(), Title: movie.Name},
+		Watchable: media.Watchable{
+			MediaResolution: media.MediaResolution{Width: *metadata.FrameW, Height: *metadata.FrameH},
+			SourcePath:      metadata.Path,
+			Adult:           movie.Adult,
+		},
 	}
 }

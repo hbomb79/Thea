@@ -14,13 +14,25 @@ import (
 	"github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/mitchellh/go-homedir"
 )
 
 var log = logger.Get("FFmpeg")
 
 type Config struct {
-	FfmpegBinPath  string
-	FfprobeBinPath string
+	FfmpegBinPath       string
+	FfprobeBinPath      string
+	OutputBaseDirectory string
+}
+
+func (config *Config) GetOutputBaseDirectory() string {
+	out, err := homedir.Expand(config.OutputBaseDirectory)
+	if err != nil {
+		log.Errorf("Failed to expand transcode base output path (%s): %v {will use provided path un-expanded}\n", config.OutputBaseDirectory, err)
+		return config.OutputBaseDirectory
+	}
+
+	return out
 }
 
 type Progress struct {
@@ -34,11 +46,11 @@ type Progress struct {
 type TranscodeCmd struct {
 	inputPath       string
 	outputPath      string
-	transcodeConfig *Config
+	transcodeConfig Config
 	runningCommand  *exec.Cmd
 }
 
-func NewCmd(input string, output string, config *Config) *TranscodeCmd {
+func NewCmd(input string, output string, config Config) *TranscodeCmd {
 	return &TranscodeCmd{input, output, config, nil}
 }
 
@@ -112,7 +124,7 @@ func (cmd *TranscodeCmd) OutputPath() string {
 }
 
 func (cmd *TranscodeCmd) String() string {
-	var pid int = -1
+	pid := -1
 	if cmd.runningCommand != nil {
 		pid = cmd.runningCommand.Process.Pid
 	}

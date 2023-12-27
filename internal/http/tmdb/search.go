@@ -318,5 +318,6 @@ func (err *IllegalRequestError) Error() string {
 func (err *FailedRequestError) Error() string {
 	return fmt.Sprintf("Request failure (HTTP %d): %s", err.httpCode, err.message)
 }
-func (err *NoResultError) Error() string       { return "no results returned from TMDB" }
-func (err *MultipleResultError) Error() string { return "too many results returned from TMDB" }
+func (err *NoResultError) Error() string                      { return "no results returned from TMDB" }
+func (err *MultipleResultError) Error() string                { return "too many results returned from TMDB" }
+func (err *MultipleResultError) Choices() *[]SearchResultItem { return &err.results }

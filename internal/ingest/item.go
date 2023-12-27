@@ -14,19 +14,19 @@ import (
 )
 
 type (
-	TroubleType       int
-	IngestItemTrouble struct {
-		error
-		Type TroubleType
+	TroubleResolution struct {
+		method  ResolutionType
+		context map[string]any
 	}
+
 	IngestItemState int
 	IngestItem      struct {
-		Id      uuid.UUID
-		Path    string
-		State   IngestItemState
-		Trouble *IngestItemTrouble
-
+		ID              uuid.UUID
+		Path            string
+		State           IngestItemState
+		Trouble         *Trouble
 		ScrapedMetadata *media.FileMediaMetadata
+		OverrideTmdbID  *string
 	}
 )
 
@@ -36,17 +36,14 @@ const (
 	INGESTING
 	TROUBLED
 	COMPLETE
-
-	METADATA_FAILURE TroubleType = iota
-	TMDB_FAILURE_UNKNOWN
-	TMDB_FAILURE_MULTI
-	TMDB_FAILURE_NONE
-	GENERIC_FAILURE
 )
 
-func (item *IngestItem) ResolveTrouble(method string, context map[string]string) error {
-	return nil
-}
+var (
+	ErrNoTrouble                     = errors.New("ingestion has no trouble")
+	ErrResolutionIncompatible        = errors.New("provided resolution method is not valid for ingestion trouble")
+	ErrResolutionIncomplete          = errors.New("provided resolution context is missing information required to resolve the trouble")
+	ErrResolutionContextIncompatible = errors.New("trouble resolution failed, consult logs for further information")
+)
 
 // ingest is the main task for an ingest task which:
 // - Scrapes the metadata from the file
@@ -57,57 +54,86 @@ func (item *IngestItem) ResolveTrouble(method string, context map[string]string)
 func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper, searcher searcher, data DataStore) error {
 	log.Emit(logger.NEW, "Beginning ingestion of item %s\n", item)
 	if item.ScrapedMetadata == nil {
-		log.Emit(logger.DEBUG, "Performing file system metadata scrape\n")
+		log.Emit(logger.DEBUG, "Performing file system scrape of %s\n", item.Path)
 		if meta, err := scraper.ScrapeFileForMediaInfo(item.Path); err != nil {
-			return IngestItemTrouble{err, METADATA_FAILURE}
+			return Trouble{error: err, tType: METADATA_FAILURE}
 		} else if meta == nil {
-			return IngestItemTrouble{errors.New("metadata scraping returned no error, but also returned nil"), METADATA_FAILURE}
+			return Trouble{error: errors.New("metadata scrape returned no error, but nil payload received"), tType: METADATA_FAILURE}
 		} else {
-			log.Emit(logger.DEBUG, "Scrape for item %s complete:\n%#v\n", item, meta)
+			log.Emit(logger.DEBUG, "Scraped metadata for item %s:\n%#v\n", item, meta)
 			item.ScrapedMetadata = meta
 		}
 	}
 
-	log.Emit(logger.DEBUG, "Performing TMDB search\n")
 	meta := item.ScrapedMetadata
 	if item.ScrapedMetadata.Episodic {
-		series, err := searcher.SearchForSeries(meta)
-		if err != nil {
-			return handleSearchError(err)
+		var series *tmdb.Series = nil
+		if item.OverrideTmdbID != nil {
+			// This item WAS troubled, but a resolution has provided a new value for the TMDB ID which we should use now.
+			tmdbID := *item.OverrideTmdbID
+			item.OverrideTmdbID = nil
+
+			log.Emit(logger.INFO, "Retrying ingestion item %s with provided TMDB ID override (from trouble resolution) of %s\n", item, tmdbID)
+			if found, err := searcher.GetSeries(tmdbID); err != nil {
+				return newTrouble(err)
+			} else {
+				series = found
+			}
+		} else {
+			if found, err := searcher.SearchForSeries(meta); err != nil {
+				return newTrouble(err)
+			} else {
+				series = found
+			}
 		}
 
 		season, err := searcher.GetSeason(series.Id.String(), meta.SeasonNumber)
 		if err != nil {
-			return IngestItemTrouble{err, TMDB_FAILURE_UNKNOWN}
+			return newTrouble(err)
 		}
 
 		episode, err := searcher.GetEpisode(series.Id.String(), meta.SeasonNumber, meta.EpisodeNumber)
 		if err != nil {
-			return IngestItemTrouble{err, TMDB_FAILURE_UNKNOWN}
+			return newTrouble(err)
 		}
 
 		log.Emit(logger.DEBUG, "Saving TMDB EPISODE: %v\nSEASON: %v\nSERIES: %v\n", episode, season, series)
-		ep := tmdb.TmdbEpisodeToMedia(episode, item.ScrapedMetadata)
+		ep := tmdb.TmdbEpisodeToMedia(episode, series.Adult, item.ScrapedMetadata)
 		if err := data.SaveEpisode(
 			ep,
 			tmdb.TmdbSeasonToMedia(season),
 			tmdb.TmdbSeriesToMedia(series),
 		); err != nil {
-			return IngestItemTrouble{err, GENERIC_FAILURE}
+			return newTrouble(err)
 		}
 
 		log.Emit(logger.SUCCESS, "Saved newly ingested episode %v\n", ep)
 		eventBus.Dispatch(event.NEW_MEDIA, ep.ID)
 	} else {
-		movie, err := searcher.SearchForMovie(item.ScrapedMetadata)
-		if err != nil {
-			return handleSearchError(err)
+		var movie *tmdb.Movie = nil
+		if item.OverrideTmdbID != nil {
+			// This item WAS troubled, but a resolution has provided a new value for the TMDB ID which we should use now.
+			tmdbID := *item.OverrideTmdbID
+			item.OverrideTmdbID = nil
+
+			log.Emit(logger.INFO, "Retrying ingestion item %s with provided TMDB ID override (from trouble resolution) of %s\n", item, tmdbID)
+			if found, err := searcher.GetMovie(tmdbID); err != nil {
+				return newTrouble(err)
+			} else {
+				movie = found
+			}
+		} else {
+			if found, err := searcher.SearchForMovie(item.ScrapedMetadata); err != nil {
+				return newTrouble(err)
+			} else {
+				movie = found
+			}
 		}
 
 		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %v\n", movie)
 		mov := tmdb.TmdbMovieToMedia(movie, meta)
 		if err := data.SaveMovie(mov); err != nil {
-			return IngestItemTrouble{err, GENERIC_FAILURE}
+			return newTrouble(err)
 		}
 
 		log.Emit(logger.SUCCESS, "Saved newly ingested movie %v\n", mov)
@@ -115,19 +141,6 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 	}
 
 	return nil
-}
-
-func handleSearchError(err error) error {
-	switch e := err.(type) {
-	case *tmdb.NoResultError:
-		return IngestItemTrouble{e, TMDB_FAILURE_NONE}
-	case *tmdb.MultipleResultError:
-		return IngestItemTrouble{e, TMDB_FAILURE_MULTI}
-	case *tmdb.IllegalRequestError:
-		return IngestItemTrouble{e, TMDB_FAILURE_UNKNOWN}
-	}
-
-	return IngestItemTrouble{err, TMDB_FAILURE_UNKNOWN}
 }
 
 func (item *IngestItem) modtimeDiff() (*time.Duration, error) {
@@ -141,22 +154,7 @@ func (item *IngestItem) modtimeDiff() (*time.Duration, error) {
 }
 
 func (item *IngestItem) String() string {
-	return fmt.Sprintf("IngestItem{ID=%s state=%s}", item.Id, item.State)
-}
-
-func (t TroubleType) String() string {
-	switch t {
-	case METADATA_FAILURE:
-		return fmt.Sprintf("METADATA_FAILURE[%d]", t)
-	case TMDB_FAILURE_UNKNOWN:
-		return fmt.Sprintf("TMDB_FAILURE_UNKNOWN[%d]", t)
-	case TMDB_FAILURE_MULTI:
-		return fmt.Sprintf("TMDB_FAILURE_MULTI[%d]", t)
-	case TMDB_FAILURE_NONE:
-		return fmt.Sprintf("TMDB_FAILURE_NONE[%d]", t)
-	}
-
-	return fmt.Sprintf("UNKNOWN[%d]", t)
+	return fmt.Sprintf("IngestItem{ID=%s state=%s}", item.ID, item.State)
 }
 
 func (s IngestItemState) String() string {
@@ -169,7 +167,7 @@ func (s IngestItemState) String() string {
 		return fmt.Sprintf("INGESTING[%d]", s)
 	case TROUBLED:
 		return fmt.Sprintf("TROUBLED[%d]", s)
+	default:
+		return fmt.Sprintf("UNKNOWN[%d]", s)
 	}
-
-	return fmt.Sprintf("UNKNOWN[%d]", s)
 }

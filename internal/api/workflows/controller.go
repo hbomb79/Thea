@@ -15,7 +15,7 @@ import (
 type (
 	CreateRequest struct {
 		Label     string        `json:"label" validate:"required,alphaNumericWhitespaceTrimmed"`
-		Enabled   bool          `json:"enabled" validate:"required"`
+		Enabled   bool          `json:"enabled"`
 		TargetIDs []uuid.UUID   `json:"target_ids" validate:"required,min=1"`
 		Criteria  []CriteriaDto `json:"criteria" validate:"required"`
 	}

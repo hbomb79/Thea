@@ -13,8 +13,8 @@ import (
 
 type (
 	createRequest struct {
-		MediaID  uuid.UUID `json:"media_id"`
-		TargetID uuid.UUID `json:"target_id"`
+		MediaID  *uuid.UUID `json:"media_id"`
+		TargetID *uuid.UUID `json:"target_id"`
 	}
 
 	transcodeDto struct {
@@ -23,20 +23,20 @@ type (
 		TargetId     uuid.UUID                     `json:"target_id"`
 		OutputPath   string                        `json:"output_path"`
 		Status       transcode.TranscodeTaskStatus `json:"status"`
-		LastProgress *ffmpeg.Progress              `json:"last_progress"`
+		LastProgress *ffmpeg.Progress              `json:"last_progress,omitempty"`
 	}
 
 	Service interface {
 		NewTask(uuid.UUID, uuid.UUID) error
-		CancelTask(uuid.UUID)
+		CancelTask(uuid.UUID) error
 		Task(uuid.UUID) *transcode.TranscodeTask
 		AllTasks() []*transcode.TranscodeTask
 	}
 
 	Store interface {
-		GetTranscodesForMedia(uuid.UUID) ([]*transcode.TranscodeTask, error)
-		GetTranscode(uuid.UUID) *transcode.TranscodeTask
-		GetAllTranscodes() ([]*transcode.TranscodeTask, error)
+		GetTranscodesForMedia(uuid.UUID) ([]*transcode.Transcode, error)
+		GetTranscode(uuid.UUID) *transcode.Transcode
+		GetAllTranscodes() ([]*transcode.Transcode, error)
 	}
 
 	Controller struct {
@@ -65,7 +65,13 @@ func (controller *Controller) create(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
-	if err := controller.Service.NewTask(createRequest.MediaID, createRequest.TargetID); err != nil {
+	mID := createRequest.MediaID
+	tID := createRequest.TargetID
+	if mID == nil || tID == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid body: one or both of mandatory fields 'media_id' and 'target_id' not provided")
+	}
+
+	if err := controller.Service.NewTask(*mID, *tID); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Task creation failed: %v", err))
 	}
 
@@ -76,7 +82,7 @@ func (controller *Controller) getActive(ec echo.Context) error {
 	tasks := controller.Service.AllTasks()
 	taskDtos := make([]transcodeDto, len(tasks))
 	for i, v := range tasks {
-		taskDtos[i] = NewDto(v)
+		taskDtos[i] = NewDtoFromTask(v)
 	}
 
 	return ec.JSON(http.StatusOK, taskDtos)
@@ -90,7 +96,7 @@ func (controller *Controller) getComplete(ec echo.Context) error {
 
 	taskDtos := make([]transcodeDto, len(tasks))
 	for i, v := range tasks {
-		taskDtos[i] = NewDto(v)
+		taskDtos[i] = NewDtoFromModel(v)
 	}
 
 	return ec.JSON(http.StatusOK, taskDtos)
@@ -103,11 +109,11 @@ func (controller *Controller) get(ec echo.Context) error {
 	}
 
 	if task := controller.Service.Task(id); task != nil {
-		return ec.JSON(http.StatusOK, NewDto(task))
+		return ec.JSON(http.StatusOK, NewDtoFromTask(task))
 	}
 
-	if task := controller.Store.GetTranscode(id); task != nil {
-		return ec.JSON(http.StatusOK, NewDto(task))
+	if model := controller.Store.GetTranscode(id); model != nil {
+		return ec.JSON(http.StatusOK, NewDtoFromModel(model))
 	}
 
 	return echo.NewHTTPError(http.StatusNotFound)
@@ -119,7 +125,10 @@ func (controller *Controller) cancel(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Task ID is not a valid UUID")
 	}
 
-	controller.Service.CancelTask(id)
+	if err := controller.Service.CancelTask(id); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Failed to cancel task %s due to error: %v", id, err)
+	}
+
 	return ec.NoContent(http.StatusOK)
 }
 
@@ -131,12 +140,23 @@ func (controller *Controller) stream(ec echo.Context) error {
 	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
 }
 
-func NewDto(model *transcode.TranscodeTask) transcodeDto {
+func NewDtoFromModel(model *transcode.Transcode) transcodeDto {
+	return transcodeDto{
+		ID:           model.Id,
+		MediaID:      model.MediaID,
+		TargetId:     model.TargetID,
+		OutputPath:   model.MediaPath,
+		Status:       transcode.COMPLETE,
+		LastProgress: nil,
+	}
+}
+
+func NewDtoFromTask(model *transcode.TranscodeTask) transcodeDto {
 	return transcodeDto{
 		ID:           model.Id(),
 		MediaID:      model.Media().Id(),
 		TargetId:     model.Target().ID,
-		OutputPath:   "NYI",
+		OutputPath:   model.OutputPath(),
 		Status:       model.Status(),
 		LastProgress: model.LastProgress(),
 	}

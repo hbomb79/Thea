@@ -196,8 +196,9 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 		go func(taskToStart *TranscodeTask, wg *sync.WaitGroup, budget int) {
 			defer wg.Done()
 
-			updateHandler := func(_ *ffmpeg.Progress) {
+			updateHandler := func(prog *ffmpeg.Progress) {
 				service.taskChange <- taskToStart.id
+				fmt.Printf("\rTask %s transcode progress: %d%%", taskToStart.Id(), int(prog.Progress))
 			}
 
 			service.taskChange <- taskToStart.id
@@ -271,10 +272,13 @@ func (service *transcodeService) spawnFfmpegTarget(m *media.Container, target *f
 		return fmt.Errorf("task for media %s and target %s already exists", m.Id(), target.ID)
 	}
 
-	ffmpegConfig := ffmpeg.Config{FfmpegBinPath: service.config.FfmpegBinaryPath, FfprobeBinPath: service.config.FfprobeBinaryPath}
-	newTask := NewTranscodeTask(service.config.OutputPath, m, target, ffmpegConfig)
-	service.tasks = append(service.tasks, newTask)
+	ffmpegConfig := ffmpeg.Config{FfmpegBinPath: service.config.FfmpegBinaryPath, FfprobeBinPath: service.config.FfprobeBinaryPath, OutputBaseDirectory: service.config.OutputPath}
+	newTask, err := NewTranscodeTask(service.config.OutputPath, m, target, ffmpegConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create new transcode task: %w", err)
+	}
 
+	service.tasks = append(service.tasks, newTask)
 	service.queueChange <- true
 	return nil
 }

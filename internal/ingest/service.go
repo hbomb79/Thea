@@ -77,14 +77,15 @@ type (
 func New(config Config, searcher searcher, scraper scraper, store DataStore, eventBus event.EventCoordinator) (*ingestService, error) {
 	// Ensure config ingest path is a valid directory, create it
 	// if it's missing.
-	if info, err := os.Stat(config.IngestPath); err == nil {
+	ingestionPath := config.GetIngestPath()
+	if info, err := os.Stat(ingestionPath); err == nil {
 		if !info.IsDir() {
-			return nil, fmt.Errorf("ingestion path '%s' is not a directory", config.IngestPath)
+			return nil, fmt.Errorf("ingestion path '%s' is not a directory", ingestionPath)
 		}
 	} else if errors.Is(err, os.ErrNotExist) {
-		os.MkdirAll(config.IngestPath, os.ModeDir|os.ModePerm)
+		os.MkdirAll(ingestionPath, os.ModeDir|os.ModePerm)
 	} else {
-		return nil, fmt.Errorf("ingestion path '%s' could not be accessed: %w", config.IngestPath, err)
+		return nil, fmt.Errorf("ingestion path '%s' could not be accessed: %w", ingestionPath, err)
 	}
 
 	service := &ingestService{
@@ -219,7 +220,7 @@ func (service *ingestService) DiscoverNewFiles() {
 		sourcePathsLookup[item.Path] = true
 	}
 
-	newItems, err := recursivelyWalkFileSystem(service.config.IngestPath, sourcePathsLookup)
+	newItems, err := recursivelyWalkFileSystem(service.config.GetIngestPath(), sourcePathsLookup)
 	if err != nil {
 		log.Emit(logger.FATAL, "file system polling failed: %v\n", err)
 		return

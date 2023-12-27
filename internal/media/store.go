@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -70,6 +71,8 @@ type (
 
 	Store struct{}
 )
+
+var storeLogger = logger.Get("MediaStore")
 
 const (
 	IDCol     = "id"
@@ -181,15 +184,19 @@ func (store *Store) SaveEpisode(db dbOrTx, episode *Episode) error {
 func (store *Store) GetMedia(db *sqlx.DB, mediaID uuid.UUID) *Container {
 	if movie, err := store.GetMovie(db, mediaID); err != nil {
 		//TODO: consider wrapping these three in a transaction (probably overkill though)
+		storeLogger.Emit(logger.ERROR, "Failed to find movie with media ID %s: %v {falling back to searching for episode}\n", mediaID, err)
 		if episode, err := store.GetEpisode(db, mediaID); err != nil {
+			storeLogger.Emit(logger.ERROR, "Failed to fetch episode with media ID %s: %v\n", mediaID, err)
 			return nil
 		} else {
 			season, err := store.GetSeason(db, episode.SeasonID)
 			if err != nil {
+				storeLogger.Emit(logger.FATAL, "Episode %s found, but error (%v) occurred when fetching referenced season. This may indicate a serious problem with the referential integrity of the DB\n", mediaID, err)
 				return nil
 			}
 			series, err := store.GetSeries(db, season.SeriesID)
 			if err != nil {
+				storeLogger.Emit(logger.FATAL, "Episode %s and season %s found, but error (%v) occurred when fetching referenced series. This may indicate a serious problem with the referential integrity of the DB\n", mediaID, season.ID, err)
 				return nil
 			}
 			return &Container{Type: EPISODE, Episode: episode, Series: series, Season: season}
@@ -252,7 +259,10 @@ func (store *Store) GetAllSourcePaths(db *sqlx.DB) ([]string, error) {
 
 func queryRow[T any](db *sqlx.DB, table string, col string, val any) (*T, error) {
 	v := new(T)
-	if err := db.Get(&v, fmt.Sprintf(`SELECT * FROM %s WHERE %s=$1;`, table, col), val); err != nil {
+	// DB.Unsafe() is used here to allow for partial struct scanning (i.e. we don't want the 'type' column to come
+	// in to our model from the DB, although one could argue we should scan in to an intermediate struct and validate the
+	// type matches our expectation... but that's a later me problem).
+	if err := db.Unsafe().Get(v, fmt.Sprintf(`SELECT * FROM %s WHERE %s=$1 LIMIT 1;`, table, col), val); err != nil {
 		return nil, err
 	}
 

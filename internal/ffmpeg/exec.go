@@ -34,11 +34,11 @@ type Progress struct {
 type TranscodeCmd struct {
 	inputPath       string
 	outputPath      string
-	transcodeConfig *Config
+	transcodeConfig Config
 	runningCommand  *exec.Cmd
 }
 
-func NewCmd(input string, output string, config *Config) *TranscodeCmd {
+func NewCmd(input string, output string, config Config) *TranscodeCmd {
 	return &TranscodeCmd{input, output, config, nil}
 }
 

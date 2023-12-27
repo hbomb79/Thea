@@ -271,7 +271,8 @@ func (service *transcodeService) spawnFfmpegTarget(m *media.Container, target *f
 		return fmt.Errorf("task for media %s and target %s already exists", m.Id(), target.ID)
 	}
 
-	newTask := NewTranscodeTask(service.config.OutputPath, m, target)
+	ffmpegConfig := ffmpeg.Config{FfmpegBinPath: service.config.FfmpegBinaryPath, FfprobeBinPath: service.config.FfprobeBinaryPath}
+	newTask := NewTranscodeTask(service.config.OutputPath, m, target, ffmpegConfig)
 	service.tasks = append(service.tasks, newTask)
 
 	service.queueChange <- true

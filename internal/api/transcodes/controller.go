@@ -13,8 +13,8 @@ import (
 
 type (
 	createRequest struct {
-		MediaID  uuid.UUID `json:"media_id"`
-		TargetID uuid.UUID `json:"target_id"`
+		MediaID  *uuid.UUID `json:"media_id"`
+		TargetID *uuid.UUID `json:"target_id"`
 	}
 
 	transcodeDto struct {
@@ -65,7 +65,13 @@ func (controller *Controller) create(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
-	if err := controller.Service.NewTask(createRequest.MediaID, createRequest.TargetID); err != nil {
+	mID := createRequest.MediaID
+	tID := createRequest.TargetID
+	if mID == nil || tID == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid body: one or both of mandatory fields 'media_id' and 'target_id' not provided")
+	}
+
+	if err := controller.Service.NewTask(*mID, *tID); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Task creation failed: %v", err))
 	}
 

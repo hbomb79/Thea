@@ -33,7 +33,7 @@ const (
 // management & monitoring.
 type TranscodeTask struct {
 	id         uuid.UUID
-	config     *ffmpeg.Config
+	config     ffmpeg.Config
 	media      *media.Container
 	target     *ffmpeg.Target
 	outputPath string
@@ -43,7 +43,7 @@ type TranscodeTask struct {
 	lastProgress *ffmpeg.Progress
 }
 
-func NewTranscodeTask(outputPath string, m *media.Container, t *ffmpeg.Target) *TranscodeTask {
+func NewTranscodeTask(outputPath string, m *media.Container, t *ffmpeg.Target, config ffmpeg.Config) *TranscodeTask {
 	return &TranscodeTask{
 		id:           uuid.New(),
 		media:        m,
@@ -51,6 +51,7 @@ func NewTranscodeTask(outputPath string, m *media.Container, t *ffmpeg.Target) *
 		lastProgress: nil,
 		outputPath:   fmt.Sprintf("%s/%s.%s", outputPath, t.Label, t.Ext),
 		command:      nil,
+		config:       config,
 		status:       WAITING,
 	}
 }

@@ -67,9 +67,24 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 
 	meta := item.ScrapedMetadata
 	if item.ScrapedMetadata.Episodic {
-		series, err := searcher.SearchForSeries(meta)
-		if err != nil {
-			return newTrouble(err)
+		var series *tmdb.Series = nil
+		if item.OverrideTmdbID != nil {
+			// This item WAS troubled, but a resolution has provided a new value for the TMDB ID which we should use now.
+			tmdbID := *item.OverrideTmdbID
+			item.OverrideTmdbID = nil
+
+			log.Emit(logger.INFO, "Retrying ingestion item %s with provided TMDB ID override (from trouble resolution) of %s\n", item, tmdbID)
+			if found, err := searcher.GetSeries(tmdbID); err != nil {
+				return newTrouble(err)
+			} else {
+				series = found
+			}
+		} else {
+			if found, err := searcher.SearchForSeries(meta); err != nil {
+				return newTrouble(err)
+			} else {
+				series = found
+			}
 		}
 
 		season, err := searcher.GetSeason(series.Id.String(), meta.SeasonNumber)
@@ -95,9 +110,24 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 		log.Emit(logger.SUCCESS, "Saved newly ingested episode %v\n", ep)
 		eventBus.Dispatch(event.NEW_MEDIA, ep.ID)
 	} else {
-		movie, err := searcher.SearchForMovie(item.ScrapedMetadata)
-		if err != nil {
-			return newTrouble(err)
+		var movie *tmdb.Movie = nil
+		if item.OverrideTmdbID != nil {
+			// This item WAS troubled, but a resolution has provided a new value for the TMDB ID which we should use now.
+			tmdbID := *item.OverrideTmdbID
+			item.OverrideTmdbID = nil
+
+			log.Emit(logger.INFO, "Retrying ingestion item %s with provided TMDB ID override (from trouble resolution) of %s\n", item, tmdbID)
+			if found, err := searcher.GetMovie(tmdbID); err != nil {
+				return newTrouble(err)
+			} else {
+				movie = found
+			}
+		} else {
+			if found, err := searcher.SearchForMovie(item.ScrapedMetadata); err != nil {
+				return newTrouble(err)
+			} else {
+				movie = found
+			}
 		}
 
 		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %v\n", movie)

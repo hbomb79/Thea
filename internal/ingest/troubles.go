@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/hbomb79/Thea/internal/http/tmdb"
 )
@@ -29,7 +30,8 @@ const (
 	TMDB_FAILURE_MULTI
 	TMDB_FAILURE_NONE
 	GENERIC_FAILURE
-
+)
+const (
 	RETRY ResolutionType = iota
 	SPECIFY_TMDB_ID
 	ABORT
@@ -88,7 +90,7 @@ func (t *Trouble) GenerateResolution(resolutionMethod ResolutionType, context ma
 	case RETRY:
 		return &RetryResolution{}, nil
 	case SPECIFY_TMDB_ID:
-		if id, ok := context["tmdb_id"]; ok {
+		if id, ok := context["tmdb_id"]; ok && len(strings.TrimSpace(id)) != 0 {
 			return &TmdbIDResolution{tmdbID: id}, nil
 		}
 

@@ -180,21 +180,22 @@ func (store *Store) SaveEpisode(db dbOrTx, episode *Episode) error {
 // query is successful is used to populate a media Container.
 func (store *Store) GetMedia(db *sqlx.DB, mediaID uuid.UUID) *Container {
 	if movie, err := store.GetMovie(db, mediaID); err != nil {
+		//TODO: consider wrapping these three in a transaction (probably overkill though)
 		if episode, err := store.GetEpisode(db, mediaID); err != nil {
 			return nil
 		} else {
-			return &Container{
-				Type:    EPISODE,
-				Episode: episode,
-				Movie:   nil,
+			season, err := store.GetSeason(db, episode.SeasonID)
+			if err != nil {
+				return nil
 			}
+			series, err := store.GetSeries(db, season.SeriesID)
+			if err != nil {
+				return nil
+			}
+			return &Container{Type: EPISODE, Episode: episode, Series: series, Season: season}
 		}
 	} else {
-		return &Container{
-			Type:    MOVIE,
-			Movie:   movie,
-			Episode: nil,
-		}
+		return &Container{Type: MOVIE, Movie: movie}
 	}
 }
 

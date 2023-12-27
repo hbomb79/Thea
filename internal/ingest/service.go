@@ -32,6 +32,7 @@ type (
 		GetSeason(string, int) (*tmdb.Season, error)
 		GetSeries(string) (*tmdb.Series, error)
 		GetEpisode(string, int, int) (*tmdb.Episode, error)
+		GetMovie(string) (*tmdb.Movie, error)
 	}
 
 	DataStore interface {
@@ -264,6 +265,10 @@ func (service *ingestService) RemoveIngest(itemID uuid.UUID) error {
 	service.Lock()
 	defer service.Unlock()
 
+	return service.removeIngest(itemID)
+}
+
+func (service *ingestService) removeIngest(itemID uuid.UUID) error {
 	for k, v := range service.items {
 		if v.ID == itemID {
 			// Remove item from service
@@ -291,31 +296,37 @@ func (service *ingestService) GetIngest(itemID uuid.UUID) *IngestItem {
 }
 
 func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method ResolutionType, context map[string]string) error {
+	service.Lock()
+	defer service.Unlock()
+
 	item := service.GetIngest(itemID)
 	if item == nil {
 		return errors.New("ingest with ID provided does not exist")
 	}
 
-	if item.Trouble == nil || item.State != IDLE {
+	if item.Trouble == nil || item.State != TROUBLED {
 		return ErrNoTrouble
 	}
 
 	res, err := item.Trouble.GenerateResolution(method, context)
 	if res == nil || err != nil {
-		return ErrResolutionIncompatible
+		return fmt.Errorf("failed to resolve with method %s: %w", method, err)
 	}
 
-	// TODO think about thread safety
 	switch v := res.(type) {
 	case *AbortResolution:
-		service.RemoveIngest(item.ID)
+		service.removeIngest(item.ID)
 	case *RetryResolution:
 		item.State = IDLE
 		item.Trouble = nil
+		// An item has been updated, so we need to inform the service to check for work to be done
+		service.wakeupWorkerPool()
 	case *TmdbIDResolution:
 		item.State = IDLE
 		item.Trouble = nil
 		item.OverrideTmdbID = &v.tmdbID
+		// An item has been updated, so we need to inform the service to check for work to be done
+		service.wakeupWorkerPool()
 	default:
 		return fmt.Errorf("trouble resolution type of %T was not expected. This is likely a bug/should be unreachable", res)
 	}

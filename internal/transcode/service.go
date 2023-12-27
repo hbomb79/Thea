@@ -192,6 +192,7 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 
 		service.consumedThreads += requiredBudget
 		service.taskWg.Add(1)
+		// TODO data race: task.MarkAsStarting()
 		go func(taskToStart *TranscodeTask, wg *sync.WaitGroup, budget int) {
 			defer wg.Done()
 

@@ -168,6 +168,8 @@ func (handler *eventHandler) validatePayload(event Event, payload Payload) error
 		fallthrough
 	case DOWNLOAD_PROGRESS:
 		fallthrough
+	case NEW_MEDIA:
+		fallthrough
 	case TRANSCODE_UPDATE:
 		if _, ok := payload.(uuid.UUID); !ok {
 			return fmt.Errorf("illegal payload (type %s) for %s event. Expected uuid.UUID payload", payloadTypeName, event)

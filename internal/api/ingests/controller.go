@@ -16,8 +16,8 @@ import (
 type (
 	ResolutionTypeWrapper struct{ Value ingest.ResolutionType }
 	ResolveTroubleRequest struct {
-		Method  ResolutionTypeWrapper `json:"method"`
-		Context map[string]string     `json:"context"`
+		Method  *ResolutionTypeWrapper `json:"method"`
+		Context map[string]string      `json:"context"`
 	}
 
 	// IngestDto is the response used by endpoints that return
@@ -34,9 +34,10 @@ type (
 	TroubleTypeDto string
 
 	TroubleDto struct {
-		Type    TroubleTypeDto `json:"type"`
-		Message string         `json:"message"`
-		Context map[string]any `json:"context"`
+		Type                   TroubleTypeDto          `json:"type"`
+		Message                string                  `json:"message"`
+		Context                map[string]any          `json:"context"`
+		AllowedResolutionTypes []ResolutionTypeWrapper `json:"allowed_resolution_types"`
 	}
 
 	// Service is where this controller gets it's information from, this is
@@ -139,10 +140,12 @@ func (controller *Controller) postTroubleResolution(ec echo.Context) error {
 	var request ResolveTroubleRequest
 	if err := ec.Bind(&request); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("JSON body illegal: %v", err))
+	} else if request.Method == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "JSON body missing mandatory 'method' field")
 	}
 
 	if err := controller.Service.ResolveTroubledIngest(id, request.Method.Value, request.Context); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err)
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	return ec.NoContent(http.StatusOK)
@@ -161,6 +164,10 @@ func (wrapper *ResolutionTypeWrapper) UnmarshalJSON(data []byte) error {
 	}
 
 	switch strValue {
+	case "abort":
+		wrapper.Value = ingest.ABORT
+	case "specify_tmdb_id":
+		wrapper.Value = ingest.SPECIFY_TMDB_ID
 	case "retry":
 		wrapper.Value = ingest.RETRY
 	default:
@@ -168,6 +175,19 @@ func (wrapper *ResolutionTypeWrapper) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+func (wrapper *ResolutionTypeWrapper) MarshalJSON() ([]byte, error) {
+	switch wrapper.Value {
+	case ingest.ABORT:
+		return json.Marshal("abort")
+	case ingest.SPECIFY_TMDB_ID:
+		return json.Marshal("specify_tmdb_id")
+	case ingest.RETRY:
+		return json.Marshal("retry")
+	}
+
+	return nil, fmt.Errorf("invalid enum value: %s for resolution method has no known marshalling", wrapper.Value)
 }
 
 // NewDto creates a IngestDto using the IngestItem model.
@@ -183,9 +203,10 @@ func NewDto(item *ingest.IngestItem) *IngestDto {
 		}
 
 		trbl = &TroubleDto{
-			Type:    TroubleTypeModelToDto(item.Trouble.Type()),
-			Message: item.Trouble.Error(),
-			Context: context,
+			Type:                   TroubleTypeModelToDto(item.Trouble.Type()),
+			Message:                item.Trouble.Error(),
+			Context:                context,
+			AllowedResolutionTypes: ExtractTroubleResolutionTypes(item.Trouble),
 		}
 	}
 
@@ -227,9 +248,18 @@ func ExtractTroubleContext(trouble *ingest.Trouble) (map[string]any, error) {
 	default:
 		// Only multi-choice TMDB errors have context, all other ingestion errors are (at the moment)
 		// context-free (i.e. the message and allowed actions alone should suffice).
-		trouble.AllowedResolutionTypes()
 		return map[string]any{}, nil
 	}
+}
+
+func ExtractTroubleResolutionTypes(trouble *ingest.Trouble) []ResolutionTypeWrapper {
+	modelResTypes := trouble.AllowedResolutionTypes()
+	dtoResTypes := make([]ResolutionTypeWrapper, len(modelResTypes))
+	for k, v := range modelResTypes {
+		dtoResTypes[k] = ResolutionTypeWrapper{Value: v}
+	}
+
+	return dtoResTypes
 }
 
 func TroubleTypeModelToDto(troubleType ingest.TroubleType) TroubleTypeDto {

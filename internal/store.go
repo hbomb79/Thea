@@ -228,14 +228,17 @@ func (orchestrator *storeOrchestrator) DeleteWorkflow(id uuid.UUID) {
 func (orchestrator *storeOrchestrator) SaveTranscode(transcode *transcode.TranscodeTask) error {
 	return orchestrator.transcodeStore.SaveTranscode(orchestrator.db.GetSqlxDb(), transcode)
 }
-func (orchestrator *storeOrchestrator) GetTranscode(id uuid.UUID) *transcode.TranscodeTask {
+func (orchestrator *storeOrchestrator) GetTranscode(id uuid.UUID) *transcode.Transcode {
 	return orchestrator.transcodeStore.Get(orchestrator.db.GetSqlxDb(), id)
 }
-func (orchestrator *storeOrchestrator) GetAllTranscodes() ([]*transcode.TranscodeTask, error) {
+func (orchestrator *storeOrchestrator) GetAllTranscodes() ([]*transcode.Transcode, error) {
 	return orchestrator.transcodeStore.GetAll(orchestrator.db.GetSqlxDb())
 }
-func (orchestrator *storeOrchestrator) GetTranscodesForMedia(mediaId uuid.UUID) ([]*transcode.TranscodeTask, error) {
+func (orchestrator *storeOrchestrator) GetTranscodesForMedia(mediaId uuid.UUID) ([]*transcode.Transcode, error) {
 	return orchestrator.transcodeStore.GetForMedia(orchestrator.db.GetSqlxDb(), mediaId)
+}
+func (orchestrator *storeOrchestrator) GetForMediaAndTarget(mediaId uuid.UUID, targetId uuid.UUID) (*transcode.Transcode, error) {
+	return orchestrator.transcodeStore.GetForMediaAndTarget(orchestrator.db.GetSqlxDb(), mediaId, targetId)
 }
 
 // Targets

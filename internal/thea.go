@@ -47,10 +47,10 @@ type (
 		RunnableService
 		EventParticipator
 		NewTask(mediaID uuid.UUID, targetID uuid.UUID) error
-		CancelTask(taskID uuid.UUID)
+		CancelTask(taskID uuid.UUID) error
 		AllTasks() []*transcode.TranscodeTask
 		Task(taskID uuid.UUID) *transcode.TranscodeTask
-		TaskForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) *transcode.TranscodeTask
+		ActiveTaskForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) *transcode.TranscodeTask
 	}
 
 	IngestService interface {

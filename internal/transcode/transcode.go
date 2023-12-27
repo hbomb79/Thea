@@ -123,6 +123,7 @@ func (task *TranscodeTask) Run(parentCtx context.Context, updateHandler func(*ff
 	if ctx.Err() != nil {
 		// Task was stopped because the context was cancelled,
 		log.Infof("Transcode %s was interrupted due to context cancellation (%v). Cleaning up...\n", task, ctx.Err())
+		task.status = CANCELLED
 		task.cleanup()
 		return ErrCancelled
 	}
@@ -156,8 +157,7 @@ func (task *TranscodeTask) Cancel() error {
 		return fmt.Errorf("task cannot be cancelled, no context cancel handle is available (this usually indicates the task is not running)")
 	}
 
-	task.status = CANCELLED
-	task.cleanup()
+	(*task.cancelHandle)()
 	return nil
 }
 
@@ -174,6 +174,7 @@ func (task *TranscodeTask) LastProgress() *ffmpeg.Progress { return task.lastPro
 func (task *TranscodeTask) Id() uuid.UUID                  { return task.id }
 func (task *TranscodeTask) Media() *media.Container        { return task.media }
 func (task *TranscodeTask) Target() *ffmpeg.Target         { return task.target }
+func (task *TranscodeTask) OutputPath() string             { return task.outputPath }
 func (task *TranscodeTask) Status() TranscodeTaskStatus    { return task.status }
 func (task *TranscodeTask) Trouble() any                   { return nil }
 func (task *TranscodeTask) String() string {

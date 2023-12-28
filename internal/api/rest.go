@@ -90,7 +90,9 @@ func NewRestGateway(
 		mediaController:     medias.New(validate, store),
 	}
 
-	ec.Use(middleware.Logger())
+	ec.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: "[Request] ${time_rfc3339} :: ${method} ${uri} -> ${status} ${error} {ip=${remote_ip}, user_agent=${user_agent}}\n",
+	}))
 	ec.Use(middleware.Recover())
 	ec.Pre(middleware.AddTrailingSlash())
 

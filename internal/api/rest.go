@@ -41,6 +41,7 @@ type (
 		targets.Store
 		workflows.Store
 		transcodes.Store
+		medias.Store
 	}
 
 	// The RestGateway is a thin-wrapper around the Echo HTTP router. It's sole responsbility

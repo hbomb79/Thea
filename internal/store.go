@@ -104,6 +104,111 @@ func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
 	return orchestrator.mediaStore.SaveSeason(orchestrator.db.GetSqlxDb(), season)
 }
 
+func (orchestrator *storeOrchestrator) ListMovie() ([]*media.Movie, error) {
+	return orchestrator.mediaStore.ListMovie(orchestrator.db.GetSqlxDb())
+}
+
+func (orchestrator *storeOrchestrator) ListSeries() ([]*media.Series, error) {
+	return orchestrator.mediaStore.ListSeries(orchestrator.db.GetSqlxDb())
+}
+
+func (orchestrator *storeOrchestrator) CountSeasonsInSeries(seriesIDs []uuid.UUID) (map[uuid.UUID]int, error) {
+	return orchestrator.mediaStore.CountSeasonsInSeries(orchestrator.db.GetSqlxDb(), seriesIDs)
+}
+
+func (orchestrator *storeOrchestrator) GetInflatedSeries(seriesID uuid.UUID) (*media.InflatedSeries, error) {
+	wrap := func(err error) error {
+		return fmt.Errorf("failed to fetch inflated series: %w", err)
+	}
+
+	var inflated *media.InflatedSeries
+	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+		// Fetch the series
+		series, err := orchestrator.mediaStore.GetSeriesTx(tx, seriesID)
+		if err != nil {
+			return err
+		}
+
+		// Fetch all seasons for series
+		seasons, err := orchestrator.mediaStore.GetSeasonsForSeries(tx, seriesID)
+		if err != nil {
+			return err
+		}
+
+		seasonIDs := make([]uuid.UUID, len(seasons))
+		for k, v := range seasons {
+			seasonIDs[k] = v.ID
+		}
+
+		// Fetch all episodes for all series
+		episodes, err := orchestrator.mediaStore.GetEpisodesForSeasons(tx, seasonIDs)
+		if err != nil {
+			return err
+		}
+
+		// Package the results in to the InflatedSeries
+		inflatedSeasons := make([]*media.InflatedSeason, len(seasons))
+		for k, v := range seasons {
+			eps := episodes[v.ID]
+			inflatedSeasons[k] = &media.InflatedSeason{Season: v, Episodes: eps}
+		}
+
+		inflated = &media.InflatedSeries{
+			Series:  series,
+			Seasons: inflatedSeasons,
+		}
+		return nil
+	}); err != nil {
+		return nil, wrap(err)
+	}
+
+	return inflated, nil
+}
+
+// Transactionally lists all series in the DB, and then submits a second query to fetch the number of seasons
+// associated with the series we found. This information is then packaged inside the SeriesStub struct.
+func (orchestrator *storeOrchestrator) ListSeriesStubs() ([]*media.SeriesStub, error) {
+	wrap := func(err error) error {
+		return fmt.Errorf("failed to list series stubs: %w", err)
+	}
+
+	var inflated []*media.SeriesStub
+	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+		series, err := orchestrator.mediaStore.ListSeries(tx)
+		if err != nil {
+			return err
+		}
+
+		seriesIDs := make([]uuid.UUID, len(series))
+		for k, v := range series {
+			seriesIDs[k] = v.ID
+		}
+
+		seasonCounts, err := orchestrator.mediaStore.CountSeasonsInSeries(tx, seriesIDs)
+		if err != nil {
+			return err
+		}
+
+		// TODO: grab ratings, cast, etc etc... once we actually store this information xD
+
+		inflated = make([]*media.SeriesStub, len(seriesIDs))
+		for k, v := range series {
+			seasonCount := -1
+			if count, ok := seasonCounts[v.ID]; ok {
+				seasonCount = count
+			}
+
+			inflated[k] = &media.SeriesStub{Series: v, SeasonCount: seasonCount}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, wrap(err)
+	}
+
+	return inflated, nil
+}
+
 // SaveEpisode transactionally saves the episode provided, as well as the season and series
 // it's associatted with. Existing models are updating ON CONFLICT with the TmdbID unique
 // identifier. The PK's and relational FK's of the models will automatically be

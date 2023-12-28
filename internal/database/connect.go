@@ -139,9 +139,9 @@ func (l *SqlLogger) Log(_ context.Context, level sqldblogger.Level, msg string, 
 		duration := data["duration"]
 		query, ok := data["query"]
 		if ok {
-			l.logger.Infof("%s [%.2fms] -- %s\n", msg, duration, query)
+			l.logger.Debugf("%s [%.2fms] -- %s\n", msg, duration, query)
 		} else {
-			l.logger.Infof("%s [%.2fms]\n", msg, duration)
+			l.logger.Debugf("%s [%.2fms]\n", msg, duration)
 		}
 	case sqldblogger.LevelError:
 		l.logger.Errorf(template, msg, data)

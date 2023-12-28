@@ -13,10 +13,11 @@ import (
 
 type (
 	Target struct {
-		ID            uuid.UUID
-		Label         string // unique
-		FfmpegOptions *Opts  `db:"ffmpeg_options"`
-		Ext           string `db:"extension"`
+		ID    uuid.UUID `json:"id"`
+		Label string    `json:"label"` // unique
+		// NB: These JSON struct tags are important! It's used when unmarhsalling the JSON coalesced rows from the DB
+		FfmpegOptions *Opts  `db:"ffmpeg_options" json:"ffmpeg_options"`
+		Ext           string `db:"extension" json:"extension"`
 	}
 
 	Opts ffmpeg.Options

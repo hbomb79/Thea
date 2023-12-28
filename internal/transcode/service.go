@@ -270,14 +270,14 @@ func (service *transcodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) 
 				}
 			}
 
-			log.Emit(logger.NEW, "Media %s met the conditions of workflow %s. Automated transcodes queued\n", mediaId)
+			log.Emit(logger.NEW, "Media %s met the conditions of workflow %s. Automated transcodes queued\n", mediaId, workflow)
 			return
 		}
 	}
 
 	// TODO: Maybe we create some sort of a notification or something about not being able to find an eligible
 	//		 workflow? I could see that being useful.
-	log.Emit(logger.WARNING, "Media %s did not meet the conditions of any known workflows. No automated transcoding will occur\n", mediaId)
+	log.Emit(logger.DEBUG, "Media %s did not meet the conditions of any known workflows. No automated transcoding will occur\n", mediaId)
 }
 
 // spawnFfmpegTarget will create a new transcode task assigned to the media and target provided,

@@ -40,9 +40,9 @@ type (
 		AllowedResolutionTypes []ResolutionTypeWrapper `json:"allowed_resolution_types"`
 	}
 
-	// Service is where this controller gets it's information from, this is
+	// IngestService is where this controller gets it's information from, this is
 	// typically the Ingest service.
-	Service interface {
+	IngestService interface {
 		GetAllIngests() []*ingest.IngestItem
 		GetIngest(uuid.UUID) *ingest.IngestItem
 		RemoveIngest(uuid.UUID) error
@@ -54,7 +54,7 @@ type (
 	// routes for this controller. Additionally, it holds the reference to
 	// the store used to retrieve information about ingests from Thea
 	Controller struct {
-		Service Service
+		service IngestService
 	}
 )
 
@@ -73,8 +73,8 @@ const (
 	GENERIC_FAILURE      TroubleTypeDto = "GENERIC_FAILURE"
 )
 
-func New(validate *validator.Validate, serv Service) *Controller {
-	return &Controller{Service: serv}
+func New(validate *validator.Validate, serv IngestService) *Controller {
+	return &Controller{service: serv}
 }
 
 // Init accepts the Echo group for the ingest endpoints
@@ -89,7 +89,7 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 
 // list returns all the ingests - represented as DTOs - from the underlying store.
 func (controller *Controller) list(ec echo.Context) error {
-	items := controller.Service.GetAllIngests()
+	items := controller.service.GetAllIngests()
 	dtos := make([]*IngestDto, len(items))
 	for k, v := range items {
 		dtos[k] = NewDto(v)
@@ -106,7 +106,7 @@ func (controller *Controller) get(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
 	}
 
-	item := controller.Service.GetIngest(id)
+	item := controller.service.GetIngest(id)
 	if item == nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
@@ -122,7 +122,7 @@ func (controller *Controller) delete(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
 	}
 
-	if err := controller.Service.RemoveIngest(id); err != nil {
+	if err := controller.service.RemoveIngest(id); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
@@ -144,7 +144,7 @@ func (controller *Controller) postTroubleResolution(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "JSON body missing mandatory 'method' field")
 	}
 
-	if err := controller.Service.ResolveTroubledIngest(id, request.Method.Value, request.Context); err != nil {
+	if err := controller.service.ResolveTroubledIngest(id, request.Method.Value, request.Context); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
@@ -152,7 +152,7 @@ func (controller *Controller) postTroubleResolution(ec echo.Context) error {
 }
 
 func (controller *Controller) performPoll(ec echo.Context) error {
-	controller.Service.DiscoverNewFiles()
+	controller.service.DiscoverNewFiles()
 
 	return ec.NoContent(http.StatusOK)
 }

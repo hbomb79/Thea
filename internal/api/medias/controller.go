@@ -14,8 +14,6 @@ import (
 )
 
 type (
-	Dto struct{}
-
 	watchTargetType int
 
 	// watchTargetDto represents a way in which a particular type
@@ -100,13 +98,13 @@ type (
 		GetAllTargets() []*ffmpeg.Target
 	}
 
-	Service interface {
+	TranscodeService interface {
 		ActiveTasksForMedia(uuid.UUID) []*transcode.TranscodeTask
 	}
 
 	Controller struct {
-		Store   Store
-		Service Service
+		store            Store
+		transcodeService TranscodeService
 	}
 )
 
@@ -115,8 +113,8 @@ const (
 	LiveTranscode
 )
 
-func New(validate *validator.Validate, service Service, store Store) *Controller {
-	return &Controller{Store: store, Service: service}
+func New(validate *validator.Validate, service TranscodeService, store Store) *Controller {
+	return &Controller{store: store, transcodeService: service}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
@@ -144,7 +142,7 @@ func (controller *Controller) listLatest(ec echo.Context) error {
 // listMovies returns a list of 'MovieStubDto's, which is an uninflated version
 // of 'MovieDto' (which can be obtained via getMovie).
 func (controller *Controller) listMovies(ec echo.Context) error {
-	movies, err := controller.Store.ListMovie()
+	movies, err := controller.store.ListMovie()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Error occurred while listing movies: %v", err))
 	}
@@ -161,7 +159,7 @@ func (controller *Controller) listMovies(ec echo.Context) error {
 // an uninflated 'SeasonDto'. A fully inflated season DTO can be obtained
 // via 'getSeries', which returns all seasons (and episode stubs) embedded within
 func (controller *Controller) listSeries(ec echo.Context) error {
-	series, err := controller.Store.ListSeriesStubs()
+	series, err := controller.store.ListSeriesStubs()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Error occurred while listing series: %v", err))
 	}
@@ -175,7 +173,7 @@ func (controller *Controller) listSeries(ec echo.Context) error {
 }
 
 func (controller *Controller) constructWatchTargetsForMedia(mediaID uuid.UUID) ([]*watchTargetDto, error) {
-	targets := controller.Store.GetAllTargets()
+	targets := controller.store.GetAllTargets()
 	findTarget := func(tid uuid.UUID) *ffmpeg.Target {
 		for _, v := range targets {
 			if v.ID == tid {
@@ -186,8 +184,8 @@ func (controller *Controller) constructWatchTargetsForMedia(mediaID uuid.UUID) (
 		panic("Media references a target which does not exist. This should simply be unreachable unless the DB has lost referential integrity")
 	}
 
-	activeTranscodes := controller.Service.ActiveTasksForMedia(mediaID)
-	completedTranscodes, err := controller.Store.GetTranscodesForMedia(mediaID)
+	activeTranscodes := controller.transcodeService.ActiveTasksForMedia(mediaID)
+	completedTranscodes, err := controller.store.GetTranscodesForMedia(mediaID)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +232,7 @@ func (controller *Controller) getMovie(ec echo.Context) error {
 		return wrap(err)
 	}
 
-	movie, err := controller.Store.GetMovie(movieId)
+	movie, err := controller.store.GetMovie(movieId)
 	if err != nil {
 		return wrap(err)
 	}
@@ -262,7 +260,7 @@ func (controller *Controller) getSeries(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
 	}
 
-	series, err := controller.Store.GetInflatedSeries(id)
+	series, err := controller.store.GetInflatedSeries(id)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to get series: %s", err))
 	}
@@ -281,7 +279,7 @@ func (controller *Controller) getEpisode(ec echo.Context) error {
 		return wrap(err)
 	}
 
-	movie, err := controller.Store.GetEpisode(movieId)
+	movie, err := controller.store.GetEpisode(movieId)
 	if err != nil {
 		return wrap(err)
 	}

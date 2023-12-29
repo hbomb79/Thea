@@ -38,13 +38,13 @@ type (
 	}
 
 	Controller struct {
-		Store     Store
+		store     Store
 		validator *validator.Validate
 	}
 )
 
 func New(validate *validator.Validate, store Store) *Controller {
-	return &Controller{Store: store, validator: validate}
+	return &Controller{store: store, validator: validate}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
@@ -72,7 +72,7 @@ func (controller *Controller) create(ec echo.Context) error {
 		Ext:           createRequest.Ext,
 	}
 
-	if err := controller.Store.SaveTarget(&newTarget); err != nil {
+	if err := controller.store.SaveTarget(&newTarget); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
 	}
 
@@ -80,7 +80,7 @@ func (controller *Controller) create(ec echo.Context) error {
 }
 
 func (controller *Controller) list(ec echo.Context) error {
-	targets := controller.Store.GetAllTargets()
+	targets := controller.store.GetAllTargets()
 	dtos := make([]*Dto, len(targets))
 	for i, t := range targets {
 		dtos[i] = NewDto(t)
@@ -95,7 +95,7 @@ func (controller *Controller) get(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
 	}
 
-	item := controller.Store.GetTarget(id)
+	item := controller.store.GetTarget(id)
 	if item == nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
@@ -117,7 +117,7 @@ func (controller *Controller) update(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
 	}
 
-	model := *controller.Store.GetTarget(id)
+	model := *controller.store.GetTarget(id)
 	if patchRequest.Ext != nil {
 		model.Ext = *patchRequest.Ext
 	}
@@ -128,7 +128,7 @@ func (controller *Controller) update(ec echo.Context) error {
 		model.FfmpegOptions = patchRequest.Opts
 	}
 
-	if err := controller.Store.SaveTarget(&model); err != nil {
+	if err := controller.store.SaveTarget(&model); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
 	}
 
@@ -141,7 +141,7 @@ func (controller *Controller) delete(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
 	}
 
-	controller.Store.DeleteTarget(id)
+	controller.store.DeleteTarget(id)
 	return ec.NoContent(http.StatusNoContent)
 }
 

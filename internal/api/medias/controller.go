@@ -14,9 +14,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// DTOs
 type (
-	watchTargetType int
-
 	// watchTargetDto represents a way in which a particular type
 	// of media could be watched:
 	// - If a particular target has a pre-transcode COMPLETE for the given media,
@@ -29,7 +28,8 @@ type (
 	// - ADDITIONALLY, a watch target with NO target_id will be available of type
 	//   on-the-fly and ready=true will be present, which represents being able to stream
 	//   from the source media directly.
-	watchTargetDto struct {
+	watchTargetType int
+	watchTargetDto  struct {
 		Name     string          `json:"display_name"`
 		TargetID *uuid.UUID      `json:"target_id,omitempty"`
 		Enabled  bool            `json:"enabled"`
@@ -87,7 +87,14 @@ type (
 		UpdatedAt    time.Time         `json:"updated_at"`
 		WatchTargets []*watchTargetDto `json:"watch_targets"`
 	}
+)
 
+const (
+	PreTranscoded watchTargetType = iota
+	LiveTranscode
+)
+
+type (
 	Store interface {
 		ListMovie() ([]*media.Movie, error)
 		GetMovie(movieID uuid.UUID) (*media.Movie, error)
@@ -106,11 +113,6 @@ type (
 		store            Store
 		transcodeService TranscodeService
 	}
-)
-
-const (
-	PreTranscoded watchTargetType = iota
-	LiveTranscode
 )
 
 func New(validate *validator.Validate, service TranscodeService, store Store) *Controller {

@@ -180,7 +180,7 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 			item.Trouble = &trbl
 			item.State = TROUBLED
 
-			log.Emit(logger.ERROR, "Ingestion of item %s failed due to error %s - Trouble (%T) raised!\n", item, trbl.Error(), trbl)
+			log.Emit(logger.ERROR, "Ingestion of item %s failed, raising trouble {message='%s' type=%s}\n", item, item.Trouble, item.Trouble.Type())
 		} else {
 			log.Emit(logger.FATAL, "Ingestion of item %s returned an unexpected error (%#v) (not a trouble)! Worker will crash\n", item, err)
 			return false, err

@@ -135,6 +135,28 @@ func (service *transcodeService) ActiveTasksForMedia(mediaId uuid.UUID) []*Trans
 	return tasks
 }
 
+// CancelTasksForMedia finds and cancels any active transcodes for the media ID provided.
+// This function acquires the service mutex to ensure no tasks for this media are added
+// while this process is occurring.
+func (service *transcodeService) CancelTasksForMedia(mediaID uuid.UUID) {
+	service.Lock()
+	defer service.Unlock()
+
+	toDelete := make([]uuid.UUID, 0)
+	for _, t := range service.tasks {
+		if t.Media().Id() == mediaID {
+			toDelete = append(toDelete, t.Id())
+		}
+	}
+
+	log.Debugf("Cancelling all tasks for media %s (tasks: %v)\n", mediaID, toDelete)
+	for _, id := range toDelete {
+		if err := service.CancelTask(id); err != nil {
+			log.Warnf("Cancellation of task %s failed with error: %s\n", id, err)
+		}
+	}
+}
+
 // TaskForMediaAndTarget searches through all the tasks in this service and looks for one
 // which was created for the media and target matching the IDs provided. If no such task exists
 // then nil is returned.
@@ -177,7 +199,9 @@ func (service *transcodeService) CancelTask(id uuid.UUID) error {
 	}
 
 	if err := task.Cancel(); err != nil {
-		return fmt.Errorf("failed to cancel task %s: %w", task, err)
+		// This error usually indicates the task is not the right state to be cancelled, however
+		// we should still proceed with removing it from the queue
+		log.Warnf("failed to cancel task %s command: %s", task, err)
 	}
 
 	if !isBeingMonitored {

@@ -100,6 +100,17 @@ type (
 		Watchable
 	}
 
+	WatchTargetType int
+	WatchTarget     struct {
+		Name     string
+		TargetID *uuid.UUID
+		Enabled  bool
+		Type     WatchTargetType
+		Ready    bool
+		// TODO: may want to include some additional information about the
+		// target here, such as bitrate and resolution.
+	}
+
 	Store struct{}
 )
 
@@ -110,6 +121,9 @@ var (
 )
 
 const (
+	PreTranscoded WatchTargetType = iota
+	LiveTranscode
+
 	IDCol     = "id"
 	TmdbIDCol = "tmdb_id"
 
@@ -413,6 +427,22 @@ func (store *Store) GetAllSourcePaths(db *sqlx.DB) ([]string, error) {
 	}
 
 	return paths, nil
+}
+
+func (store *Store) DeleteEpisode(db database.Queryable, episodeID uuid.UUID) error {
+	if _, err := db.Exec(`DELETE FROM media WHERE type='episode' AND id=$1`, episodeID); err != nil {
+		return fmt.Errorf("deletion of episode %s failed: %w", episodeID, err)
+	}
+
+	return nil
+}
+
+func (store *Store) DeleteMovie(db database.Queryable, movieID uuid.UUID) error {
+	if _, err := db.Exec(`DELETE FROM media WHERE type='movie' AND id=$1`, movieID); err != nil {
+		return fmt.Errorf("deletion of movie %s failed: %w", movieID, err)
+	}
+
+	return nil
 }
 
 // queryRowMovie extracts a Media row from the database and ensures that the row returned represents

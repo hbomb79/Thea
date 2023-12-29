@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/api"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/event"
@@ -25,59 +24,21 @@ const (
 	THEA_USER_DIR_SUFFIX = "/thea/"
 )
 
-type (
-	EventParticipator interface {
-		RegisterEventCoordinator(event.EventCoordinator)
-	}
+// Thea represents the top-level object for the server, and is responsible
+// for initialising embedded support services, services, stores, event
+// handling, et cetera...
+type theaImpl struct {
+	eventBus          event.EventCoordinator
+	dockerManager     docker.DockerManager
+	storeOrchestrator *storeOrchestrator
+	activityManager   *activityManager
+	config            TheaConfig
 
-	RunnableService interface {
-		Run(context.Context) error
-	}
-
-	RestGateway interface {
-		RunnableService
-		BroadcastTaskUpdate(taskID uuid.UUID) error
-		BroadcastTaskProgressUpdate(taskID uuid.UUID) error
-		BroadcastWorkflowUpdate(workflowID uuid.UUID) error
-		BroadcastMediaUpdate(mediaID uuid.UUID) error
-		BroadcastIngestUpdate(ingestID uuid.UUID) error
-	}
-
-	TranscodeService interface {
-		RunnableService
-		EventParticipator
-		NewTask(mediaID uuid.UUID, targetID uuid.UUID) error
-		CancelTask(taskID uuid.UUID) error
-		AllTasks() []*transcode.TranscodeTask
-		Task(taskID uuid.UUID) *transcode.TranscodeTask
-		ActiveTaskForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) *transcode.TranscodeTask
-		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
-	}
-
-	IngestService interface {
-		RunnableService
-		RemoveIngest(ingestID uuid.UUID) error
-		GetIngest(ingestID uuid.UUID) *ingest.IngestItem
-		GetAllIngests() []*ingest.IngestItem
-		DiscoverNewFiles()
-		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
-	}
-
-	// Thea represents the top-level object for the server, and is responsible
-	// for initialising embedded support services, services, stores, event
-	// handling, et cetera...
-	theaImpl struct {
-		eventBus          event.EventCoordinator
-		dockerManager     docker.DockerManager
-		storeOrchestrator *storeOrchestrator
-		activityManager   *activityManager
-		config            TheaConfig
-
-		restGateway      RestGateway
-		ingestService    IngestService
-		transcodeService TranscodeService
-	}
-)
+	restGateway      RestGateway
+	ingestService    IngestService
+	transcodeService TranscodeService
+	dataManager      *serviceOrchestrator
+}
 
 func New(config TheaConfig) *theaImpl {
 	log.Emit(logger.DEBUG, "Bootstrapping Thea services using config: %#v\n", config)
@@ -119,7 +80,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to initialise connection to DB: %w", err)
 	}
 
-	store, err := NewStoreOrchestrator(db)
+	store, err := newStoreOrchestrator(db)
 	if err != nil {
 		return fmt.Errorf("failed to construct data orchestrator: %w", err)
 	}
@@ -130,16 +91,17 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	if serv, err := ingest.New(thea.config.IngestService, searcher, scraper, thea.storeOrchestrator, thea.eventBus); err == nil {
 		thea.ingestService = serv
 	} else {
-		panic(fmt.Sprintf("failed to construct ingestion service due to error: %v", err))
+		return fmt.Errorf("failed to construct ingestion service due to error: %w", err)
 	}
 
 	if serv, err := transcode.New(thea.config.Format, thea.eventBus, thea.storeOrchestrator); err == nil {
 		thea.transcodeService = serv
 	} else {
-		panic(fmt.Sprintf("failed to construct transcode service due to error: %v", err))
+		return fmt.Errorf("failed to construct transcode service due to error: %w", err)
 	}
 
-	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.storeOrchestrator)
+	thea.dataManager = newServiceOrchestrator(store, thea.ingestService, thea.transcodeService)
+	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.dataManager, thea.storeOrchestrator)
 	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	wg := &sync.WaitGroup{}
@@ -161,7 +123,7 @@ func (thea *theaImpl) spawnService(context context.Context, wg *sync.WaitGroup, 
 	defer func() {
 		if r := recover(); r != nil {
 			log.Emit(logger.ERROR, "panic of service %s, stack:%s\n", serviceLabel, string(debug.Stack()))
-			crashHandler(serviceLabel, fmt.Errorf("panic %v", r))
+			crashHandler(serviceLabel, fmt.Errorf("panic %w", r))
 		}
 	}()
 

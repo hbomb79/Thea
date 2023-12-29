@@ -42,7 +42,7 @@ type (
 	}
 )
 
-func NewStoreOrchestrator(db database.Manager) (*storeOrchestrator, error) {
+func newStoreOrchestrator(db database.Manager) (*storeOrchestrator, error) {
 	if db.GetSqlxDb() == nil {
 		return nil, ErrDatabaseNotConnected
 	}
@@ -255,6 +255,18 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 	}
 
 	return nil
+}
+
+func (orchestrator *storeOrchestrator) DeleteEpisode(episodeID uuid.UUID) error {
+	// TODO: FK cascading deletion will mean transcodes are also deleted, but this
+	// will leave files behind. Deal with this
+	return orchestrator.mediaStore.DeleteEpisode(orchestrator.db.GetSqlxDb(), episodeID)
+}
+
+func (orchestrator *storeOrchestrator) DeleteMovie(movieID uuid.UUID) error {
+	// TODO: FK cascading deletion will mean transcodes are also deleted, but this
+	// will leave files behind. Deal with this
+	return orchestrator.mediaStore.DeleteMovie(orchestrator.db.GetSqlxDb(), movieID)
 }
 
 // Workflows

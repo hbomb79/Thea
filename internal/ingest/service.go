@@ -174,7 +174,6 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 	}
 
 	log.Emit(logger.DEBUG, "Item %s claimed by worker %s for ingestion\n", item, w)
-	time.Sleep(time.Second * 1)
 	if err := item.ingest(service.eventBus, service.scraper, service.searcher, service.dataStore); err != nil {
 		if trbl, ok := err.(Trouble); ok {
 			item.Trouble = &trbl

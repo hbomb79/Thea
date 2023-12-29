@@ -36,12 +36,21 @@ type (
 		SetRoutes(*echo.Group)
 	}
 
-	// DataStore represents a union of all the controller store requirements
-	DataStore interface {
+	// Store represents a union of all the controller store requirements, typically
+	// fulfilled by Thea's store orchestrator
+	Store interface {
 		targets.Store
 		workflows.Store
 		transcodes.Store
 		medias.Store
+	}
+
+	// Data represents a union of all the service-related requirements, typically
+	// fulfilled by Thea's data manager
+	Data interface {
+		medias.Data
+		ingests.Data
+		transcodes.Data
 	}
 
 	// The RestGateway is a thin-wrapper around the Echo HTTP router. It's sole responsbility
@@ -65,9 +74,8 @@ type (
 // to a data store, which are provided as arguments.
 func NewRestGateway(
 	config *RestConfig,
-	ingestService ingests.IngestService,
-	transcodeService transcodes.TranscodeService,
-	store DataStore,
+	data Data,
+	store Store,
 ) *RestGateway {
 	ec := echo.New()
 	ec.OnAddRouteHandler = func(_ string, route echo.Route, _ echo.HandlerFunc, _ []echo.MiddlewareFunc) {
@@ -79,15 +87,15 @@ func NewRestGateway(
 	validate := newValidator()
 	socket := websocket.New()
 	gateway := &RestGateway{
-		broadcaster:         newBroadcaster(socket, ingestService, store),
+		broadcaster:         newBroadcaster(socket, data, store),
 		config:              config,
 		ec:                  ec,
 		socket:              socket,
-		ingestController:    ingests.New(validate, ingestService),
-		transcodeController: transcodes.New(validate, transcodeService, store),
+		ingestController:    ingests.New(validate, data),
+		transcodeController: transcodes.New(validate, data, store),
 		targetsController:   targets.New(validate, store),
 		workflowController:  workflows.New(validate, store),
-		mediaController:     medias.New(validate, transcodeService, store),
+		mediaController:     medias.New(validate, data, store),
 	}
 
 	ec.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{

@@ -83,7 +83,6 @@ func (db *manager) Connect(config DatabaseConfig) error {
 	sql = sqldblogger.OpenDriver(dsn, sql.Driver(), &SqlLogger{dbLogger})
 
 	attempt := 1
-	time.Sleep(time.Second * 2)
 	for {
 		err := sql.Ping()
 		if err != nil {

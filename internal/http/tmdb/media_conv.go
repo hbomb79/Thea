@@ -11,6 +11,7 @@ func TmdbEpisodeToMedia(ep *Episode, isSeasonAdult bool, metadata *media.FileMed
 		Watchable: media.Watchable{
 			MediaResolution: media.MediaResolution{Width: *metadata.FrameW, Height: *metadata.FrameH},
 			SourcePath:      metadata.Path,
+			Duration:        runtimeToDurationSecs(metadata.Runtime),
 			Adult:           isSeasonAdult,
 		},
 		EpisodeNumber: metadata.EpisodeNumber,
@@ -35,7 +36,13 @@ func TmdbMovieToMedia(movie *Movie, metadata *media.FileMediaMetadata) *media.Mo
 		Watchable: media.Watchable{
 			MediaResolution: media.MediaResolution{Width: *metadata.FrameW, Height: *metadata.FrameH},
 			SourcePath:      metadata.Path,
+			Duration:        runtimeToDurationSecs(metadata.Runtime),
 			Adult:           movie.Adult,
 		},
 	}
+}
+
+func runtimeToDurationSecs(runtime string) int {
+	// TODO: Implement formating runtime extracted from ffprobe to seconds
+	return 0
 }

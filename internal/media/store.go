@@ -38,6 +38,7 @@ type (
 		MediaResolution
 		SourcePath string `db:"source_path"`
 		Adult      bool   `db:"adult"`
+		Duration   int
 	}
 
 	MediaResolution struct {

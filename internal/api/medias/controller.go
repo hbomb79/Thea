@@ -35,6 +35,10 @@ type (
 		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
 	}
 
+	StreamingService interface {
+		GenerateHSLPlaylist(*media.Container) string
+	}
+
 	Controller struct {
 		store            Store
 		transcodeService TranscodeService
@@ -72,6 +76,8 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.DELETE("/series/:id/", controller.deleteSeries)
 	eg.DELETE("/season/:id/", controller.deleteSeason)
 	eg.DELETE("/episode/:id/", controller.deleteEpisode)
+
+	eg.GET("/:id/stream/direct/stream.m3u8", controller.getDirectStreamPlaylist)
 }
 
 // list is an endpoint used to retrieve a list of movies and series which have been
@@ -270,6 +276,26 @@ func (controller *Controller) deleteSeason(ec echo.Context) error {
 	}
 
 	return ec.NoContent(http.StatusOK)
+}
+
+func (controller *Controller) getDirectStreamPlaylist(ec echo.Context) error {
+	mediaID, err := uuid.Parse(ec.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Media ID is not a valid UUID")
+	}
+
+	mediaContainer := controller.store.GetMedia(mediaID)
+	if mediaContainer == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "No Media found")
+	}
+
+	playlistContent := controller.streamingService.GenerateHSLPlaylist(mediaContainer)
+	response := ec.Response().Writer
+
+	response.Header().Add("Content-Type", "application/vnd.apple.mpegurl")
+	response.Write([]byte(playlistContent))
+
+	return nil
 }
 
 func (controller *Controller) getMediaWatchTargets(mediaID uuid.UUID) ([]*watchTargetDto, error) {

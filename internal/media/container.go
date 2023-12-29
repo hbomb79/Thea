@@ -36,6 +36,7 @@ func (cont *Container) TmdbId() string         { return cont.model().TmdbID }
 func (cont *Container) CreatedAt() time.Time   { return cont.model().CreatedAt }
 func (cont *Container) UpdatedAt() time.Time   { return cont.model().UpdatedAt }
 func (cont *Container) Source() string         { return cont.watchable().SourcePath }
+func (cont *Container) DurationSecs() int      { return cont.watchable().Duration }
 
 // EpisodeNumber returns the episode number for the media IF it is an Episode. -1
 // is returned if the container is holding a Movie.

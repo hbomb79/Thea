@@ -64,52 +64,6 @@ func (orchestrator *storeOrchestrator) GetMovie(movieId uuid.UUID) (*media.Movie
 	return orchestrator.mediaStore.GetMovie(orchestrator.db.GetSqlxDb(), movieId)
 }
 
-// GetInflatedMovie fetches the movie, the targets Thea knows about, and other related information (in the future,
-// this will include things like ratings, cast members, etc etc).
-// func (orchestrator *storeOrchestrator) GetInflatedMovie(movieId uuid.UUID) (*media.Movie, []*transcode.Transcode, error) {
-// 	wrap := func(err error) error {
-// 		return fmt.Errorf("failed to fetch inflated series: %w", err)
-// 	}
-
-// 	var movie *media.Movie
-// 	var transcodes []*transcode.Transcode
-// 	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
-// 		// Fetch the movie
-// 		movie, err := orchestrator.mediaStore.GetMovie(tx, movieId)
-// 		if err != nil {
-// 			return wrap(err)
-// 		}
-
-// 		// Fetch any completed transcodes for this media
-// 		transcodes, err := orchestrator.transcodeStore.GetForMedia(tx, movieId)
-// 		if err != nil {
-// 			return wrap(err)
-// 		}
-
-// 		// Fetch any transcode TARGETS which are not already completed AND which are eligible for
-// 		// on-the-fly transcoding.
-// 		targets := orchestrator.targetStore.GetAll(tx)
-
-// 		// Add completed transcodes as valid pre-transcoded targets
-// 		watchTargets := make([]*media.WatchTarget, len(transcodes))
-// 		for k, v := range transcodes {
-// 			watchTargets[k] = &media.WatchTarget{
-// 				Ready:    true,
-// 				Type:     media.PreTranscoded,
-// 				TargetID: v.TargetID,
-// 			}
-// 		}
-
-// 		// Add any other targets
-
-// 		return nil
-// 	}); err != nil {
-// 		return nil, err
-// 	}
-
-// 	return inflated, nil
-// }
-
 func (orchestrator *storeOrchestrator) GetEpisode(episodeId uuid.UUID) (*media.Episode, error) {
 	return orchestrator.mediaStore.GetEpisode(orchestrator.db.GetSqlxDb(), episodeId)
 }

@@ -1,6 +1,7 @@
 package medias
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -85,7 +86,6 @@ type (
 		CreatedAt    time.Time         `json:"created_at"`
 		UpdatedAt    time.Time         `json:"updated_at"`
 		WatchTargets []*watchTargetDto `json:"watch_targets"`
-		// Source mediaSourceDto `json:"source"`
 	}
 
 	Store interface {
@@ -172,6 +172,96 @@ func (controller *Controller) listSeries(ec echo.Context) error {
 	return ec.JSON(http.StatusOK, dtos)
 }
 
+func (controller *Controller) getMovie(ec echo.Context) error {
+	// TODO: consider pushing all of this down in to a DB transaction
+	wrap := wrapErrorGenerator("failed to fetch movie")
+	movieId, err := uuid.Parse(ec.Param("id"))
+	if err != nil {
+		return wrap(err)
+	}
+
+	movie, err := controller.store.GetMovie(movieId)
+	if err != nil {
+		return wrap(err)
+	}
+
+	watchTargets, err := controller.constructWatchTargetsForMedia(movieId)
+	if err != nil {
+		return wrap(err)
+	}
+
+	dto := movieDto{
+		Id:           movie.ID,
+		TmdbId:       movie.TmdbId,
+		Title:        movie.Title,
+		CreatedAt:    movie.CreatedAt,
+		UpdatedAt:    movie.UpdatedAt,
+		WatchTargets: watchTargets,
+	}
+
+	return ec.JSON(http.StatusOK, dto)
+}
+
+func (controller *Controller) getEpisode(ec echo.Context) error {
+	// TODO: consider pushing all of this down in to a DB transaction
+	wrap := wrapErrorGenerator("failed to fetch episode")
+	episodeID, err := uuid.Parse(ec.Param("id"))
+	if err != nil {
+		return wrap(err)
+	}
+
+	episode, err := controller.store.GetEpisode(episodeID)
+	if err != nil {
+		return wrap(err)
+	}
+
+	watchTargets, err := controller.constructWatchTargetsForMedia(episodeID)
+	if err != nil {
+		return wrap(err)
+	}
+
+	dto := episodeDto{
+		Id:           episode.ID,
+		TmdbId:       episode.TmdbId,
+		Title:        episode.Title,
+		CreatedAt:    episode.CreatedAt,
+		UpdatedAt:    episode.UpdatedAt,
+		WatchTargets: watchTargets,
+	}
+
+	return ec.JSON(http.StatusOK, dto)
+}
+
+func (controller *Controller) getSeries(ec echo.Context) error {
+	id, err := uuid.Parse(ec.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
+	}
+
+	series, err := controller.store.GetInflatedSeries(id)
+	if err != nil {
+		return wrapErrorGenerator("Failed to get series")(err)
+	}
+
+	return ec.JSON(http.StatusOK, series)
+}
+
+func (controller *Controller) deleteEpisode(ec echo.Context) error {
+	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+}
+
+func (controller *Controller) deleteMovie(ec echo.Context) error {
+	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+}
+
+func (controller *Controller) deleteSeries(ec echo.Context) error {
+	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+}
+
+func (controller *Controller) deleteSeason(ec echo.Context) error {
+	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+}
+
 func (controller *Controller) constructWatchTargetsForMedia(mediaID uuid.UUID) ([]*watchTargetDto, error) {
 	targets := controller.store.GetAllTargets()
 	findTarget := func(tid uuid.UUID) *ffmpeg.Target {
@@ -221,102 +311,6 @@ func (controller *Controller) constructWatchTargetsForMedia(mediaID uuid.UUID) (
 	return watchTargets, nil
 }
 
-func (controller *Controller) getMovie(ec echo.Context) error {
-	// TODO: consider pushing all of this down in to a DB transaction
-	wrap := func(err error) error {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to fetch movie: %w", err))
-	}
-
-	movieId, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return wrap(err)
-	}
-
-	movie, err := controller.store.GetMovie(movieId)
-	if err != nil {
-		return wrap(err)
-	}
-
-	watchTargets, err := controller.constructWatchTargetsForMedia(movieId)
-	if err != nil {
-		return wrap(err)
-	}
-
-	dto := movieDto{
-		Id:           movie.ID,
-		TmdbId:       movie.TmdbId,
-		Title:        movie.Title,
-		CreatedAt:    movie.CreatedAt,
-		UpdatedAt:    movie.UpdatedAt,
-		WatchTargets: watchTargets,
-	}
-
-	return ec.JSON(http.StatusOK, dto)
-}
-
-func (controller *Controller) getSeries(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
-	}
-
-	series, err := controller.store.GetInflatedSeries(id)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to get series: %s", err))
-	}
-
-	return ec.JSON(http.StatusOK, series)
-}
-
-func (controller *Controller) getEpisode(ec echo.Context) error {
-	// TODO: consider pushing all of this down in to a DB transaction
-	wrap := func(err error) error {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to fetch episode: %v", err))
-	}
-
-	movieId, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return wrap(err)
-	}
-
-	movie, err := controller.store.GetEpisode(movieId)
-	if err != nil {
-		return wrap(err)
-	}
-
-	watchTargets, err := controller.constructWatchTargetsForMedia(movieId)
-	if err != nil {
-		return wrap(err)
-	}
-
-	dto := episodeDto{
-		Id:           movie.ID,
-		TmdbId:       movie.TmdbId,
-		Title:        movie.Title,
-		CreatedAt:    movie.CreatedAt,
-		UpdatedAt:    movie.UpdatedAt,
-		WatchTargets: watchTargets,
-	}
-
-	return ec.JSON(http.StatusOK, dto)
-}
-
-func (controller *Controller) deleteEpisode(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
-}
-
-func (controller *Controller) deleteMovie(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
-}
-
-func (controller *Controller) deleteSeries(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
-}
-
-func (controller *Controller) deleteSeason(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
-}
-
 func InflatedSeriesModelToDto(model *media.SeriesStub) seriesStubDto {
 	return seriesStubDto{
 		Id:          model.ID,
@@ -339,5 +333,14 @@ func newWatchTarget(target *ffmpeg.Target, t watchTargetType, ready bool) *watch
 		Type:     t,
 		TargetID: &target.ID, // TODO: this needs to actually come from the target
 		Enabled:  true,
+	}
+}
+
+func wrapErrorGenerator(message string) func(err error) error {
+	return func(err error) error {
+		if errors.Is(err, media.ErrNoRowFound) {
+			return echo.ErrNotFound
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to fetch episode: %v", err))
 	}
 }

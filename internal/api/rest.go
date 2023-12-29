@@ -65,8 +65,8 @@ type (
 // to a data store, which are provided as arguments.
 func NewRestGateway(
 	config *RestConfig,
-	ingestService ingests.Service,
-	transcodeService transcodes.Service,
+	ingestService ingests.IngestService,
+	transcodeService transcodes.TranscodeService,
 	store DataStore,
 ) *RestGateway {
 	ec := echo.New()

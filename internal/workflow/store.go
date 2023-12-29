@@ -166,7 +166,7 @@ func (store *Store) UpdateWorkflowTargetsTx(tx *sqlx.Tx, workflowID uuid.UUID, t
 // The workflows criteria/targets are accessed via a join and aggregated in to
 // the result row as a JSONB array, which is then unmarshalled and used to
 // construct a 'Workflow'
-func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Workflow {
+func (store *Store) Get(db database.Queryable, id uuid.UUID) *Workflow {
 	dest := &workflowModel{}
 	if err := db.Get(dest, getWorkflowSql(`WHERE w.id=$1`), id); err != nil {
 		log.Warnf("Failed to find workflow (id=%s): %v\n", id, err)
@@ -180,7 +180,7 @@ func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Workflow {
 // The workflows criteria/targets are accessed via a join and aggregated in to
 // the result row as a JSONB array, which is then unmarshalled and used to
 // construct a 'Workflow'
-func (store *Store) GetAll(db *sqlx.DB) []*Workflow {
+func (store *Store) GetAll(db database.Queryable) []*Workflow {
 	var dest []*workflowModel
 	if err := db.Select(&dest, getWorkflowSql("")); err != nil {
 		log.Warnf("Failed to get all workflows: %v\n", err)
@@ -197,7 +197,7 @@ func (store *Store) GetAll(db *sqlx.DB) []*Workflow {
 // Delete will remove a workflow, and all it's related information (by way of cascading deletes)
 // using the workflow ID provided. To delete only the workflows criteria/targets/etc,
 // the relevant update method should be used instead.
-func (store *Store) Delete(db *sqlx.DB, id uuid.UUID) {
+func (store *Store) Delete(db database.Queryable, id uuid.UUID) {
 	_, err := db.Exec(`DELETE FROM workflow WHERE id=$1;`, id)
 
 	if err != nil {

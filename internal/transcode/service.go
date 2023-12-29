@@ -123,6 +123,18 @@ func (service *transcodeService) Task(id uuid.UUID) *TranscodeTask {
 	return nil
 }
 
+// ActiveTasksForMedia returns all the tasks which are running against the given media ID
+func (service *transcodeService) ActiveTasksForMedia(mediaId uuid.UUID) []*TranscodeTask {
+	tasks := make([]*TranscodeTask, 0)
+	for _, t := range service.tasks {
+		if t.media.Id() == mediaId {
+			tasks = append(tasks, t)
+		}
+	}
+
+	return tasks
+}
+
 // TaskForMediaAndTarget searches through all the tasks in this service and looks for one
 // which was created for the media and target matching the IDs provided. If no such task exists
 // then nil is returned.

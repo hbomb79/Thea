@@ -31,6 +31,7 @@ type (
 		CancelTask(uuid.UUID) error
 		Task(uuid.UUID) *transcode.TranscodeTask
 		AllTasks() []*transcode.TranscodeTask
+		ActiveTasksForMedia(uuid.UUID) []*transcode.TranscodeTask
 	}
 
 	Store interface {

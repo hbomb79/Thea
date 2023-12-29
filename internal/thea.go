@@ -51,6 +51,7 @@ type (
 		AllTasks() []*transcode.TranscodeTask
 		Task(taskID uuid.UUID) *transcode.TranscodeTask
 		ActiveTaskForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) *transcode.TranscodeTask
+		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
 	}
 
 	IngestService interface {

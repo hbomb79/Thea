@@ -87,7 +87,7 @@ func NewRestGateway(
 		transcodeController: transcodes.New(validate, transcodeService, store),
 		targetsController:   targets.New(validate, store),
 		workflowController:  workflows.New(validate, store),
-		mediaController:     medias.New(validate, store),
+		mediaController:     medias.New(validate, transcodeService, store),
 	}
 
 	ec.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{

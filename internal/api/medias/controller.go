@@ -77,7 +77,7 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.DELETE("/season/:id/", controller.deleteSeason)
 	eg.DELETE("/episode/:id/", controller.deleteEpisode)
 
-	eg.GET("/:id/stream/direct/stream.m3u8", controller.getDirectStreamPlaylist)
+	eg.GET("/:id/stream/direct/stream.m3u8/", controller.getDirectStreamPlaylist)
 }
 
 // list is an endpoint used to retrieve a list of movies and series which have been
@@ -289,7 +289,7 @@ func (controller *Controller) getDirectStreamPlaylist(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "No Media found")
 	}
 
-	playlistContent := controller.streamingService.GenerateHSLPlaylist(mediaContainer)
+	playlistContent := media.GenerateHSLPlaylist(mediaContainer)
 	response := ec.Response().Writer
 
 	response.Header().Add("Content-Type", "application/vnd.apple.mpegurl")

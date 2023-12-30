@@ -1,21 +1,11 @@
-package streaming
+package media
 
 import (
 	"fmt"
 	"strconv"
-
-	"github.com/hbomb79/Thea/internal/media"
 )
 
-type (
-	streamingService struct{}
-)
-
-func New() (*streamingService, error) {
-	return &streamingService{}, nil
-}
-
-func (service *streamingService) GenerateHSLPlaylist(container media.Container) string {
+func GenerateHSLPlaylist(container *Container) string {
 	segmentLength := 5 // Every segment is 5 seconds long for now.
 	content := "#EXTM3U\n" +
 		"#EXT-X-PLAYLIST-TYPE:VOD\n" +

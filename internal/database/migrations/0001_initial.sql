@@ -33,6 +33,7 @@ CREATE TABLE media(
     title TEXT NOT NULL,
     adult BOOLEAN NOT NULL,
     source_path TEXT NOT NULL,
+    duration INT NOT NULL,
 
     -- Nullable columns which must be specified if the media t is episode
     episode_number INT CHECK (episode_number IS NULL OR episode_number >= 0),

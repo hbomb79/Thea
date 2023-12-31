@@ -1,6 +1,8 @@
 package tmdb
 
 import (
+	"strconv"
+
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/media"
 )
@@ -43,6 +45,11 @@ func TmdbMovieToMedia(movie *Movie, metadata *media.FileMediaMetadata) *media.Mo
 }
 
 func runtimeToDurationSecs(runtime string) int {
-	// TODO: Implement formating runtime extracted from ffprobe to seconds
-	return 0
+	secsFloat, err := strconv.ParseFloat(runtime, 64)
+	if err != nil {
+		return 0 // TODO: Panic or handle if runtime is not a float number
+	}
+
+	secs := int(secsFloat)
+	return secs
 }

@@ -38,7 +38,7 @@ type (
 		MediaResolution
 		SourcePath string `db:"source_path"`
 		Adult      bool   `db:"adult"`
-		Duration   int
+		Duration   int    `db:"duration"`
 	}
 
 	MediaResolution struct {
@@ -147,12 +147,12 @@ const (
 func (store *Store) SaveMovie(db database.Queryable, movie *Movie) error {
 	var updatedMovie Movie
 	if err := db.QueryRowx(`
-		INSERT INTO media(id, type, tmdb_id, title, adult, source_path, created_at, updated_at)
-		VALUES($1, $2, $3, $4, $5, $6, current_timestamp, current_timestamp)
+		INSERT INTO media(id, type, tmdb_id, title, adult, source_path, duration, created_at, updated_at)
+		VALUES($1, $2, $3, $4, $5, $6, $7, current_timestamp, current_timestamp)
 		ON CONFLICT(tmdb_id, type) DO UPDATE
-			SET (updated_at, title, adult, source_path) = (current_timestamp, EXCLUDED.title, EXCLUDED.adult, EXCLUDED.source_path)
-		RETURNING id, tmdb_id, title, adult, source_path, created_at, updated_at;
-	`, movie.ID, "movie", movie.TmdbID, movie.Title, movie.Adult, movie.SourcePath).StructScan(&updatedMovie); err != nil {
+			SET (updated_at, title, adult, source_path, duration) = (current_timestamp, EXCLUDED.title, EXCLUDED.adult, EXCLUDED.source_path, EXCLUDED.duration)
+		RETURNING id, tmdb_id, title, adult, source_path, duration, created_at, updated_at;
+	`, movie.ID, "movie", movie.TmdbId, movie.Title, movie.Adult, movie.SourcePath, movie.Duration).StructScan(&updatedMovie); err != nil {
 		return err
 	}
 
@@ -217,13 +217,13 @@ func (store *Store) SaveSeason(db database.Queryable, season *Season) error {
 func (store *Store) SaveEpisode(db database.Queryable, episode *Episode) error {
 	var updatedEpisode Episode
 	if err := db.QueryRowx(`
-		INSERT INTO media(id, type, tmdb_id, episode_number, title, source_path, season_id, adult, created_at, updated_at)
-		VALUES($1, $2, $3, $4, $5, $6, $7, $8, current_timestamp, current_timestamp)
+		INSERT INTO media(id, type, tmdb_id, episode_number, title, source_path, duration, season_id, adult, created_at, updated_at)
+		VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, current_timestamp, current_timestamp)
 		ON CONFLICT(tmdb_id, type) DO UPDATE
-			SET (episode_number, title, source_path, season_id, updated_at, adult) =
-				(EXCLUDED.episode_number, EXCLUDED.title, EXCLUDED.source_path, EXCLUDED.season_id, current_timestamp, EXCLUDED.adult)
-		RETURNING id, tmdb_id, episode_number, title, source_path, season_id, adult, created_at, updated_at;
-	`, episode.ID, "episode", episode.TmdbID, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.SeasonID, episode.Adult).StructScan(&updatedEpisode); err != nil {
+			SET (episode_number, title, source_path, duration, season_id, updated_at, adult) =
+				(EXCLUDED.episode_number, EXCLUDED.title, EXCLUDED.source_path, EXCLUDED.duration, EXCLUDED.season_id, current_timestamp, EXCLUDED.adult)
+		RETURNING id, tmdb_id, episode_number, title, source_path, duration, season_id, adult, created_at, updated_at;
+	`, episode.ID, "episode", episode.TmdbId, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.Duration, episode.SeasonID, episode.Adult).StructScan(&updatedEpisode); err != nil {
 		return err
 	}
 

@@ -24,18 +24,20 @@ type (
 	MediaUpdate        struct{}
 
 	broadcaster struct {
-		socketHub *websocket.SocketHub
-		data      Data
-		store     Store
+		socketHub        *websocket.SocketHub
+		ingestService    ingests.IngestService
+		transcodeService TranscodeService
+		store            Store
 	}
 )
 
 func newBroadcaster(
 	socketHub *websocket.SocketHub,
-	data Data,
+	ingestService ingests.IngestService,
+	transcodeService TranscodeService,
 	store Store,
 ) *broadcaster {
-	return &broadcaster{socketHub, data, store}
+	return &broadcaster{socketHub, ingestService, transcodeService, store}
 }
 
 func (hub *broadcaster) BroadcastTaskUpdate(id uuid.UUID) error {
@@ -55,7 +57,7 @@ func (hub *broadcaster) BroadcastMediaUpdate(id uuid.UUID) error {
 }
 
 func (hub *broadcaster) BroadcastIngestUpdate(id uuid.UUID) error {
-	item := hub.data.GetIngest(id)
+	item := hub.ingestService.GetIngest(id)
 	update := IngestUpdate{IngestId: id, Ingest: ingests.NewDto(item)}
 	hub.broadcast(TITLE_INGEST_UPDATE, update)
 

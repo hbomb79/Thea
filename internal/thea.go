@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/api"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/internal/event"
@@ -19,6 +20,41 @@ import (
 )
 
 var log = logger.Get("Core")
+
+type (
+	RunnableService interface {
+		Run(context.Context) error
+	}
+
+	RestGateway interface {
+		RunnableService
+		BroadcastTaskUpdate(taskID uuid.UUID) error
+		BroadcastTaskProgressUpdate(taskID uuid.UUID) error
+		BroadcastWorkflowUpdate(workflowID uuid.UUID) error
+		BroadcastMediaUpdate(mediaID uuid.UUID) error
+		BroadcastIngestUpdate(ingestID uuid.UUID) error
+	}
+
+	TranscodeService interface {
+		RunnableService
+		NewTask(mediaID uuid.UUID, targetID uuid.UUID) error
+		CancelTask(taskID uuid.UUID) error
+		AllTasks() []*transcode.TranscodeTask
+		Task(taskID uuid.UUID) *transcode.TranscodeTask
+		ActiveTaskForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) *transcode.TranscodeTask
+		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
+		CancelTasksForMedia(mediaID uuid.UUID)
+	}
+
+	IngestService interface {
+		RunnableService
+		RemoveIngest(ingestID uuid.UUID) error
+		GetIngest(ingestID uuid.UUID) *ingest.IngestItem
+		GetAllIngests() []*ingest.IngestItem
+		DiscoverNewFiles()
+		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
+	}
+)
 
 const (
 	THEA_USER_DIR_SUFFIX = "/thea/"
@@ -37,7 +73,6 @@ type theaImpl struct {
 	restGateway      RestGateway
 	ingestService    IngestService
 	transcodeService TranscodeService
-	dataManager      *serviceOrchestrator
 }
 
 func New(config TheaConfig) *theaImpl {
@@ -80,7 +115,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to initialise connection to DB: %w", err)
 	}
 
-	store, err := newStoreOrchestrator(db)
+	store, err := newStoreOrchestrator(db, thea.eventBus)
 	if err != nil {
 		return fmt.Errorf("failed to construct data orchestrator: %w", err)
 	}
@@ -100,8 +135,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to construct transcode service due to error: %w", err)
 	}
 
-	thea.dataManager = newServiceOrchestrator(store, thea.ingestService, thea.transcodeService)
-	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.dataManager, thea.storeOrchestrator)
+	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.storeOrchestrator)
 	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	wg := &sync.WaitGroup{}
@@ -109,7 +143,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	go thea.spawnService(ctx, wg, thea.ingestService, "ingest-service", crashHandler)
 	go thea.spawnService(ctx, wg, thea.transcodeService, "transcode-service", crashHandler)
 	go thea.spawnService(ctx, wg, thea.restGateway, "rest-gateway", crashHandler)
-	log.Emit(logger.SUCCESS, "Thea services spawned!\n")
+	log.Emit(logger.SUCCESS, "Thea services spawned! [CTRL+C to stop]\n")
 
 	wg.Wait()
 	return nil

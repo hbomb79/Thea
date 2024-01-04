@@ -28,13 +28,13 @@ type (
 	// - ADDITIONALLY, a watch target with NO target_id will be available of type
 	//   on-the-fly and ready=true will be present, which represents being able to stream
 	//   from the source media directly.
-	watchTargetType int
+	watchTargetType string
 	watchTargetDto  struct {
-		Name     string     `json:"display_name"`
-		TargetID *uuid.UUID `json:"target_id,omitempty"`
-		Enabled  bool       `json:"enabled"`
-		Type     string     `json:"type"`
-		Ready    bool       `json:"ready"`
+		Name     string          `json:"display_name"`
+		TargetID *uuid.UUID      `json:"target_id,omitempty"`
+		Enabled  bool            `json:"enabled"`
+		Type     watchTargetType `json:"type"`
+		Ready    bool            `json:"ready"`
 		// TODO: may want to include some additional information about the
 		// target here, such as bitrate and resolution.
 	}
@@ -90,37 +90,37 @@ type (
 )
 
 const (
-	PreTranscoded watchTargetType = iota
-	LiveTranscode
+	PreTranscoded watchTargetType = "pre_transcode"
+	LiveTranscode watchTargetType = "live_transcode"
 )
 
 type (
 	Store interface {
-		ListMovie() ([]*media.Movie, error)
 		GetMovie(movieID uuid.UUID) (*media.Movie, error)
 		GetEpisode(episodeID uuid.UUID) (*media.Episode, error)
-		DeleteEpisode(episodeID uuid.UUID) error
-		DeleteMovie(movieID uuid.UUID) error
+		ListMovie() ([]*media.Movie, error)
 		ListSeriesStubs() ([]*media.SeriesStub, error)
 		GetInflatedSeries(seriesID uuid.UUID) (*media.InflatedSeries, error)
 		GetTranscodesForMedia(uuid.UUID) ([]*transcode.Transcode, error)
 		GetAllTargets() []*ffmpeg.Target
+		DeleteEpisode(episodeID uuid.UUID) error
+		DeleteSeries(seriesID uuid.UUID) error
+		DeleteSeason(seasonID uuid.UUID) error
+		DeleteMovie(movieID uuid.UUID) error
 	}
 
-	Data interface {
-		GetActiveTranscodeTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
-		CancelTranscodeTasksForMedia(mediaID uuid.UUID)
-		GetMediaWatchTargets(mediaID uuid.UUID) ([]*media.WatchTarget, error)
+	TranscodeService interface {
+		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
 	}
 
 	Controller struct {
-		store Store
-		data  Data
+		store            Store
+		transcodeService TranscodeService
 	}
 )
 
-func New(validate *validator.Validate, dataManager Data, store Store) *Controller {
-	return &Controller{store: store, data: dataManager}
+func New(validate *validator.Validate, transcodeService TranscodeService, store Store) *Controller {
+	return &Controller{store: store, transcodeService: transcodeService}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
@@ -191,7 +191,7 @@ func (controller *Controller) getMovie(ec echo.Context) error {
 		return wrap(err)
 	}
 
-	watchTargets, err := controller.data.GetMediaWatchTargets(movieId)
+	watchTargets, err := controller.getMediaWatchTargets(movieId)
 	if err != nil {
 		return wrap(err)
 	}
@@ -202,7 +202,7 @@ func (controller *Controller) getMovie(ec echo.Context) error {
 		Title:        movie.Title,
 		CreatedAt:    movie.CreatedAt,
 		UpdatedAt:    movie.UpdatedAt,
-		WatchTargets: newWatchTargetDtos(watchTargets),
+		WatchTargets: watchTargets,
 	}
 
 	return ec.JSON(http.StatusOK, dto)
@@ -221,7 +221,7 @@ func (controller *Controller) getEpisode(ec echo.Context) error {
 		return wrap(err)
 	}
 
-	watchTargets, err := controller.data.GetMediaWatchTargets(episodeID)
+	watchTargets, err := controller.getMediaWatchTargets(episodeID)
 	if err != nil {
 		return wrap(err)
 	}
@@ -232,7 +232,7 @@ func (controller *Controller) getEpisode(ec echo.Context) error {
 		Title:        episode.Title,
 		CreatedAt:    episode.CreatedAt,
 		UpdatedAt:    episode.UpdatedAt,
-		WatchTargets: newWatchTargetDtos(watchTargets),
+		WatchTargets: watchTargets,
 	}
 
 	return ec.JSON(http.StatusOK, dto)
@@ -258,15 +258,9 @@ func (controller *Controller) deleteEpisode(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Episode ID is not a valid UUID")
 	}
 
-	// Delete the episode first, and *then* cancel the tasks so that if episode deletion fails we
-	// won't have cancelled the tasks (as this is non-reversable).
-	// As the episode will be deleted from the DB, the inability to satisfy the foreign key
-	// constraint will prevent any *perfectly* time transcodes from inserting new transcode rows
-	// between the episode deletion and the cancellation of the tasks.
 	if err := controller.store.DeleteEpisode(id); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
-	controller.data.CancelTranscodeTasksForMedia(id)
 
 	return ec.NoContent(http.StatusOK)
 }
@@ -277,33 +271,90 @@ func (controller *Controller) deleteMovie(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Movie ID is not a valid UUID")
 	}
 
-	// Delete the movie first, and *then* cancel the tasks so that if movie deletion fails we
-	// won't have cancelled the tasks (as this is non-reversable).
-	// As the movie will be deleted from the DB, the inability to satisfy the foreign key
-	// constraint will prevent any *perfectly* time transcodes from inserting new transcode rows
-	// between the movie deletion and the cancellation of the tasks.
 	if err := controller.store.DeleteMovie(id); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
-	controller.data.CancelTranscodeTasksForMedia(id)
 
 	return ec.NoContent(http.StatusOK)
 }
 
 func (controller *Controller) deleteSeries(ec echo.Context) error {
-	// TODO:
-	// - Find all episodes nested inside this series' seasons
-	// - Delete the series (which will delete all seasons and episodes due to FK cascading)
-	// - Cancel all the tasks associated with the episodes above if the deletion was successful
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	id, err := uuid.Parse(ec.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Movie ID is not a valid UUID")
+	}
+
+	if err := controller.store.DeleteSeries(id); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return ec.NoContent(http.StatusOK)
 }
 
 func (controller *Controller) deleteSeason(ec echo.Context) error {
-	// TODO:
-	// - Find all episodes nested inside this series' seasons
-	// - Delete the series (which will delete all seasons and episodes due to FK cascading)
-	// - Cancel all the tasks associated with the episodes above if the deletion was successful
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	id, err := uuid.Parse(ec.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Season ID is not a valid UUID")
+	}
+
+	if err := controller.store.DeleteSeason(id); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return ec.NoContent(http.StatusOK)
+}
+
+func (controller *Controller) getMediaWatchTargets(mediaID uuid.UUID) ([]*watchTargetDto, error) {
+	targets := controller.store.GetAllTargets()
+	findTarget := func(tid uuid.UUID) *ffmpeg.Target {
+		for _, v := range targets {
+			if v.ID == tid {
+				return v
+			}
+		}
+
+		panic("Media references a target which does not exist. This should simply be unreachable unless the DB has lost referential integrity")
+	}
+
+	activeTranscodes := controller.transcodeService.ActiveTasksForMedia(mediaID)
+	completedTranscodes, err := controller.store.GetTranscodesForMedia(mediaID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 1. Add completed transcodes as valid pre-transcoded targets
+	targetsNotEligibleForLiveTranscode := make(map[uuid.UUID]struct{}, len(activeTranscodes))
+	watchTargets := make([]*watchTargetDto, len(completedTranscodes))
+	for k, v := range completedTranscodes {
+		targetsNotEligibleForLiveTranscode[v.TargetID] = struct{}{}
+		watchTargets[k] = newWatchTarget(findTarget(v.TargetID), PreTranscoded, true)
+	}
+
+	// 2. Add in-progress transcodes (as not ready to watch)
+	for _, v := range activeTranscodes {
+		targetsNotEligibleForLiveTranscode[v.Target().ID] = struct{}{}
+		watchTargets = append(watchTargets, newWatchTarget(v.Target(), PreTranscoded, false))
+	}
+
+	// 3. Any targets which do NOT have a complete or in-progress pre-transcode are eligible for live transcoding/streaming
+	for _, v := range targets {
+		// TODO: check if the specified target allows for live transcoding
+		if _, ok := targetsNotEligibleForLiveTranscode[v.ID]; ok {
+			continue
+		}
+
+		watchTargets = append(watchTargets, newWatchTarget(v, LiveTranscode, true))
+	}
+
+	// 4. We can directly stream the source media itself, so add that too
+	// TODO: at some point we may want this to be configurable
+	watchTargets = append(watchTargets, &watchTargetDto{Name: "Source", Ready: true, Type: LiveTranscode, TargetID: nil, Enabled: true})
+
+	return watchTargets, nil
+}
+
+func newWatchTarget(target *ffmpeg.Target, t watchTargetType, ready bool) *watchTargetDto {
+	return &watchTargetDto{Name: target.Label, Ready: ready, Type: t, TargetID: &target.ID, Enabled: true}
 }
 
 func inflatedSeriesModelToDto(model *media.SeriesStub) seriesStubDto {
@@ -319,24 +370,6 @@ func movieModelToDto(model *media.Movie) movieStubDto {
 		Id:    model.ID,
 		Title: model.Title,
 	}
-}
-
-func newWatchTargetDtos(watchTargets []*media.WatchTarget) []*watchTargetDto {
-	dtos := make([]*watchTargetDto, len(watchTargets))
-	for k, v := range watchTargets {
-		dtos[k] = newWatchTargetDto(v)
-	}
-
-	return dtos
-}
-
-func newWatchTargetDto(watchTarget *media.WatchTarget) *watchTargetDto {
-	var t string = "pre_transcode"
-	if watchTarget.Type == media.LiveTranscode {
-		t = "live_transcode"
-	}
-
-	return &watchTargetDto{Name: watchTarget.Name, Ready: watchTarget.Ready, Type: t, TargetID: watchTarget.TargetID, Enabled: watchTarget.Enabled}
 }
 
 func wrapErrorGenerator(message string) func(err error) error {

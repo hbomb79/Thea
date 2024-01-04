@@ -100,17 +100,6 @@ type (
 		Watchable
 	}
 
-	WatchTargetType int
-	WatchTarget     struct {
-		Name     string
-		TargetID *uuid.UUID
-		Enabled  bool
-		Type     WatchTargetType
-		Ready    bool
-		// TODO: may want to include some additional information about the
-		// target here, such as bitrate and resolution.
-	}
-
 	Store struct{}
 )
 
@@ -121,9 +110,6 @@ var (
 )
 
 const (
-	PreTranscoded WatchTargetType = iota
-	LiveTranscode
-
 	IDCol     = "id"
 	TmdbIDCol = "tmdb_id"
 
@@ -338,6 +324,49 @@ func (store *Store) GetSeasonsForSeries(db database.Queryable, seriesID uuid.UUI
 	return dest, nil
 }
 
+// GetEpisodesForSeries accepts a list of series IDs and queries the database
+// for all the episodes referencing them (indirectly, via the associated seasons).
+// The result is constructed in to a map such that each key is one of the
+// series IDs, and the value is a slice of all the
+// episodes related to that series.
+//
+// NB: if a series ID does not reference an existing series, or it has no episodes, then it's key
+// will be missing from the resulting map.
+func (store *Store) GetEpisodesForSeries(db database.Queryable, seriesIDs []uuid.UUID) (map[uuid.UUID][]*Episode, error) {
+	wrap := func(err error) error {
+		return fmt.Errorf("failed to get episodes for series %s: %w", seriesIDs, err)
+	}
+
+	query, args, err := sqlx.In(`
+		SELECT series.id AS owning_series_id, media.* FROM series
+		INNER JOIN season
+		  ON season.series_id = series.id
+		INNER JOIN media
+		  ON media.type = 'episode'
+		 AND media.season_id = season.id
+		WHERE series.id IN (?)`, seriesIDs)
+	if err != nil {
+		return nil, wrap(err)
+	}
+
+	type r struct {
+		media
+		OwningSeriesID uuid.UUID `db:"owning_series_id"`
+	}
+
+	var dest []*r
+	if err := db.Select(&dest, db.Rebind(query), args...); err != nil {
+		return nil, wrap(err)
+	}
+
+	output := make(map[uuid.UUID][]*Episode)
+	for _, v := range dest {
+		output[v.OwningSeriesID] = append(output[v.OwningSeriesID], mediaToEpisode(&v.media))
+	}
+
+	return output, nil
+}
+
 // GetEpisodesForSeasons accepts a list of season IDs and queries the database
 // for all the episodes referencing them. The result is constructed in to a map
 // such that each key is one of the season IDs, and the value is a slice of all the
@@ -427,6 +456,22 @@ func (store *Store) GetAllSourcePaths(db *sqlx.DB) ([]string, error) {
 	}
 
 	return paths, nil
+}
+
+func (store *Store) DeleteSeries(db database.Queryable, seriesID uuid.UUID) error {
+	if _, err := db.Exec(`DELETE FROM series WHERE id=$1`, seriesID); err != nil {
+		return fmt.Errorf("deletion of series %s failed: %w", seriesID, err)
+	}
+
+	return nil
+}
+
+func (store *Store) DeleteSeason(db database.Queryable, seasonID uuid.UUID) error {
+	if _, err := db.Exec(`DELETE FROM season WHERE id=$1`, seasonID); err != nil {
+		return fmt.Errorf("deletion of season %s failed: %w", seasonID, err)
+	}
+
+	return nil
 }
 
 func (store *Store) DeleteEpisode(db database.Queryable, episodeID uuid.UUID) error {

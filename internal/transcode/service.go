@@ -72,7 +72,7 @@ func New(config Config, eventBus event.EventCoordinator, dataStore DataStore) (*
 // will wait for it's running transcode tasks to cancel.
 func (service *transcodeService) Run(ctx context.Context) error {
 	eventChannel := make(event.HandlerChannel, 2)
-	service.eventBus.RegisterHandlerChannel(eventChannel, event.NEW_MEDIA)
+	service.eventBus.RegisterHandlerChannel(eventChannel, event.NEW_MEDIA, event.DELETE_MEDIA)
 
 	for {
 		select {
@@ -82,16 +82,20 @@ func (service *transcodeService) Run(ctx context.Context) error {
 			service.handleTaskUpdate(taskId)
 		case message := <-eventChannel:
 			ev := message.Event
-			if ev != event.NEW_MEDIA {
-				log.Emit(logger.WARNING, "received unknown event %s\n", ev)
-				continue
-			}
-
-			if mediaId, ok := message.Payload.(uuid.UUID); ok {
-				log.Emit(logger.DEBUG, "newly ingested media with ID %s detected\n", mediaId)
-				service.createWorkflowTasksForMedia(mediaId)
-			} else {
-				log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
+			if ev == event.NEW_MEDIA {
+				if mediaId, ok := message.Payload.(uuid.UUID); ok {
+					log.Emit(logger.DEBUG, "newly ingested media with ID %s detected\n", mediaId)
+					service.createWorkflowTasksForMedia(mediaId)
+				} else {
+					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
+				}
+			} else if ev == event.DELETE_MEDIA {
+				if mediaId, ok := message.Payload.(uuid.UUID); ok {
+					log.Emit(logger.DEBUG, "media with ID %s deleted, cancelling any ongoing transcodes\n", mediaId)
+					service.CancelTasksForMedia(mediaId)
+				} else {
+					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
+				}
 			}
 		case <-ctx.Done():
 			log.Emit(logger.STOP, "Shutting down (context cancelled). Waiting for transcode tasks to cancel.\n")

@@ -40,13 +40,11 @@ type (
 		AllowedResolutionTypes []ResolutionTypeWrapper `json:"allowed_resolution_types"`
 	}
 
-	// Data represents the methods used by the controller to
-	// gather it's information, this is typically the IngestService.
-	Data interface {
+	IngestService interface {
 		GetAllIngests() []*ingest.IngestItem
 		GetIngest(uuid.UUID) *ingest.IngestItem
 		RemoveIngest(uuid.UUID) error
-		DiscoverNewIngestableFiles()
+		DiscoverNewFiles()
 		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
 	}
 
@@ -54,7 +52,7 @@ type (
 	// routes for this controller. Additionally, it holds the reference to
 	// the store used to retrieve information about ingests from Thea
 	Controller struct {
-		service Data
+		service IngestService
 	}
 )
 
@@ -73,7 +71,7 @@ const (
 	GENERIC_FAILURE      TroubleTypeDto = "GENERIC_FAILURE"
 )
 
-func New(validate *validator.Validate, serv Data) *Controller {
+func New(validate *validator.Validate, serv IngestService) *Controller {
 	return &Controller{service: serv}
 }
 
@@ -152,7 +150,7 @@ func (controller *Controller) postTroubleResolution(ec echo.Context) error {
 }
 
 func (controller *Controller) performPoll(ec echo.Context) error {
-	controller.service.DiscoverNewIngestableFiles()
+	controller.service.DiscoverNewFiles()
 
 	return ec.NoContent(http.StatusOK)
 }

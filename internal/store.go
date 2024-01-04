@@ -3,9 +3,11 @@ package internal
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
+	"github.com/hbomb79/Thea/internal/event"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/transcode"
@@ -35,6 +37,7 @@ type (
 	// obligation to take care of relational data (which is the orchestrator's job)
 	storeOrchestrator struct {
 		db             database.Manager
+		ev             event.EventDispatcher
 		mediaStore     *media.Store
 		transcodeStore *transcode.Store
 		workflowStore  *workflow.Store
@@ -42,13 +45,14 @@ type (
 	}
 )
 
-func newStoreOrchestrator(db database.Manager) (*storeOrchestrator, error) {
+func newStoreOrchestrator(db database.Manager, eventBus event.EventDispatcher) (*storeOrchestrator, error) {
 	if db.GetSqlxDb() == nil {
 		return nil, ErrDatabaseNotConnected
 	}
 
 	return &storeOrchestrator{
 		db:             db,
+		ev:             eventBus,
 		mediaStore:     &media.Store{},
 		transcodeStore: &transcode.Store{},
 		workflowStore:  &workflow.Store{},
@@ -114,6 +118,32 @@ func (orchestrator *storeOrchestrator) ListSeries() ([]*media.Series, error) {
 
 func (orchestrator *storeOrchestrator) CountSeasonsInSeries(seriesIDs []uuid.UUID) (map[uuid.UUID]int, error) {
 	return orchestrator.mediaStore.CountSeasonsInSeries(orchestrator.db.GetSqlxDb(), seriesIDs)
+}
+
+func (orchestrator *storeOrchestrator) GetEpisodesForSeries(seriesID uuid.UUID) ([]*media.Episode, error) {
+	episodes, err := orchestrator.mediaStore.GetEpisodesForSeries(orchestrator.db.GetSqlxDb(), []uuid.UUID{seriesID})
+	if err != nil {
+		return nil, err
+	}
+
+	if eps, ok := episodes[seriesID]; ok {
+		return eps, nil
+	}
+
+	return []*media.Episode{}, nil
+}
+
+func (orchestrator *storeOrchestrator) GetEpisodesForSeason(seasonID uuid.UUID) ([]*media.Episode, error) {
+	episodes, err := orchestrator.mediaStore.GetEpisodesForSeasons(orchestrator.db.GetSqlxDb(), []uuid.UUID{seasonID})
+	if err != nil {
+		return nil, err
+	}
+
+	if eps, ok := episodes[seasonID]; ok {
+		return eps, nil
+	}
+
+	return []*media.Episode{}, nil
 }
 
 func (orchestrator *storeOrchestrator) GetInflatedSeries(seriesID uuid.UUID) (*media.InflatedSeries, error) {
@@ -257,16 +287,78 @@ func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, seaso
 	return nil
 }
 
-func (orchestrator *storeOrchestrator) DeleteEpisode(episodeID uuid.UUID) error {
-	// TODO: FK cascading deletion will mean transcodes are also deleted, but this
-	// will leave files behind. Deal with this
-	return orchestrator.mediaStore.DeleteEpisode(orchestrator.db.GetSqlxDb(), episodeID)
-}
+// ** Media deletion is a little bit tricky, but the general shape is:
+// 1. Fetch completed transcodes for the media (or it's children, if we're deleting a series/season).
+// 2. Delete the above completed transcodes from the database, *and* the filesystem.
+// 3. Now, delete the media itself from the database. This will FAIL if a new transcode for the media
+//	  was inserted between this step and the last due to the use of ON DELETE RESTRICT on the FK
+// 4. Finally, cancel all on-going transcodes (via the event bus) for the relevant medias now that we've dealt with the
+//    database entries.
 
 func (orchestrator *storeOrchestrator) DeleteMovie(movieID uuid.UUID) error {
-	// TODO: FK cascading deletion will mean transcodes are also deleted, but this
-	// will leave files behind. Deal with this
-	return orchestrator.mediaStore.DeleteMovie(orchestrator.db.GetSqlxDb(), movieID)
+	orchestrator.DeleteTranscodesForMedia(movieID)
+	if err := orchestrator.mediaStore.DeleteMovie(orchestrator.db.GetSqlxDb(), movieID); err != nil {
+		return err
+	}
+
+	orchestrator.ev.Dispatch(event.DELETE_MEDIA, movieID)
+	return nil
+}
+
+func (orchestrator *storeOrchestrator) DeleteSeries(seriesID uuid.UUID) error {
+	episodes, err := orchestrator.GetEpisodesForSeries(seriesID)
+	if err != nil {
+		return err
+	}
+
+	episodeIDs := make([]uuid.UUID, len(episodes))
+	for k, v := range episodes {
+		episodeIDs[k] = v.ID
+	}
+
+	orchestrator.DeleteTranscodesForMedias(episodeIDs)
+	if err := orchestrator.mediaStore.DeleteSeries(orchestrator.db.GetSqlxDb(), seriesID); err != nil {
+		return err
+	}
+
+	for _, id := range episodeIDs {
+		orchestrator.ev.Dispatch(event.DELETE_MEDIA, id)
+	}
+
+	return nil
+}
+
+func (orchestrator *storeOrchestrator) DeleteSeason(seasonID uuid.UUID) error {
+	episodes, err := orchestrator.GetEpisodesForSeason(seasonID)
+	if err != nil {
+		return err
+	}
+
+	episodeIDs := make([]uuid.UUID, len(episodes))
+	for k, v := range episodes {
+		episodeIDs[k] = v.ID
+	}
+
+	orchestrator.DeleteTranscodesForMedias(episodeIDs)
+	if err := orchestrator.mediaStore.DeleteSeason(orchestrator.db.GetSqlxDb(), seasonID); err != nil {
+		return err
+	}
+
+	for _, id := range episodeIDs {
+		orchestrator.ev.Dispatch(event.DELETE_MEDIA, id)
+	}
+
+	return nil
+}
+
+func (orchestrator *storeOrchestrator) DeleteEpisode(episodeID uuid.UUID) error {
+	orchestrator.DeleteTranscodesForMedia(episodeID)
+	if err := orchestrator.mediaStore.DeleteEpisode(orchestrator.db.GetSqlxDb(), episodeID); err != nil {
+		return err
+	}
+
+	orchestrator.ev.Dispatch(event.DELETE_MEDIA, episodeID)
+	return nil
 }
 
 // Workflows
@@ -353,6 +445,23 @@ func (orchestrator *storeOrchestrator) GetAllTranscodes() ([]*transcode.Transcod
 }
 func (orchestrator *storeOrchestrator) GetTranscodesForMedia(mediaId uuid.UUID) ([]*transcode.Transcode, error) {
 	return orchestrator.transcodeStore.GetForMedia(orchestrator.db.GetSqlxDb(), mediaId)
+}
+func (orchestrator *storeOrchestrator) DeleteTranscodesForMedia(mediaID uuid.UUID) error {
+	return orchestrator.DeleteTranscodesForMedias([]uuid.UUID{mediaID})
+}
+func (orchestrator *storeOrchestrator) DeleteTranscodesForMedias(mediaIDs []uuid.UUID) error {
+	paths, err := orchestrator.transcodeStore.DeleteForMedias(orchestrator.db.GetSqlxDb(), mediaIDs)
+	if err != nil {
+		return err
+	}
+
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil {
+			log.Warnf("Cleanup of transcode at path '%s' failed: %v\n", path, err)
+		}
+	}
+
+	return nil
 }
 func (orchestrator *storeOrchestrator) GetForMediaAndTarget(mediaId uuid.UUID, targetId uuid.UUID) (*transcode.Transcode, error) {
 	return orchestrator.transcodeStore.GetForMediaAndTarget(orchestrator.db.GetSqlxDb(), mediaId, targetId)

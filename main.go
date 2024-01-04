@@ -68,6 +68,7 @@ func listenForInterrupt(ctxCancel context.CancelFunc) {
 	signal.Notify(exitChannel, os.Interrupt, syscall.SIGTERM)
 
 	<-exitChannel
+	log.Emit(logger.STOP, "Interrupt received, shutting down...\n")
 	ctxCancel()
 }
 

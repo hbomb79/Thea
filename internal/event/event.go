@@ -58,7 +58,8 @@ const (
 	INGEST_UPDATE   Event = "ingest:update"
 	INGEST_COMPLETE Event = "ingest:complete"
 
-	NEW_MEDIA Event = "media:new"
+	NEW_MEDIA    Event = "media:new"
+	DELETE_MEDIA Event = "media:delete"
 
 	TRANSCODE_UPDATE        Event = "transcode:task:update"
 	TRANSCODE_COMPLETE      Event = "transcode:task:complete"
@@ -169,6 +170,8 @@ func (handler *eventHandler) validatePayload(event Event, payload Payload) error
 	case DOWNLOAD_PROGRESS:
 		fallthrough
 	case NEW_MEDIA:
+		fallthrough
+	case DELETE_MEDIA:
 		fallthrough
 	case TRANSCODE_UPDATE:
 		if _, ok := payload.(uuid.UUID); !ok {

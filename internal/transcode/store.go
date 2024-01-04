@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/jmoiron/sqlx"
 )
 
 var (
@@ -84,4 +85,24 @@ func (store *Store) GetForMediaAndTarget(db database.Queryable, mediaId uuid.UUI
 	}
 
 	return dest, nil
+}
+
+// DeleteForMedias deletes all media transcode row associated
+// with any of the given media IDs. The paths of the deleted media
+// transcodes are returned to allow for file-system cleanup
+func (store *Store) DeleteForMedias(db database.Queryable, mediaIDs []uuid.UUID) ([]string, error) {
+	query, args, err := sqlx.In(`
+		DELETE FROM media_transcodes
+		WHERE media_id IN ($1)
+		RETURNING path`, mediaIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []string
+	if err := db.Select(&result, db.Rebind(query), args); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }

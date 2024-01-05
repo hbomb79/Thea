@@ -16,7 +16,7 @@ type (
 	// to contain. This is typically basic information about the container.
 	Model struct {
 		ID        uuid.UUID
-		TmdbId    string    `db:"tmdb_id"`
+		TmdbID    string    `db:"tmdb_id"`
 		CreatedAt time.Time `db:"created_at"`
 		UpdatedAt time.Time `db:"updated_at"`
 		Title     string
@@ -106,7 +106,7 @@ type (
 var (
 	storeLogger = logger.Get("MediaStore")
 
-	ErrNoRowFound = errors.New("No rows found")
+	ErrNoRowFound = errors.New("no rows found")
 )
 
 const (
@@ -141,7 +141,7 @@ func (store *Store) SaveMovie(db database.Queryable, movie *Movie) error {
 		ON CONFLICT(tmdb_id, type) DO UPDATE
 			SET (updated_at, title, adult, source_path) = (current_timestamp, EXCLUDED.title, EXCLUDED.adult, EXCLUDED.source_path)
 		RETURNING id, tmdb_id, title, adult, source_path, created_at, updated_at;
-	`, movie.ID, "movie", movie.TmdbId, movie.Title, movie.Adult, movie.SourcePath).StructScan(&updatedMovie); err != nil {
+	`, movie.ID, "movie", movie.TmdbID, movie.Title, movie.Adult, movie.SourcePath).StructScan(&updatedMovie); err != nil {
 		return err
 	}
 
@@ -164,7 +164,7 @@ func (store *Store) SaveSeries(db database.Queryable, series *Series) error {
 		ON CONFLICT(tmdb_id) DO UPDATE
 			SET (title, updated_at) = (EXCLUDED.title, current_timestamp)
 		RETURNING *
-	`, series.ID, series.TmdbId, series.Title).StructScan(&updatedSeries); err != nil {
+	`, series.ID, series.TmdbID, series.Title).StructScan(&updatedSeries); err != nil {
 		return err
 	}
 
@@ -187,7 +187,7 @@ func (store *Store) SaveSeason(db database.Queryable, season *Season) error {
 		ON CONFLICT(tmdb_id) DO UPDATE
 			SET (season_number, title, series_id, updated_at) = (EXCLUDED.season_number, EXCLUDED.title, EXCLUDED.series_id, current_timestamp)
 		RETURNING *
-	`, season.ID, season.TmdbId, season.SeasonNumber, season.Title, season.SeriesID).StructScan(&updatedSeason); err != nil {
+	`, season.ID, season.TmdbID, season.SeasonNumber, season.Title, season.SeriesID).StructScan(&updatedSeason); err != nil {
 		return err
 	}
 
@@ -212,7 +212,7 @@ func (store *Store) SaveEpisode(db database.Queryable, episode *Episode) error {
 			SET (episode_number, title, source_path, season_id, updated_at, adult) =
 				(EXCLUDED.episode_number, EXCLUDED.title, EXCLUDED.source_path, EXCLUDED.season_id, current_timestamp, EXCLUDED.adult)
 		RETURNING id, tmdb_id, episode_number, title, source_path, season_id, adult, created_at, updated_at;
-	`, episode.ID, "episode", episode.TmdbId, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.SeasonID, episode.Adult).StructScan(&updatedEpisode); err != nil {
+	`, episode.ID, "episode", episode.TmdbID, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.SeasonID, episode.Adult).StructScan(&updatedEpisode); err != nil {
 		return err
 	}
 
@@ -275,8 +275,9 @@ func (store *Store) ListSeries(db database.Queryable) ([]*Series, error) {
 
 // ListLatestMedia is able to take a union of both movies and series (depending on the allowed types, which defaults
 // to including both if empty), and orders the union by it's updated_at timestamp in order to return a representation
-// of this list as a slice of containers. The containers will only be of type MOVIE or SERIES. The limit specified
-// will be used if it falls between 0 and 100, else the default/maximum of 100 will be used.
+// of this list as a slice of containers. The containers will only be of type MOVIE or SERIES.
+//
+// The limit specified will be used, up to the maximum of 100. If no limit provided then the default of 15 will be used.
 //
 // NB: A container of type MOVIE will NOT have had it's 'Watchable' embedded struct populated. Only the 'Model' of
 // each result will be populated.
@@ -290,18 +291,19 @@ func (store *Store) ListLatestMedia(db database.Queryable, allowedTypes []string
 	movieEnabledClause := "AND false"
 	seriesAllowedClause := "WHERE false"
 	for _, v := range allowedTypes {
-		if v == "movie" {
+		switch v {
+		case "movie":
 			movieEnabledClause = ""
-		} else if v == "series" {
+		case "series":
 			seriesAllowedClause = ""
 		}
 	}
 
-	// Override default (and maximum) limit of 100 if the user provided value
-	// is acceptable
-	limitClause := "LIMIT 100"
-	if limit > 0 && limit < 100 {
-		limitClause = fmt.Sprintf("LIMIT %d", limit)
+	// Override default of 15 result limit if the user provided value
+	// is acceptable. Maximum is 100.
+	limitClause := "LIMIT 15"
+	if limit > 0 {
+		limitClause = fmt.Sprintf("LIMIT %d", min(limit, 100))
 	}
 
 	query := fmt.Sprintf(`
@@ -320,12 +322,12 @@ func (store *Store) ListLatestMedia(db database.Queryable, allowedTypes []string
 	`, movieEnabledClause, seriesAllowedClause, limitClause)
 
 	var results []struct {
-		Id         uuid.UUID `db:"id"`
-		Title      string    `db:"title"`
-		Tmdb_id    string    `db:"tmdb_id"`
-		Created_at time.Time `db:"created_at"`
-		Updated_at time.Time `db:"updated_at"`
-		Media_type string    `db:"type"`
+		ID        uuid.UUID `db:"id"`
+		Title     string    `db:"title"`
+		TmdbID    string    `db:"tmdb_id"`
+		CreatedAt time.Time `db:"created_at"`
+		UpdatedAt time.Time `db:"updated_at"`
+		MediaType string    `db:"type"`
 	}
 	if err := db.Select(&results, query); err != nil {
 		return nil, err
@@ -333,13 +335,14 @@ func (store *Store) ListLatestMedia(db database.Queryable, allowedTypes []string
 
 	out := make([]*Container, len(results))
 	for k, v := range results {
-		model := Model{ID: v.Id, TmdbId: v.Tmdb_id, CreatedAt: v.Created_at, UpdatedAt: v.Updated_at, Title: v.Title}
-		if v.Media_type == "movie" {
+		model := Model{ID: v.ID, TmdbID: v.TmdbID, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, Title: v.Title}
+		switch v.MediaType {
+		case "movie":
 			out[k] = &Container{Type: MOVIE, Movie: &Movie{Model: model}}
-		} else if v.Media_type == "series" {
+		case "series":
 			out[k] = &Container{Type: SERIES, Series: &Series{Model: model}}
-		} else {
-			return nil, fmt.Errorf("type of list result %s is illegal. Expected 'movie' or 'series', found %s", v, v.Media_type)
+		default:
+			return nil, fmt.Errorf("type of list result %s is illegal. Expected 'movie' or 'series', found %s", v, v.MediaType)
 		}
 	}
 
@@ -362,7 +365,7 @@ func (store *Store) CountSeasonsInSeries(db database.Queryable, seriesIDs []uuid
 	}
 
 	type r struct {
-		Id    uuid.UUID `db:"id"`
+		ID    uuid.UUID `db:"id"`
 		Count int       `db:"count"`
 	}
 
@@ -373,7 +376,7 @@ func (store *Store) CountSeasonsInSeries(db database.Queryable, seriesIDs []uuid
 
 	finalResult := make(map[uuid.UUID]int)
 	for _, v := range results {
-		finalResult[v.Id] = v.Count
+		finalResult[v.ID] = v.Count
 	}
 
 	return finalResult, nil

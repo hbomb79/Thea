@@ -43,7 +43,7 @@ const (
 func (cont *Container) Resolution() (int, int) { return 0, 0 }
 func (cont *Container) Id() uuid.UUID          { return cont.model().ID }
 func (cont *Container) Title() string          { return cont.model().Title }
-func (cont *Container) TmdbId() string         { return cont.model().TmdbId }
+func (cont *Container) TmdbId() string         { return cont.model().TmdbID }
 func (cont *Container) CreatedAt() time.Time   { return cont.model().CreatedAt }
 func (cont *Container) UpdatedAt() time.Time   { return cont.model().UpdatedAt }
 func (cont *Container) Source() string         { return cont.watchable().SourcePath }
@@ -69,7 +69,7 @@ func (cont *Container) SeasonNumber() int {
 }
 
 func (cont *Container) String() string {
-	return fmt.Sprintf("{media title=%s | id=%s | tmdb_id=%s }", cont.model().Title, cont.model().ID, cont.model().TmdbId)
+	return fmt.Sprintf("{media title=%s | id=%s | tmdb_id=%s }", cont.model().Title, cont.model().ID, cont.model().TmdbID)
 }
 
 func (cont *Container) watchable() *Watchable {

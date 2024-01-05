@@ -185,7 +185,7 @@ func (wrapper *ResolutionTypeWrapper) MarshalJSON() ([]byte, error) {
 		return json.Marshal("retry")
 	}
 
-	return nil, fmt.Errorf("invalid enum value: %s for resolution method has no known marshalling", wrapper.Value)
+	return nil, fmt.Errorf("invalid enum value: %v for resolution method has no known marshalling", wrapper.Value)
 }
 
 // NewDto creates a IngestDto using the IngestItem model.

@@ -156,8 +156,8 @@ func (thea *theaImpl) spawnService(context context.Context, wg *sync.WaitGroup, 
 
 	defer func() {
 		if r := recover(); r != nil {
-			log.Emit(logger.ERROR, "panic of service %s, stack:%s\n", serviceLabel, string(debug.Stack()))
-			crashHandler(serviceLabel, fmt.Errorf("panic %w", r))
+			log.Errorf("Service %s PANIC! Debug stack follows:\n---\n%s\n---\n", serviceLabel, string(debug.Stack()))
+			crashHandler(serviceLabel, fmt.Errorf("panic %v", r))
 		}
 	}()
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -49,6 +50,16 @@ type (
 		Id    uuid.UUID `json:"id"`
 		Title string    `json:"title"`
 		// TODO: poster path, runtime
+	}
+
+	listDto struct {
+		Type      string    `json:"type"`
+		Id        uuid.UUID `json:"id"`
+		Title     string    `json:"title"`
+		TmdbID    string    `json:"tmdb_id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		// TODO poster path, optional movie/series specific information such as runtime and season count
 	}
 
 	episodeDto struct {
@@ -100,6 +111,7 @@ type (
 		GetEpisode(episodeID uuid.UUID) (*media.Episode, error)
 		ListMovie() ([]*media.Movie, error)
 		ListSeriesStubs() ([]*media.SeriesStub, error)
+		ListLatestMedia(allowedTypes []string, limit int) ([]*media.Container, error)
 		GetInflatedSeries(seriesID uuid.UUID) (*media.InflatedSeries, error)
 		GetTranscodesForMedia(uuid.UUID) ([]*transcode.Transcode, error)
 		GetAllTargets() []*ffmpeg.Target
@@ -140,9 +152,35 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.DELETE("/episode/:id/", controller.deleteEpisode)
 }
 
-// listLatest ...
+// listLatest is an endpoint used to retrieve a list of movies and series which have been
+// updated recently (this includes episodes being added to a series). The caller of this endpoint
+// can specify filtering options such as the type (movie|series), a limit to the number
+// of results, or the genres which apply to the content
+//
+// TODO: the genre stuff!
 func (controller *Controller) listLatest(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "Not yet implemented")
+	params := ec.QueryParams()
+	allowedTypes, ok := params["allowedType"]
+	if !ok {
+		allowedTypes = []string{"movie", "series"}
+	}
+
+	limit, err := strconv.Atoi(params.Get("limit"))
+	if err != nil {
+		limit = 0
+	}
+
+	results, err := controller.store.ListLatestMedia(allowedTypes, limit)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	dtos, err := newListDtos(results)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return ec.JSON(http.StatusOK, dtos)
 }
 
 // listMovies returns a list of 'MovieStubDto's, which is an uninflated version
@@ -355,6 +393,32 @@ func (controller *Controller) getMediaWatchTargets(mediaID uuid.UUID) ([]*watchT
 
 func newWatchTarget(target *ffmpeg.Target, t watchTargetType, ready bool) *watchTargetDto {
 	return &watchTargetDto{Name: target.Label, Ready: ready, Type: t, TargetID: &target.ID, Enabled: true}
+}
+
+func newListDtos(results []*media.Container) ([]*listDto, error) {
+	dtos := make([]*listDto, len(results))
+	for k, v := range results {
+		dto, err := newListDto(v)
+		if err != nil {
+			return nil, err
+		}
+		dtos[k] = dto
+	}
+
+	return dtos, nil
+}
+
+func newListDto(container *media.Container) (*listDto, error) {
+	var ty string
+	if container.Type == media.SERIES {
+		ty = "series"
+	} else if container.Type == media.MOVIE {
+		ty = "movie"
+	} else {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Media %s found during listing has an illegal type %s. Expected movie or series.", container, container.Type))
+	}
+
+	return &listDto{Type: ty, Id: container.Id(), Title: container.Title(), TmdbID: container.TmdbId(), CreatedAt: container.CreatedAt(), UpdatedAt: container.UpdatedAt()}, nil
 }
 
 func inflatedSeriesModelToDto(model *media.SeriesStub) seriesStubDto {

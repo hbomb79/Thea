@@ -23,7 +23,7 @@ type (
 	}
 
 	// Media represents the form of both movies and episodes inside the database. It is only after checking the
-	// type of the media row that we can determine whether the row represents a movie or an episode.
+	// type of the Media row that we can determine whether the row represents a movie or an episode.
 	media struct {
 		Model
 		Watchable
@@ -273,6 +273,79 @@ func (store *Store) ListSeries(db database.Queryable) ([]*Series, error) {
 	return dest, nil
 }
 
+// ListLatestMedia is able to take a union of both movies and series (depending on the allowed types, which defaults
+// to including both if empty), and orders the union by it's updated_at timestamp in order to return a representation
+// of this list as a slice of containers. The containers will only be of type MOVIE or SERIES. The limit specified
+// will be used if it falls between 0 and 100, else the default/maximum of 100 will be used.
+//
+// NB: A container of type MOVIE will NOT have had it's 'Watchable' embedded struct populated. Only the 'Model' of
+// each result will be populated.
+func (store *Store) ListLatestMedia(db database.Queryable, allowedTypes []string, limit int) ([]*Container, error) {
+	// If allowedTypes is empty, default to including both movies and series
+	if len(allowedTypes) == 0 {
+		allowedTypes = []string{"movie", "series"}
+	}
+
+	// Initially 'disallow' the types by specifiying false clauses
+	movieEnabledClause := "AND false"
+	seriesAllowedClause := "WHERE false"
+	for _, v := range allowedTypes {
+		if v == "movie" {
+			movieEnabledClause = ""
+		} else if v == "series" {
+			seriesAllowedClause = ""
+		}
+	}
+
+	// Override default (and maximum) limit of 100 if the user provided value
+	// is acceptable
+	limitClause := "LIMIT 100"
+	if limit > 0 && limit < 100 {
+		limitClause = fmt.Sprintf("LIMIT %d", limit)
+	}
+
+	query := fmt.Sprintf(`
+		WITH joinedMedia AS (
+			SELECT id, title, tmdb_id, created_at, updated_at, 'movie' AS type
+			FROM media WHERE type='movie' %s 
+			UNION
+			SELECT id, title, tmdb_id, created_at, updated_at, 'series' AS type
+			FROM series
+			%s
+		)
+		SELECT *
+		FROM joinedMedia
+		ORDER BY updated_at
+		%s
+	`, movieEnabledClause, seriesAllowedClause, limitClause)
+
+	var results []struct {
+		Id         uuid.UUID `db:"id"`
+		Title      string    `db:"title"`
+		Tmdb_id    string    `db:"tmdb_id"`
+		Created_at time.Time `db:"created_at"`
+		Updated_at time.Time `db:"updated_at"`
+		Media_type string    `db:"type"`
+	}
+	if err := db.Select(&results, query); err != nil {
+		return nil, err
+	}
+
+	out := make([]*Container, len(results))
+	for k, v := range results {
+		model := Model{ID: v.Id, TmdbId: v.Tmdb_id, CreatedAt: v.Created_at, UpdatedAt: v.Updated_at, Title: v.Title}
+		if v.Media_type == "movie" {
+			out[k] = &Container{Type: MOVIE, Movie: &Movie{Model: model}}
+		} else if v.Media_type == "series" {
+			out[k] = &Container{Type: SERIES, Series: &Series{Model: model}}
+		} else {
+			return nil, fmt.Errorf("type of list result %s is illegal. Expected 'movie' or 'series', found %s", v, v.Media_type)
+		}
+	}
+
+	return out, nil
+}
+
 // CountSeasonsInSeries queries the database for the number of seasons associated with
 // each of the given series, and constructs a mapping from seriesID -> season count.
 // NB: series which did not exist in the database will be omitted from the result mapping
@@ -458,6 +531,12 @@ func (store *Store) GetAllSourcePaths(db *sqlx.DB) ([]string, error) {
 	return paths, nil
 }
 
+// DeleteSeries deletes the series with the given ID, including all it's seasons and
+// enclosed episodes.
+//
+// NB: It is important to explicitly delete associated media transcodes for the affected
+// episodes before attempting to delete this resource - failure to do so will cause
+// this query to fail.
 func (store *Store) DeleteSeries(db database.Queryable, seriesID uuid.UUID) error {
 	if _, err := db.Exec(`DELETE FROM series WHERE id=$1`, seriesID); err != nil {
 		return fmt.Errorf("deletion of series %s failed: %w", seriesID, err)
@@ -466,6 +545,11 @@ func (store *Store) DeleteSeries(db database.Queryable, seriesID uuid.UUID) erro
 	return nil
 }
 
+// DeleteSeason deletes the series with the given ID, including all it's enclosed episodes.
+//
+// NB: It is important to explicitly delete associated media transcodes for the affected
+// episodes before attempting to delete this resource - failure to do so will cause
+// this query to fail.
 func (store *Store) DeleteSeason(db database.Queryable, seasonID uuid.UUID) error {
 	if _, err := db.Exec(`DELETE FROM season WHERE id=$1`, seasonID); err != nil {
 		return fmt.Errorf("deletion of season %s failed: %w", seasonID, err)
@@ -474,6 +558,11 @@ func (store *Store) DeleteSeason(db database.Queryable, seasonID uuid.UUID) erro
 	return nil
 }
 
+// DeleteEpisode deletes the episode with the given ID
+//
+// NB: It is important to explicitly delete associated media transcodes for the affected
+// episode before attempting to delete this resource - failure to do so will cause
+// this query to fail.
 func (store *Store) DeleteEpisode(db database.Queryable, episodeID uuid.UUID) error {
 	if _, err := db.Exec(`DELETE FROM media WHERE type='episode' AND id=$1`, episodeID); err != nil {
 		return fmt.Errorf("deletion of episode %s failed: %w", episodeID, err)
@@ -482,6 +571,11 @@ func (store *Store) DeleteEpisode(db database.Queryable, episodeID uuid.UUID) er
 	return nil
 }
 
+// DeleteMovie deletes the movie with the given ID
+//
+// NB: It is important to explicitly delete associated media transcodes for the affected
+// movie before attempting to delete this resource - failure to do so will cause
+// this query to fail.
 func (store *Store) DeleteMovie(db database.Queryable, movieID uuid.UUID) error {
 	if _, err := db.Exec(`DELETE FROM media WHERE type='movie' AND id=$1`, movieID); err != nil {
 		return fmt.Errorf("deletion of movie %s failed: %w", movieID, err)

@@ -2,6 +2,7 @@ package media
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -36,12 +37,15 @@ type (
 const (
 	MOVIE ContainerType = iota
 	EPISODE
+	SERIES
 )
 
 func (cont *Container) Resolution() (int, int) { return 0, 0 }
 func (cont *Container) Id() uuid.UUID          { return cont.model().ID }
 func (cont *Container) Title() string          { return cont.model().Title }
 func (cont *Container) TmdbId() string         { return cont.model().TmdbId }
+func (cont *Container) CreatedAt() time.Time   { return cont.model().CreatedAt }
+func (cont *Container) UpdatedAt() time.Time   { return cont.model().UpdatedAt }
 func (cont *Container) Source() string         { return cont.watchable().SourcePath }
 
 // EpisodeNumber returns the episode number for the media IF it is an Episode. -1
@@ -75,7 +79,7 @@ func (cont *Container) watchable() *Watchable {
 	case EPISODE:
 		return &cont.Episode.Watchable
 	default:
-		panic("Container type unknown?")
+		panic("Cannot fetch watchable from container due to unknown container type")
 	}
 }
 
@@ -85,7 +89,9 @@ func (cont *Container) model() *Model {
 		return &cont.Movie.Model
 	case EPISODE:
 		return &cont.Episode.Model
+	case SERIES:
+		return &cont.Series.Model
 	default:
-		panic("Container type unknown?")
+		panic("Cannot fetch model from container due to unknown container type")
 	}
 }

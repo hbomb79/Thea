@@ -133,6 +133,7 @@ func (gateway *RestGateway) Run(parentCtx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		log.Emit(logger.NEW, "Started HTTP router at %s\n", gateway.config.HostAddr)
 		if err := gateway.ec.Start(gateway.config.HostAddr); err != nil {
 			ctxCancel(err)
 		}

@@ -139,10 +139,11 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	wg := &sync.WaitGroup{}
-	wg.Add(3)
+	wg.Add(4)
 	go thea.spawnService(ctx, wg, thea.ingestService, "ingest-service", crashHandler)
 	go thea.spawnService(ctx, wg, thea.transcodeService, "transcode-service", crashHandler)
 	go thea.spawnService(ctx, wg, thea.restGateway, "rest-gateway", crashHandler)
+	go thea.spawnService(ctx, wg, thea.activityManager, "activity-manager", crashHandler)
 	log.Emit(logger.SUCCESS, "Thea services spawned! [CTRL+C to stop]\n")
 
 	wg.Wait()

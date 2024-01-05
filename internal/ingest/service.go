@@ -174,7 +174,10 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 	}
 
 	log.Emit(logger.DEBUG, "Item %s claimed by worker %s for ingestion\n", item, w)
+	service.eventBus.Dispatch(event.INGEST_UPDATE, item.ID)
+
 	if err := item.ingest(service.eventBus, service.scraper, service.searcher, service.dataStore); err != nil {
+		service.eventBus.Dispatch(event.INGEST_UPDATE, item.ID)
 		if trbl, ok := err.(Trouble); ok {
 			item.Trouble = &trbl
 			item.State = TROUBLED
@@ -310,7 +313,7 @@ func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method Res
 
 	res, err := item.Trouble.GenerateResolution(method, context)
 	if res == nil || err != nil {
-		return fmt.Errorf("failed to resolve with method %s: %w", method, err)
+		return fmt.Errorf("failed to resolve with method %v: %w", method, err)
 	}
 
 	switch v := res.(type) {

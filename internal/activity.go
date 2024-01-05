@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	DEBOUNCE_DURATION  time.Duration = time.Second * 1
+	DEBOUNCE_DURATION  time.Duration = time.Second * 2
 	MAX_TIMER_DURATION time.Duration = time.Second * 5
 )
 
@@ -53,6 +53,7 @@ func (service *activityManager) Run(ctx context.Context) error {
 		event.TRANSCODE_TASK_PROGRESS, event.TRANSCODE_COMPLETE, event.WORKFLOW_UPDATE,
 		event.DOWNLOAD_UPDATE, event.DOWNLOAD_COMPLETE, event.DOWNLOAD_PROGRESS)
 
+	log.Emit(logger.NEW, "Activity manager started\n")
 	for {
 		select {
 		case ev := <-messageChan:
@@ -60,6 +61,7 @@ func (service *activityManager) Run(ctx context.Context) error {
 				log.Emit(logger.ERROR, "Handling of event %v failed: %v\n", ev, err)
 			}
 		case <-ctx.Done():
+			log.Emit(logger.STOP, "Activity manager closed\n")
 			return nil
 		}
 	}
@@ -111,7 +113,7 @@ func (service *activityManager) scheduleEventBroadcast(resourceID uuid.UUID, han
 
 	// Set a max timer if not already set
 	if _, ok := service.maxTimers[resourceID]; !ok {
-		time.AfterFunc(MAX_TIMER_DURATION, broadcaster)
+		service.maxTimers[resourceID] = time.AfterFunc(MAX_TIMER_DURATION, broadcaster)
 	}
 }
 

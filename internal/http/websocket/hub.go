@@ -68,7 +68,7 @@ func (hub *SocketHub) Start(ctx context.Context) {
 		socketLogger.Emit(logger.STOP, "Refusing to start socket hub as provided context is already cancelled\n")
 		return
 	}
-	socketLogger.Emit(logger.INFO, "Opening SocketHub!\n")
+	socketLogger.Emit(logger.NEW, "Opening SocketHub!\n")
 
 	// Open channels and make clients slice
 	hub.sendCh = make(chan *SocketMessage)

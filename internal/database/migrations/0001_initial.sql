@@ -96,6 +96,6 @@ CREATE TABLE media_transcodes(
     transcode_target_id UUID NOT NULL,
     path TEXT NOT NULL,
 
-    CONSTRAINT media_transcodes_fk_media_id FOREIGN KEY(media_id) REFERENCES media(id),
+    CONSTRAINT media_transcodes_fk_media_id FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE RESTRICT,
     CONSTRAINT media_transcodes_fk_transcode_target_id FOREIGN KEY(transcode_target_id) REFERENCES transcode_target(id)
 );

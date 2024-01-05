@@ -36,11 +36,18 @@ type (
 		SetRoutes(*echo.Group)
 	}
 
-	// DataStore represents a union of all the controller store requirements
-	DataStore interface {
+	// Store represents a union of all the controller store requirements, typically
+	// fulfilled by Thea's store orchestrator
+	Store interface {
 		targets.Store
 		workflows.Store
 		transcodes.Store
+		medias.Store
+	}
+
+	TranscodeService interface {
+		medias.TranscodeService
+		transcodes.TranscodeService
 	}
 
 	// The RestGateway is a thin-wrapper around the Echo HTTP router. It's sole responsbility
@@ -64,9 +71,9 @@ type (
 // to a data store, which are provided as arguments.
 func NewRestGateway(
 	config *RestConfig,
-	ingestService ingests.Service,
-	transcodeService transcodes.Service,
-	store DataStore,
+	ingestService ingests.IngestService,
+	transcodeService TranscodeService,
+	store Store,
 ) *RestGateway {
 	ec := echo.New()
 	ec.OnAddRouteHandler = func(_ string, route echo.Route, _ echo.HandlerFunc, _ []echo.MiddlewareFunc) {
@@ -78,7 +85,7 @@ func NewRestGateway(
 	validate := newValidator()
 	socket := websocket.New()
 	gateway := &RestGateway{
-		broadcaster:         newBroadcaster(socket, ingestService, store),
+		broadcaster:         newBroadcaster(socket, ingestService, transcodeService, store),
 		config:              config,
 		ec:                  ec,
 		socket:              socket,
@@ -86,10 +93,12 @@ func NewRestGateway(
 		transcodeController: transcodes.New(validate, transcodeService, store),
 		targetsController:   targets.New(validate, store),
 		workflowController:  workflows.New(validate, store),
-		mediaController:     medias.New(validate, store),
+		mediaController:     medias.New(validate, transcodeService, store),
 	}
 
-	ec.Use(middleware.Logger())
+	ec.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: "[Request] ${time_rfc3339} :: ${method} ${uri} -> ${status} ${error} {ip=${remote_ip}, user_agent=${user_agent}}\n",
+	}))
 	ec.Use(middleware.Recover())
 	ec.Pre(middleware.AddTrailingSlash())
 

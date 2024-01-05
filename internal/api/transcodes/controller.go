@@ -26,11 +26,12 @@ type (
 		LastProgress *ffmpeg.Progress              `json:"last_progress,omitempty"`
 	}
 
-	Service interface {
+	TranscodeService interface {
 		NewTask(uuid.UUID, uuid.UUID) error
 		CancelTask(uuid.UUID) error
 		Task(uuid.UUID) *transcode.TranscodeTask
 		AllTasks() []*transcode.TranscodeTask
+		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
 	}
 
 	Store interface {
@@ -40,13 +41,13 @@ type (
 	}
 
 	Controller struct {
-		Service Service
-		Store   Store
+		transcodeService TranscodeService
+		store            Store
 	}
 )
 
-func New(validate *validator.Validate, service Service, store Store) *Controller {
-	return &Controller{Service: service, Store: store}
+func New(validate *validator.Validate, transcodeService TranscodeService, store Store) *Controller {
+	return &Controller{transcodeService: transcodeService, store: store}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
@@ -71,7 +72,7 @@ func (controller *Controller) create(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid body: one or both of mandatory fields 'media_id' and 'target_id' not provided")
 	}
 
-	if err := controller.Service.NewTask(*mID, *tID); err != nil {
+	if err := controller.transcodeService.NewTask(*mID, *tID); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Task creation failed: %v", err))
 	}
 
@@ -79,7 +80,7 @@ func (controller *Controller) create(ec echo.Context) error {
 }
 
 func (controller *Controller) getActive(ec echo.Context) error {
-	tasks := controller.Service.AllTasks()
+	tasks := controller.transcodeService.AllTasks()
 	taskDtos := make([]transcodeDto, len(tasks))
 	for i, v := range tasks {
 		taskDtos[i] = NewDtoFromTask(v)
@@ -89,7 +90,7 @@ func (controller *Controller) getActive(ec echo.Context) error {
 }
 
 func (controller *Controller) getComplete(ec echo.Context) error {
-	tasks, err := controller.Store.GetAllTranscodes()
+	tasks, err := controller.store.GetAllTranscodes()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -108,11 +109,11 @@ func (controller *Controller) get(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Task ID is not a valid UUID")
 	}
 
-	if task := controller.Service.Task(id); task != nil {
+	if task := controller.transcodeService.Task(id); task != nil {
 		return ec.JSON(http.StatusOK, NewDtoFromTask(task))
 	}
 
-	if model := controller.Store.GetTranscode(id); model != nil {
+	if model := controller.store.GetTranscode(id); model != nil {
 		return ec.JSON(http.StatusOK, NewDtoFromModel(model))
 	}
 
@@ -125,7 +126,7 @@ func (controller *Controller) cancel(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Task ID is not a valid UUID")
 	}
 
-	if err := controller.Service.CancelTask(id); err != nil {
+	if err := controller.transcodeService.CancelTask(id); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Failed to cancel task %s due to error: %v", id, err)
 	}
 

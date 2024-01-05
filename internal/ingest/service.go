@@ -174,13 +174,12 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 	}
 
 	log.Emit(logger.DEBUG, "Item %s claimed by worker %s for ingestion\n", item, w)
-	time.Sleep(time.Second * 1)
 	if err := item.ingest(service.eventBus, service.scraper, service.searcher, service.dataStore); err != nil {
 		if trbl, ok := err.(Trouble); ok {
 			item.Trouble = &trbl
 			item.State = TROUBLED
 
-			log.Emit(logger.ERROR, "Ingestion of item %s failed due to error %s - Trouble (%T) raised!\n", item, trbl.Error(), trbl)
+			log.Emit(logger.ERROR, "Ingestion of item %s failed, raising trouble {message='%s' type=%s}\n", item, item.Trouble, item.Trouble.Type())
 		} else {
 			log.Emit(logger.FATAL, "Ingestion of item %s returned an unexpected error (%#v) (not a trouble)! Worker will crash\n", item, err)
 			return false, err

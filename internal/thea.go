@@ -21,15 +21,7 @@ import (
 
 var log = logger.Get("Core")
 
-const (
-	THEA_USER_DIR_SUFFIX = "/thea/"
-)
-
 type (
-	EventParticipator interface {
-		RegisterEventCoordinator(event.EventCoordinator)
-	}
-
 	RunnableService interface {
 		Run(context.Context) error
 	}
@@ -45,12 +37,13 @@ type (
 
 	TranscodeService interface {
 		RunnableService
-		EventParticipator
 		NewTask(mediaID uuid.UUID, targetID uuid.UUID) error
 		CancelTask(taskID uuid.UUID) error
 		AllTasks() []*transcode.TranscodeTask
 		Task(taskID uuid.UUID) *transcode.TranscodeTask
 		ActiveTaskForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) *transcode.TranscodeTask
+		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
+		CancelTasksForMedia(mediaID uuid.UUID)
 	}
 
 	IngestService interface {
@@ -61,22 +54,26 @@ type (
 		DiscoverNewFiles()
 		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
 	}
-
-	// Thea represents the top-level object for the server, and is responsible
-	// for initialising embedded support services, services, stores, event
-	// handling, et cetera...
-	theaImpl struct {
-		eventBus          event.EventCoordinator
-		dockerManager     docker.DockerManager
-		storeOrchestrator *storeOrchestrator
-		activityManager   *activityManager
-		config            TheaConfig
-
-		restGateway      RestGateway
-		ingestService    IngestService
-		transcodeService TranscodeService
-	}
 )
+
+const (
+	THEA_USER_DIR_SUFFIX = "/thea/"
+)
+
+// Thea represents the top-level object for the server, and is responsible
+// for initialising embedded support services, services, stores, event
+// handling, et cetera...
+type theaImpl struct {
+	eventBus          event.EventCoordinator
+	dockerManager     docker.DockerManager
+	storeOrchestrator *storeOrchestrator
+	activityManager   *activityManager
+	config            TheaConfig
+
+	restGateway      RestGateway
+	ingestService    IngestService
+	transcodeService TranscodeService
+}
 
 func New(config TheaConfig) *theaImpl {
 	log.Emit(logger.DEBUG, "Bootstrapping Thea services using config: %#v\n", config)
@@ -118,7 +115,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to initialise connection to DB: %w", err)
 	}
 
-	store, err := NewStoreOrchestrator(db)
+	store, err := newStoreOrchestrator(db, thea.eventBus)
 	if err != nil {
 		return fmt.Errorf("failed to construct data orchestrator: %w", err)
 	}
@@ -129,13 +126,13 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	if serv, err := ingest.New(thea.config.IngestService, searcher, scraper, thea.storeOrchestrator, thea.eventBus); err == nil {
 		thea.ingestService = serv
 	} else {
-		panic(fmt.Sprintf("failed to construct ingestion service due to error: %v", err))
+		return fmt.Errorf("failed to construct ingestion service due to error: %w", err)
 	}
 
 	if serv, err := transcode.New(thea.config.Format, thea.eventBus, thea.storeOrchestrator); err == nil {
 		thea.transcodeService = serv
 	} else {
-		panic(fmt.Sprintf("failed to construct transcode service due to error: %v", err))
+		return fmt.Errorf("failed to construct transcode service due to error: %w", err)
 	}
 
 	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.storeOrchestrator)
@@ -146,7 +143,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	go thea.spawnService(ctx, wg, thea.ingestService, "ingest-service", crashHandler)
 	go thea.spawnService(ctx, wg, thea.transcodeService, "transcode-service", crashHandler)
 	go thea.spawnService(ctx, wg, thea.restGateway, "rest-gateway", crashHandler)
-	log.Emit(logger.SUCCESS, "Thea services spawned!\n")
+	log.Emit(logger.SUCCESS, "Thea services spawned! [CTRL+C to stop]\n")
 
 	wg.Wait()
 	return nil
@@ -159,7 +156,7 @@ func (thea *theaImpl) spawnService(context context.Context, wg *sync.WaitGroup, 
 
 	defer func() {
 		if r := recover(); r != nil {
-			log.Emit(logger.ERROR, "panic of service %s, stack:%s\n", serviceLabel, string(debug.Stack()))
+			log.Errorf("Service %s PANIC! Debug stack follows:\n---\n%s\n---\n", serviceLabel, string(debug.Stack()))
 			crashHandler(serviceLabel, fmt.Errorf("panic %v", r))
 		}
 	}()

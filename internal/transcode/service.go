@@ -72,7 +72,7 @@ func New(config Config, eventBus event.EventCoordinator, dataStore DataStore) (*
 // will wait for it's running transcode tasks to cancel.
 func (service *transcodeService) Run(ctx context.Context) error {
 	eventChannel := make(event.HandlerChannel, 2)
-	service.eventBus.RegisterHandlerChannel(eventChannel, event.NEW_MEDIA)
+	service.eventBus.RegisterHandlerChannel(eventChannel, event.NEW_MEDIA, event.DELETE_MEDIA)
 
 	for {
 		select {
@@ -82,16 +82,20 @@ func (service *transcodeService) Run(ctx context.Context) error {
 			service.handleTaskUpdate(taskId)
 		case message := <-eventChannel:
 			ev := message.Event
-			if ev != event.NEW_MEDIA {
-				log.Emit(logger.WARNING, "received unknown event %s\n", ev)
-				continue
-			}
-
-			if mediaId, ok := message.Payload.(uuid.UUID); ok {
-				log.Emit(logger.DEBUG, "newly ingested media with ID %s detected\n", mediaId)
-				service.createWorkflowTasksForMedia(mediaId)
-			} else {
-				log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
+			if ev == event.NEW_MEDIA {
+				if mediaId, ok := message.Payload.(uuid.UUID); ok {
+					log.Emit(logger.DEBUG, "newly ingested media with ID %s detected\n", mediaId)
+					service.createWorkflowTasksForMedia(mediaId)
+				} else {
+					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
+				}
+			} else if ev == event.DELETE_MEDIA {
+				if mediaId, ok := message.Payload.(uuid.UUID); ok {
+					log.Emit(logger.DEBUG, "media with ID %s deleted, cancelling any ongoing transcodes\n", mediaId)
+					service.CancelTasksForMedia(mediaId)
+				} else {
+					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
+				}
 			}
 		case <-ctx.Done():
 			log.Emit(logger.STOP, "Shutting down (context cancelled). Waiting for transcode tasks to cancel.\n")
@@ -121,6 +125,40 @@ func (service *transcodeService) Task(id uuid.UUID) *TranscodeTask {
 	}
 
 	return nil
+}
+
+// ActiveTasksForMedia returns all the tasks which are running against the given media ID
+func (service *transcodeService) ActiveTasksForMedia(mediaId uuid.UUID) []*TranscodeTask {
+	tasks := make([]*TranscodeTask, 0)
+	for _, t := range service.tasks {
+		if t.media.Id() == mediaId {
+			tasks = append(tasks, t)
+		}
+	}
+
+	return tasks
+}
+
+// CancelTasksForMedia finds and cancels any active transcodes for the media ID provided.
+// This function acquires the service mutex to ensure no tasks for this media are added
+// while this process is occurring.
+func (service *transcodeService) CancelTasksForMedia(mediaID uuid.UUID) {
+	service.Lock()
+	defer service.Unlock()
+
+	toDelete := make([]uuid.UUID, 0)
+	for _, t := range service.tasks {
+		if t.Media().Id() == mediaID {
+			toDelete = append(toDelete, t.Id())
+		}
+	}
+
+	log.Debugf("Cancelling all tasks for media %s (tasks: %v)\n", mediaID, toDelete)
+	for _, id := range toDelete {
+		if err := service.CancelTask(id); err != nil {
+			log.Warnf("Cancellation of task %s failed with error: %s\n", id, err)
+		}
+	}
 }
 
 // TaskForMediaAndTarget searches through all the tasks in this service and looks for one
@@ -165,7 +203,9 @@ func (service *transcodeService) CancelTask(id uuid.UUID) error {
 	}
 
 	if err := task.Cancel(); err != nil {
-		return fmt.Errorf("failed to cancel task %s: %w", task, err)
+		// This error usually indicates the task is not the right state to be cancelled, however
+		// we should still proceed with removing it from the queue
+		log.Warnf("failed to cancel task %s command: %s", task, err)
 	}
 
 	if !isBeingMonitored {
@@ -270,14 +310,14 @@ func (service *transcodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) 
 				}
 			}
 
-			log.Emit(logger.NEW, "Media %s met the conditions of workflow %s. Automated transcodes queued\n", mediaId)
+			log.Emit(logger.NEW, "Media %s met the conditions of workflow %s. Automated transcodes queued\n", mediaId, workflow)
 			return
 		}
 	}
 
 	// TODO: Maybe we create some sort of a notification or something about not being able to find an eligible
 	//		 workflow? I could see that being useful.
-	log.Emit(logger.WARNING, "Media %s did not meet the conditions of any known workflows. No automated transcoding will occur\n", mediaId)
+	log.Emit(logger.DEBUG, "Media %s did not meet the conditions of any known workflows. No automated transcoding will occur\n", mediaId)
 }
 
 // spawnFfmpegTarget will create a new transcode task assigned to the media and target provided,

@@ -37,6 +37,31 @@ type (
 		GetSqlxDb() *sqlx.DB
 		WrapTx(func(*sqlx.Tx) error) error
 	}
+	// Queryable includes all methods shared by sqlx.DB and sqlx.Tx, allowing
+	// either type to be used interchangeably.
+	Queryable interface {
+		sqlx.Ext
+		sqlx.ExecerContext
+		sqlx.PreparerContext
+		sqlx.QueryerContext
+		sqlx.Preparer
+
+		GetContext(context.Context, interface{}, string, ...interface{}) error
+		SelectContext(context.Context, interface{}, string, ...interface{}) error
+		Get(interface{}, string, ...interface{}) error
+		MustExecContext(context.Context, string, ...interface{}) sql.Result
+		PreparexContext(context.Context, string) (*sqlx.Stmt, error)
+		QueryRowContext(context.Context, string, ...interface{}) *sql.Row
+		Select(interface{}, string, ...interface{}) error
+		QueryRow(string, ...interface{}) *sql.Row
+		PrepareNamedContext(context.Context, string) (*sqlx.NamedStmt, error)
+		PrepareNamed(string) (*sqlx.NamedStmt, error)
+		Preparex(string) (*sqlx.Stmt, error)
+		NamedExec(string, interface{}) (sql.Result, error)
+		NamedExecContext(context.Context, string, interface{}) (sql.Result, error)
+		MustExec(string, ...interface{}) sql.Result
+		NamedQuery(string, interface{}) (*sqlx.Rows, error)
+	}
 
 	manager struct {
 		rawDb *sql.DB
@@ -58,7 +83,6 @@ func (db *manager) Connect(config DatabaseConfig) error {
 	sql = sqldblogger.OpenDriver(dsn, sql.Driver(), &SqlLogger{dbLogger})
 
 	attempt := 1
-	time.Sleep(time.Second * 2)
 	for {
 		err := sql.Ping()
 		if err != nil {
@@ -139,9 +163,9 @@ func (l *SqlLogger) Log(_ context.Context, level sqldblogger.Level, msg string, 
 		duration := data["duration"]
 		query, ok := data["query"]
 		if ok {
-			l.logger.Infof("%s [%.2fms] -- %s\n", msg, duration, query)
+			l.logger.Debugf("%s [%.2fms] -- %s\n", msg, duration, query)
 		} else {
-			l.logger.Infof("%s [%.2fms]\n", msg, duration)
+			l.logger.Debugf("%s [%.2fms]\n", msg, duration)
 		}
 	case sqldblogger.LevelError:
 		l.logger.Errorf(template, msg, data)

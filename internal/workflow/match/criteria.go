@@ -16,11 +16,13 @@ import (
 // For example, a criteria might be "TITLE MATCHES 'pattern' AND". This is
 // made up of four terms: the key, type, value and combine type (in order).
 type Criteria struct {
-	ID          uuid.UUID
-	Key         Key
-	Type        Type
-	Value       string
-	CombineType CombineType
+	ID uuid.UUID
+
+	// NB: These JSON struct tags are important! It's used when unmarhsalling the JSON coalesced rows from the DB
+	Key         Key         `db:"match_key" json:"match_key"`
+	Type        Type        `db:"match_type" json:"match_type"`
+	Value       string      `db:"match_value" json:"match_value"`
+	CombineType CombineType `db:"match_combine_type" json:"match_combine_type"`
 }
 
 // ValidateLegal ensures the criteria is LEGAL:
@@ -115,6 +117,10 @@ func (criteria *Criteria) isValueAcceptable(valToTest interface{}) (bool, error)
 	}
 
 	switch criteria.Type {
+	case IS_PRESENT:
+		return true, nil
+	case IS_NOT_PRESENT:
+		return false, nil
 	case MATCHES:
 		return criteria.testStringEquality(valToTest)
 	case DOES_NOT_MATCH:

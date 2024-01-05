@@ -52,13 +52,13 @@ type (
 	}
 
 	Controller struct {
-		Store    Store
+		store    Store
 		validate *validator.Validate
 	}
 )
 
 func New(validate *validator.Validate, store Store) *Controller {
-	return &Controller{Store: store, validate: validate}
+	return &Controller{store: store, validate: validate}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
@@ -85,7 +85,7 @@ func (controller *Controller) create(ec echo.Context) error {
 		criteria[i] = NewCriteriaModel(workflowID, &v)
 	}
 
-	if model, err := controller.Store.CreateWorkflow(workflowID, createRequest.Label, criteria, createRequest.TargetIDs, createRequest.Enabled); err != nil {
+	if model, err := controller.store.CreateWorkflow(workflowID, createRequest.Label, criteria, createRequest.TargetIDs, createRequest.Enabled); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create new workflow: %v", err))
 	} else {
 		return ec.JSON(http.StatusCreated, NewWorkflowDto(model))
@@ -93,7 +93,7 @@ func (controller *Controller) create(ec echo.Context) error {
 }
 
 func (controller *Controller) list(ec echo.Context) error {
-	workflowModels := controller.Store.GetAllWorkflows()
+	workflowModels := controller.store.GetAllWorkflows()
 	workflowDtos := make([]WorkflowDto, len(workflowModels))
 	for i, v := range workflowModels {
 		workflowDtos[i] = *NewWorkflowDto(v)
@@ -108,7 +108,7 @@ func (controller *Controller) get(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Workflow ID is not a valid UUID")
 	}
 
-	workflow := controller.Store.GetWorkflow(id)
+	workflow := controller.store.GetWorkflow(id)
 	if workflow == nil {
 		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("Workflow with ID %s does not exist", id))
 	}
@@ -141,7 +141,7 @@ func (controller *Controller) update(ec echo.Context) error {
 		criteriaToUpdate = &criteria
 	}
 
-	if model, err := controller.Store.UpdateWorkflow(workflowID, updateRequest.Label, criteriaToUpdate, updateRequest.TargetIDs, updateRequest.Enabled); err != nil {
+	if model, err := controller.store.UpdateWorkflow(workflowID, updateRequest.Label, criteriaToUpdate, updateRequest.TargetIDs, updateRequest.Enabled); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to update workflow: %v", err))
 	} else {
 		return ec.JSON(http.StatusOK, NewWorkflowDto(model))
@@ -154,7 +154,7 @@ func (controller *Controller) delete(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Workflow ID is not a valid UUID")
 	}
 
-	controller.Store.DeleteWorkflow(id)
+	controller.store.DeleteWorkflow(id)
 	return ec.NoContent(http.StatusNoContent)
 }
 

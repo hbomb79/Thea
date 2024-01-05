@@ -1,6 +1,6 @@
 module github.com/hbomb79/Thea
 
-go 1.20
+go 1.21
 
 require (
 	github.com/docker/docker v24.0.2+incompatible

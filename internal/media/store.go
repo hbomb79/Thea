@@ -1,26 +1,35 @@
 package media
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/jmoiron/sqlx"
 )
 
 type (
-	dbOrTx interface {
-		QueryRowx(query string, args ...interface{}) *sqlx.Row
-	}
 	// Model contains the union of properties that we expect all store-able information
 	// to contain. This is typically basic information about the container.
 	Model struct {
 		ID        uuid.UUID
-		TmdbId    string    `db:"tmdb_id"`
+		TmdbID    string    `db:"tmdb_id"`
 		CreatedAt time.Time `db:"created_at"`
 		UpdatedAt time.Time `db:"updated_at"`
 		Title     string
+	}
+
+	// Media represents the form of both movies and episodes inside the database. It is only after checking the
+	// type of the Media row that we can determine whether the row represents a movie or an episode.
+	media struct {
+		Model
+		Watchable
+		Type          string     `db:"type"`
+		EpisodeNumber *int       `db:"episode_number"` // Nullable
+		SeasonID      *uuid.UUID `db:"season_id"`      // Nullable
 	}
 
 	// Watchable represents the union of properties that we expect to see
@@ -43,7 +52,6 @@ type (
 	Season struct {
 		Model
 		SeasonNumber int       `db:"season_number"`
-		Episodes     []Episode `db:"-"`
 		SeriesID     uuid.UUID `db:"series_id"`
 	}
 
@@ -52,7 +60,30 @@ type (
 	// are not contained within this model.
 	Series struct {
 		Model
-		Seasons []Season `db:"-"`
+	}
+
+	// SeriesStub is used to package information about a series which doesn't map one-to-one with
+	// it's databse representation. This return type is used by functions such as ListInflatedSeries (see Thea.store)
+	// NB: this struct does not represent a table which exists in the DB, it is purely used to package
+	// query results that arise from joining multiple tables together.
+	SeriesStub struct {
+		*Series
+		SeasonCount int
+		//TODO: ratings (anything else?)
+	}
+
+	// InflatedSeries follows a similar principal to SeriesStub, in that is represents a Series *along with* other information
+	// which has been retrived using table joins/additional queries. It's a representation of the basic Series entity after
+	// being 'inflated' with all the information we might reasonably want to bundle with it (such as seasons and episode [stubs]).
+	InflatedSeries struct {
+		*Series
+		Seasons []*InflatedSeason
+		//TODO: cast members, ratings, etc
+	}
+
+	InflatedSeason struct {
+		*Season
+		Episodes []*Episode
 	}
 
 	// Episode contains all the information unique to an episode, combined
@@ -72,7 +103,11 @@ type (
 	Store struct{}
 )
 
-var storeLogger = logger.Get("MediaStore")
+var (
+	storeLogger = logger.Get("MediaStore")
+
+	ErrNoRowFound = errors.New("no rows found")
+)
 
 const (
 	IDCol     = "id"
@@ -98,7 +133,7 @@ const (
 // identifier.
 //
 // NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
-func (store *Store) SaveMovie(db *sqlx.DB, movie *Movie) error {
+func (store *Store) SaveMovie(db database.Queryable, movie *Movie) error {
 	var updatedMovie Movie
 	if err := db.QueryRowx(`
 		INSERT INTO media(id, type, tmdb_id, title, adult, source_path, created_at, updated_at)
@@ -106,7 +141,7 @@ func (store *Store) SaveMovie(db *sqlx.DB, movie *Movie) error {
 		ON CONFLICT(tmdb_id, type) DO UPDATE
 			SET (updated_at, title, adult, source_path) = (current_timestamp, EXCLUDED.title, EXCLUDED.adult, EXCLUDED.source_path)
 		RETURNING id, tmdb_id, title, adult, source_path, created_at, updated_at;
-	`, movie.ID, "movie", movie.TmdbId, movie.Title, movie.Adult, movie.SourcePath).StructScan(&updatedMovie); err != nil {
+	`, movie.ID, "movie", movie.TmdbID, movie.Title, movie.Adult, movie.SourcePath).StructScan(&updatedMovie); err != nil {
 		return err
 	}
 
@@ -121,7 +156,7 @@ func (store *Store) SaveMovie(db *sqlx.DB, movie *Movie) error {
 // identifier.
 //
 // NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
-func (store *Store) SaveSeries(db dbOrTx, series *Series) error {
+func (store *Store) SaveSeries(db database.Queryable, series *Series) error {
 	var updatedSeries Series
 	if err := db.QueryRowx(`
 		INSERT INTO series(id, tmdb_id, title, created_at, updated_at)
@@ -129,7 +164,7 @@ func (store *Store) SaveSeries(db dbOrTx, series *Series) error {
 		ON CONFLICT(tmdb_id) DO UPDATE
 			SET (title, updated_at) = (EXCLUDED.title, current_timestamp)
 		RETURNING *
-	`, series.ID, series.TmdbId, series.Title).StructScan(&updatedSeries); err != nil {
+	`, series.ID, series.TmdbID, series.Title).StructScan(&updatedSeries); err != nil {
 		return err
 	}
 
@@ -144,7 +179,7 @@ func (store *Store) SaveSeries(db dbOrTx, series *Series) error {
 // identifier.
 //
 // NOTE: the PK and FK ID's of the media may be UPDATED to match existing DB entry (if any)
-func (store *Store) SaveSeason(db dbOrTx, season *Season) error {
+func (store *Store) SaveSeason(db database.Queryable, season *Season) error {
 	var updatedSeason Season
 	if err := db.QueryRowx(`
 		INSERT INTO season(id, tmdb_id, season_number, title, series_id, created_at, updated_at)
@@ -152,7 +187,7 @@ func (store *Store) SaveSeason(db dbOrTx, season *Season) error {
 		ON CONFLICT(tmdb_id) DO UPDATE
 			SET (season_number, title, series_id, updated_at) = (EXCLUDED.season_number, EXCLUDED.title, EXCLUDED.series_id, current_timestamp)
 		RETURNING *
-	`, season.ID, season.TmdbId, season.SeasonNumber, season.Title, season.SeriesID).StructScan(&updatedSeason); err != nil {
+	`, season.ID, season.TmdbID, season.SeasonNumber, season.Title, season.SeriesID).StructScan(&updatedSeason); err != nil {
 		return err
 	}
 
@@ -168,7 +203,7 @@ func (store *Store) SaveSeason(db dbOrTx, season *Season) error {
 // as this is expected to be a stable identifier.
 //
 // NOTE: the PK and FK ID's of the media may be UPDATED to match existing DB entry (if any)
-func (store *Store) SaveEpisode(db dbOrTx, episode *Episode) error {
+func (store *Store) SaveEpisode(db database.Queryable, episode *Episode) error {
 	var updatedEpisode Episode
 	if err := db.QueryRowx(`
 		INSERT INTO media(id, type, tmdb_id, episode_number, title, source_path, season_id, adult, created_at, updated_at)
@@ -177,7 +212,7 @@ func (store *Store) SaveEpisode(db dbOrTx, episode *Episode) error {
 			SET (episode_number, title, source_path, season_id, updated_at, adult) =
 				(EXCLUDED.episode_number, EXCLUDED.title, EXCLUDED.source_path, EXCLUDED.season_id, current_timestamp, EXCLUDED.adult)
 		RETURNING id, tmdb_id, episode_number, title, source_path, season_id, adult, created_at, updated_at;
-	`, episode.ID, "episode", episode.TmdbId, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.SeasonID, episode.Adult).StructScan(&updatedEpisode); err != nil {
+	`, episode.ID, "episode", episode.TmdbID, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.SeasonID, episode.Adult).StructScan(&updatedEpisode); err != nil {
 		return err
 	}
 
@@ -191,12 +226,12 @@ func (store *Store) SaveEpisode(db dbOrTx, episode *Episode) error {
 // GetMedia is a convinience method for requesting either a Movie
 // or an Episode. The ID provided is used to lookup both, and whichever
 // query is successful is used to populate a media Container.
-func (store *Store) GetMedia(db *sqlx.DB, mediaID uuid.UUID) *Container {
+func (store *Store) GetMedia(db database.Queryable, mediaID uuid.UUID) *Container {
 	if movie, err := store.GetMovie(db, mediaID); err != nil {
 		//TODO: consider wrapping these three in a transaction (probably overkill though)
-		storeLogger.Emit(logger.ERROR, "Failed to find movie with media ID %s: %v {falling back to searching for episode}\n", mediaID, err)
+		storeLogger.Emit(logger.DEBUG, "Failed to find movie with media ID %s: %v {falling back to searching for episode}\n", mediaID, err)
 		if episode, err := store.GetEpisode(db, mediaID); err != nil {
-			storeLogger.Emit(logger.ERROR, "Failed to fetch episode with media ID %s: %v\n", mediaID, err)
+			storeLogger.Emit(logger.DEBUG, "Failed to fetch episode with media ID %s: %v\n", mediaID, err)
 			return nil
 		} else {
 			season, err := store.GetSeason(db, episode.SeasonID)
@@ -216,44 +251,276 @@ func (store *Store) GetMedia(db *sqlx.DB, mediaID uuid.UUID) *Container {
 	}
 }
 
+// ListMovie returns the Movie models for all media of type 'movie' in the database, or an error
+// if the underpinning SQL query failed
+func (store *Store) ListMovie(db *sqlx.DB) ([]*Movie, error) {
+	var dest []*Movie
+	if err := db.Unsafe().Select(&dest, `SELECT * FROM media WHERE type='movie'`); err != nil {
+		return nil, fmt.Errorf("failed to select all movies: %v", err)
+	}
+
+	return dest, nil
+}
+
+// ListSeries returns the Series models for series stored in the database, or an error
+// if the underpinning SQL query failed
+func (store *Store) ListSeries(db database.Queryable) ([]*Series, error) {
+	var dest []*Series
+	if err := db.Select(&dest, `SELECT * FROM series`); err != nil {
+		return nil, fmt.Errorf("failed to select all series: %v", err)
+	}
+
+	return dest, nil
+}
+
+// ListLatestMedia is able to take a union of both movies and series (depending on the allowed types, which defaults
+// to including both if empty), and orders the union by it's updated_at timestamp in order to return a representation
+// of this list as a slice of containers. The containers will only be of type MOVIE or SERIES.
+//
+// The limit specified will be used, up to the maximum of 100. If no limit provided then the default of 15 will be used.
+//
+// NB: A container of type MOVIE will NOT have had it's 'Watchable' embedded struct populated. Only the 'Model' of
+// each result will be populated.
+func (store *Store) ListLatestMedia(db database.Queryable, allowedTypes []string, limit int) ([]*Container, error) {
+	// If allowedTypes is empty, default to including both movies and series
+	if len(allowedTypes) == 0 {
+		allowedTypes = []string{"movie", "series"}
+	}
+
+	// Initially 'disallow' the types by specifiying false clauses
+	movieEnabledClause := "AND false"
+	seriesAllowedClause := "WHERE false"
+	for _, v := range allowedTypes {
+		switch v {
+		case "movie":
+			movieEnabledClause = ""
+		case "series":
+			seriesAllowedClause = ""
+		}
+	}
+
+	// Override default of 15 result limit if the user provided value
+	// is acceptable. Maximum is 100.
+	limitClause := "LIMIT 15"
+	if limit > 0 {
+		limitClause = fmt.Sprintf("LIMIT %d", min(limit, 100))
+	}
+
+	query := fmt.Sprintf(`
+		WITH joinedMedia AS (
+			SELECT id, title, tmdb_id, created_at, updated_at, 'movie' AS type
+			FROM media WHERE type='movie' %s 
+			UNION
+			SELECT id, title, tmdb_id, created_at, updated_at, 'series' AS type
+			FROM series
+			%s
+		)
+		SELECT *
+		FROM joinedMedia
+		ORDER BY updated_at
+		%s
+	`, movieEnabledClause, seriesAllowedClause, limitClause)
+
+	var results []struct {
+		ID        uuid.UUID `db:"id"`
+		Title     string    `db:"title"`
+		TmdbID    string    `db:"tmdb_id"`
+		CreatedAt time.Time `db:"created_at"`
+		UpdatedAt time.Time `db:"updated_at"`
+		MediaType string    `db:"type"`
+	}
+	if err := db.Select(&results, query); err != nil {
+		return nil, err
+	}
+
+	out := make([]*Container, len(results))
+	for k, v := range results {
+		model := Model{ID: v.ID, TmdbID: v.TmdbID, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, Title: v.Title}
+		switch v.MediaType {
+		case "movie":
+			out[k] = &Container{Type: MOVIE, Movie: &Movie{Model: model}}
+		case "series":
+			out[k] = &Container{Type: SERIES, Series: &Series{Model: model}}
+		default:
+			return nil, fmt.Errorf("type of list result %s is illegal. Expected 'movie' or 'series', found %s", v, v.MediaType)
+		}
+	}
+
+	return out, nil
+}
+
+// CountSeasonsInSeries queries the database for the number of seasons associated with
+// each of the given series, and constructs a mapping from seriesID -> season count.
+// NB: series which did not exist in the database will be omitted from the result mapping
+func (store *Store) CountSeasonsInSeries(db database.Queryable, seriesIDs []uuid.UUID) (map[uuid.UUID]int, error) {
+	query, args, err := sqlx.In(`
+		SELECT series.id AS id, COUNT(season.*) AS count FROM series
+		LEFT JOIN season
+		  ON season.series_id = series.id
+		WHERE series.id IN (?)
+		GROUP BY series.id`, seriesIDs)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct query to count seasons for series %v: %v", seriesIDs, err)
+	}
+
+	type r struct {
+		ID    uuid.UUID `db:"id"`
+		Count int       `db:"count"`
+	}
+
+	var results []*r
+	if err := db.Select(&results, db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("failed to count seasons asscoiated with series %v: %v", seriesIDs, err)
+	}
+
+	finalResult := make(map[uuid.UUID]int)
+	for _, v := range results {
+		finalResult[v.ID] = v.Count
+	}
+
+	return finalResult, nil
+}
+
+// GetSeasonsForSeries queries the database for all seasons which are 'owned' by the series
+// referenced by the ID specified. If the ID provided does not match a known series, or if that
+// series has no seasons, the result will be an empty slice.
+func (store *Store) GetSeasonsForSeries(db database.Queryable, seriesID uuid.UUID) ([]*Season, error) {
+	var dest []*Season
+	if err := db.Select(&dest, `
+		SELECT season.* FROM series
+     	LEFT JOIN season
+	      ON season.series_id = series.id
+	    WHERE series.id=$1`,
+		seriesID,
+	); err != nil {
+		return nil, fmt.Errorf("failed to fetch seasons for series %s: %w", seriesID, err)
+	}
+
+	return dest, nil
+}
+
+// GetEpisodesForSeries accepts a list of series IDs and queries the database
+// for all the episodes referencing them (indirectly, via the associated seasons).
+// The result is constructed in to a map such that each key is one of the
+// series IDs, and the value is a slice of all the
+// episodes related to that series.
+//
+// NB: if a series ID does not reference an existing series, or it has no episodes, then it's key
+// will be missing from the resulting map.
+func (store *Store) GetEpisodesForSeries(db database.Queryable, seriesIDs []uuid.UUID) (map[uuid.UUID][]*Episode, error) {
+	wrap := func(err error) error {
+		return fmt.Errorf("failed to get episodes for series %s: %w", seriesIDs, err)
+	}
+
+	query, args, err := sqlx.In(`
+		SELECT series.id AS owning_series_id, media.* FROM series
+		INNER JOIN season
+		  ON season.series_id = series.id
+		INNER JOIN media
+		  ON media.type = 'episode'
+		 AND media.season_id = season.id
+		WHERE series.id IN (?)`, seriesIDs)
+	if err != nil {
+		return nil, wrap(err)
+	}
+
+	type r struct {
+		media
+		OwningSeriesID uuid.UUID `db:"owning_series_id"`
+	}
+
+	var dest []*r
+	if err := db.Select(&dest, db.Rebind(query), args...); err != nil {
+		return nil, wrap(err)
+	}
+
+	output := make(map[uuid.UUID][]*Episode)
+	for _, v := range dest {
+		output[v.OwningSeriesID] = append(output[v.OwningSeriesID], mediaToEpisode(&v.media))
+	}
+
+	return output, nil
+}
+
+// GetEpisodesForSeasons accepts a list of season IDs and queries the database
+// for all the episodes referencing them. The result is constructed in to a map
+// such that each key is one of the season IDs, and the value is a slice of all the
+// episodes related to that season.
+//
+// NB: if a season ID does not reference an existing season, or it has no episodes, then it's key
+// will be missing from the resulting map.
+func (store *Store) GetEpisodesForSeasons(db database.Queryable, seasonIDs []uuid.UUID) (map[uuid.UUID][]*Episode, error) {
+	wrap := func(err error) error {
+		return fmt.Errorf("failed to get episodes for seasons %s: %w", seasonIDs, err)
+	}
+
+	query, args, err := sqlx.In(`
+		SELECT season.id AS owning_season_id, media.* FROM season
+     	INNER JOIN media
+	      ON media.type = 'episode'
+		 AND media.season_id = season.id
+	    WHERE season.id IN (?)`, seasonIDs)
+	if err != nil {
+		return nil, wrap(err)
+	}
+
+	type r struct {
+		media
+		OwningSeasonID uuid.UUID `db:"owning_season_id"`
+	}
+
+	var dest []*r
+	if err := db.Select(&dest, db.Rebind(query), args...); err != nil {
+		return nil, wrap(err)
+	}
+
+	output := make(map[uuid.UUID][]*Episode)
+	for _, v := range dest {
+		output[v.OwningSeasonID] = append(output[v.OwningSeasonID], mediaToEpisode(&v.media))
+	}
+
+	return output, nil
+}
+
 // GetMovie searches for an existing movie with the Thea PK ID provided.
-func (store *Store) GetMovie(db *sqlx.DB, movieID uuid.UUID) (*Movie, error) {
-	return queryRow[Movie](db, MediaTable, IDCol, movieID, MediaMovieClause)
+func (store *Store) GetMovie(db database.Queryable, movieID uuid.UUID) (*Movie, error) {
+	return queryRowMovie(db, MediaTable, IDCol, movieID)
 }
 
 // GetMovieWithTmdbId searches for an existing movie with the TMDB unique ID provided.
-func (store *Store) GetMovieWithTmdbId(db *sqlx.DB, tmdbID string) (*Movie, error) {
-	return queryRow[Movie](db, MediaTable, TmdbIDCol, tmdbID, MediaMovieClause)
+func (store *Store) GetMovieWithTmdbId(db database.Queryable, tmdbID string) (*Movie, error) {
+	return queryRowMovie(db, MediaTable, TmdbIDCol, tmdbID)
 }
 
 // GetSeries searches for an existing series with the Thea PK ID provided.
-func (store *Store) GetSeries(db *sqlx.DB, seriesID uuid.UUID) (*Series, error) {
+func (store *Store) GetSeries(db database.Queryable, seriesID uuid.UUID) (*Series, error) {
 	return queryRow[Series](db, SeriesTable, IDCol, seriesID, "")
 }
 
 // GetSeriesWithTmdbId searches for an existing series with the TMDB unique ID provided.
-func (store *Store) GetSeriesWithTmdbId(db *sqlx.DB, tmdbID string) (*Series, error) {
+func (store *Store) GetSeriesWithTmdbId(db database.Queryable, tmdbID string) (*Series, error) {
 	return queryRow[Series](db, SeriesTable, TmdbIDCol, tmdbID, "")
 }
 
 // GetSeason searches for an existing season with the Thea PK ID provided.
-func (store *Store) GetSeason(db *sqlx.DB, seasonID uuid.UUID) (*Season, error) {
+func (store *Store) GetSeason(db database.Queryable, seasonID uuid.UUID) (*Season, error) {
 	return queryRow[Season](db, SeasonTable, IDCol, seasonID, "")
 }
 
 // GetSeasonWithTmdbId searches for an existing season with the TMDB unique ID provided.
-func (store *Store) GetSeasonWithTmdbId(db *sqlx.DB, tmdbID string) (*Season, error) {
+func (store *Store) GetSeasonWithTmdbId(db database.Queryable, tmdbID string) (*Season, error) {
 	return queryRow[Season](db, SeasonTable, TmdbIDCol, tmdbID, "")
 }
 
 // GetEpisode searches for an existing episode with the Thea PK ID provided.
-func (store *Store) GetEpisode(db *sqlx.DB, episodeID uuid.UUID) (*Episode, error) {
-	return queryRow[Episode](db, MediaTable, IDCol, episodeID, MediaEpisodeClause)
+func (store *Store) GetEpisode(db database.Queryable, episodeID uuid.UUID) (*Episode, error) {
+	return queryRowEpisode(db, MediaTable, IDCol, episodeID)
 }
 
 // GetEpisodeWithTmdbId searches for an existing episode with the TMDB unique ID provided.
-func (store *Store) GetEpisodeWithTmdbId(db *sqlx.DB, tmdbID string) (*Episode, error) {
-	return queryRow[Episode](db, MediaTable, TmdbIDCol, tmdbID, MediaEpisodeClause)
+func (store *Store) GetEpisodeWithTmdbId(db database.Queryable, tmdbID string) (*Episode, error) {
+	return queryRowEpisode(db, MediaTable, TmdbIDCol, tmdbID)
 }
 
 // GetAllSourcePaths returns all the source paths related
@@ -267,18 +534,116 @@ func (store *Store) GetAllSourcePaths(db *sqlx.DB) ([]string, error) {
 	return paths, nil
 }
 
-func queryRow[T any](db *sqlx.DB, table string, col string, val any, additionalWhereClause string) (*T, error) {
-	v := new(T)
-	// DB.Unsafe() is used here to allow for partial struct scanning (i.e. we don't want the 'type' column to come
-	// in to our model from the DB. We use the 'additionalWhereClause' to ensure we're only pulling rows which
-	// are of the correct type, so the risk is acceptable).
-	if err := db.Unsafe().Get(
-		v,
-		fmt.Sprintf(`SELECT * FROM %s WHERE %s=$1 %s LIMIT 1;`, table, col, additionalWhereClause),
-		val,
-	); err != nil {
-		return nil, err
+// DeleteSeries deletes the series with the given ID, including all it's seasons and
+// enclosed episodes.
+//
+// NB: It is important to explicitly delete associated media transcodes for the affected
+// episodes before attempting to delete this resource - failure to do so will cause
+// this query to fail.
+func (store *Store) DeleteSeries(db database.Queryable, seriesID uuid.UUID) error {
+	if _, err := db.Exec(`DELETE FROM series WHERE id=$1`, seriesID); err != nil {
+		return fmt.Errorf("deletion of series %s failed: %w", seriesID, err)
 	}
 
-	return v, nil
+	return nil
+}
+
+// DeleteSeason deletes the series with the given ID, including all it's enclosed episodes.
+//
+// NB: It is important to explicitly delete associated media transcodes for the affected
+// episodes before attempting to delete this resource - failure to do so will cause
+// this query to fail.
+func (store *Store) DeleteSeason(db database.Queryable, seasonID uuid.UUID) error {
+	if _, err := db.Exec(`DELETE FROM season WHERE id=$1`, seasonID); err != nil {
+		return fmt.Errorf("deletion of season %s failed: %w", seasonID, err)
+	}
+
+	return nil
+}
+
+// DeleteEpisode deletes the episode with the given ID
+//
+// NB: It is important to explicitly delete associated media transcodes for the affected
+// episode before attempting to delete this resource - failure to do so will cause
+// this query to fail.
+func (store *Store) DeleteEpisode(db database.Queryable, episodeID uuid.UUID) error {
+	if _, err := db.Exec(`DELETE FROM media WHERE type='episode' AND id=$1`, episodeID); err != nil {
+		return fmt.Errorf("deletion of episode %s failed: %w", episodeID, err)
+	}
+
+	return nil
+}
+
+// DeleteMovie deletes the movie with the given ID
+//
+// NB: It is important to explicitly delete associated media transcodes for the affected
+// movie before attempting to delete this resource - failure to do so will cause
+// this query to fail.
+func (store *Store) DeleteMovie(db database.Queryable, movieID uuid.UUID) error {
+	if _, err := db.Exec(`DELETE FROM media WHERE type='movie' AND id=$1`, movieID); err != nil {
+		return fmt.Errorf("deletion of movie %s failed: %w", movieID, err)
+	}
+
+	return nil
+}
+
+// queryRowMovie extracts a Media row from the database and ensures that the row returned represents
+// a movie (the type must be 'movie', and episode-specific information must be nil).
+func queryRowMovie(db database.Queryable, table string, col string, val any) (*Movie, error) {
+	r, e := queryRow[media](db, table, col, val, MediaMovieClause)
+	if e != nil {
+		return nil, e
+	}
+
+	if r.Type != "movie" || r.EpisodeNumber != nil || r.SeasonID != nil {
+		return nil, fmt.Errorf("media query for an episode returned malformed data expected ('movie', nil, nil), found (%v, %v, %v)", r.Type, r.EpisodeNumber, r.SeasonID)
+	}
+
+	return &Movie{
+		Model:     r.Model,
+		Watchable: r.Watchable,
+	}, nil
+}
+
+// queryRowEpisode extracts a Media row from the database and ensures that the row returned represents
+// an episode (the type must be 'episode', and the episode-specific information must be non-nil)
+func queryRowEpisode(db database.Queryable, table string, col string, val any) (*Episode, error) {
+	r, e := queryRow[media](db, table, col, val, MediaEpisodeClause)
+	if e != nil {
+		return nil, e
+	}
+
+	if r.Type != "episode" || r.EpisodeNumber == nil || r.SeasonID == nil {
+		return nil, fmt.Errorf("media query for an episode returned malformed data expected ('episode', non-nil, non-nil), found (%v, %v, %v)", r.Type, r.EpisodeNumber, r.SeasonID)
+	}
+
+	return mediaToEpisode(r), nil
+}
+
+// queryRow selects a single row from the given table using a where clause constructed
+// from the col and val provided (i.e. WHERE col=val). An additionalWhereClause may be
+// provided as well which is appended afterwards (and as such, the additional clause must
+// begin with 'AND ...').
+// If zero rows are returned, then 'ErrNoRowFound' is returned.
+func queryRow[T any](db database.Queryable, table string, col string, val any, additionalWhereClause string) (*T, error) {
+	var dest []T
+	query := fmt.Sprintf(`SELECT * FROM %s WHERE %s=$1 %s LIMIT 1;`, table, col, additionalWhereClause)
+	if err := db.Select(&dest, query, val); err != nil {
+		return nil, fmt.Errorf("query for %s failed: %w", table, err)
+	}
+
+	if len(dest) == 0 {
+		return nil, ErrNoRowFound
+	}
+
+	return &dest[0], nil
+}
+
+func mediaToEpisode(m *media) *Episode {
+	return &Episode{
+		Model:         m.Model,
+		Watchable:     m.Watchable,
+		SeasonID:      *m.SeasonID,
+		EpisodeNumber: *m.EpisodeNumber,
+	}
 }

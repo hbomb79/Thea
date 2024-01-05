@@ -2,6 +2,7 @@ package ffmpeg
 
 import (
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/database"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -12,7 +13,7 @@ const (
 type Store struct {
 }
 
-func (store *Store) Save(db *sqlx.DB, target *Target) error {
+func (store *Store) Save(db database.Queryable, target *Target) error {
 	_, err := db.NamedExec(`
 		INSERT INTO transcode_target(id, label, ffmpeg_options, extension)
 		VALUES (:id, :label, :ffmpeg_options, :extension)
@@ -23,7 +24,7 @@ func (store *Store) Save(db *sqlx.DB, target *Target) error {
 	return err
 }
 
-func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Target {
+func (store *Store) Get(db database.Queryable, id uuid.UUID) *Target {
 	var result Target
 	err := db.Get(&result, `SELECT * FROM transcode_target WHERE id=$1;`, id)
 	if err != nil {
@@ -34,7 +35,7 @@ func (store *Store) Get(db *sqlx.DB, id uuid.UUID) *Target {
 	return &result
 }
 
-func (store *Store) GetAll(db *sqlx.DB) []*Target {
+func (store *Store) GetAll(db database.Queryable) []*Target {
 	var results []*Target
 	err := db.Select(&results, `SELECT * FROM transcode_target;`)
 	if err != nil {
@@ -45,7 +46,7 @@ func (store *Store) GetAll(db *sqlx.DB) []*Target {
 	return results
 }
 
-func (store *Store) GetMany(db *sqlx.DB, ids ...uuid.UUID) []*Target {
+func (store *Store) GetMany(db database.Queryable, ids ...uuid.UUID) []*Target {
 	query, args, err := sqlx.In(`SELECT * FROM transcode_target WHERE id IN (?);`)
 	if err != nil {
 		log.Fatalf("Unable to create SELECT .. IN (a,b,c,...) query: %v", err)
@@ -64,7 +65,7 @@ func (store *Store) GetMany(db *sqlx.DB, ids ...uuid.UUID) []*Target {
 	return results
 }
 
-func (store *Store) Delete(db *sqlx.DB, id uuid.UUID) {
+func (store *Store) Delete(db database.Queryable, id uuid.UUID) {
 	_, err := db.NamedExec(`--sql
 		DELETE FROM transcode_target WHERE id=$1;`,
 		id)

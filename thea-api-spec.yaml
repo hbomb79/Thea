@@ -15,7 +15,122 @@ tags:
     description: Ongoing or completed tasks which transcoded media
   - name: ingest
     description: Ongoing tasks which represent the ingestion of media in to Thea
+  - name: media
+    description: Media (movies/series/seasons/episodes) that Thea is tracking
 paths:
+  /media/latest/:
+    get:
+      summary: List Latest Media
+      description: Allows a client to fetch a list of recently added/updated movies and tv series.
+      operationId: listLatestMedia
+      tags:
+        - media
+      responses:
+        "200":
+          description: List of latest tv series/movies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MediaStub"
+  /media/movie/:
+    get:
+      summary: List Movies
+      description: Returns a list of all known movies as a stubbed DTO. Full versions of the movie must be retrieved using the /media/movie/:id endpoint
+      operationId: listMovie
+      tags:
+        - media
+      responses:
+        "200":
+          description: List of movies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MovieStub"
+  /media/series/:
+    get:
+      summary: List Series
+      description: Returns a list of all known series as a stubbed DTO. Full versions of the series must be retrieved using the /media/series/:id endpoint
+      operationId: listSeries
+      tags:
+        - media
+      responses:
+        "200":
+          description: List of series
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SeriesStub"
+
+
+  /media/movie/{id}/:
+    get:
+      summary: Get Movie
+      description: Returns the fully inflated DTO for this movie
+      operationId: getMovie
+      tags:
+        - media
+      responses:
+        "200":
+          description: Movie
+          content:
+            application/json:
+              schema:
+                type: arraIngestTasky
+                items:
+                  $ref: "#/components/schemas/Movie"
+    delete:
+      summary: Deletes Movie
+      description: Deletes the movie and all it's related transcodes. Any on-going transcodes will be cancelled first.
+      operationId: deleteMovie
+      tags:
+        - media
+      responses:
+        "201":
+          description: Succesfully queued deletion of movie and related transcodes
+
+  /media/series/{id}/:
+    get:
+      summary: Get Series
+      description: Returns the fully inflated DTO for this series (which contains the seasons, which further contain their episode stubs)
+      operationId: getSeries
+      tags:
+        - media
+      responses:
+        "200":
+          description: Series containing all seasons (and their episode stubs)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Series"
+    delete:
+      summary: Deletes Series
+      description: Deletes the series and ALL it's seasons and episodes, including any related transcodes. Any on-going transcodes for the episodes contianed within will be cancelled first.
+      operationId: deleteSeries
+      tags:
+        - media
+      responses:
+        "201":
+          description: Succesfully queued deletion of series/seasons/episodes and related transcodes
+
+  /media/episode/{id}/:
+    delete:
+      summary: Deletes Episode
+      description: Deletes the episode specified, any related transcodes, and cancels any ongoing transcodes for this episode
+      operationId: deleteEpisode
+      tags:
+        - media
+      responses:
+        "201":
+          description: Successfully queued deletion of episode and related transcodes
+
   /ingests:
     get:
       summary: List Ingests
@@ -382,6 +497,17 @@ components:
             $ref: "#/components/schemas/CreateTarget"
   schemas:
     IngestTask:
+      type: object
+
+    MediaStub:
+      type: object
+    MovieStub:
+      type: object
+    SeriesStub:
+      type: object
+    Series:
+      type: object
+    Movie:
       type: object
 
     CreateTranscodeTask:

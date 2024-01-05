@@ -3,9 +3,7 @@
 package event
 
 import (
-	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/pkg/logger"
@@ -58,7 +56,8 @@ const (
 	INGEST_UPDATE   Event = "ingest:update"
 	INGEST_COMPLETE Event = "ingest:complete"
 
-	NEW_MEDIA Event = "media:new"
+	NEW_MEDIA    Event = "media:new"
+	DELETE_MEDIA Event = "media:delete"
 
 	TRANSCODE_UPDATE        Event = "transcode:task:update"
 	TRANSCODE_COMPLETE      Event = "transcode:task:complete"
@@ -144,39 +143,9 @@ func (handler *eventHandler) Dispatch(event Event, payload Payload) {
 // will be returned if the payload is not valid, and the event should not be sent to the registered
 // handlers in this case.
 func (handler *eventHandler) validatePayload(event Event, payload Payload) error {
-	var payloadTypeName string
-	if t := reflect.TypeOf(payload); t != nil {
-		payloadTypeName = t.Name()
-	} else {
-		payloadTypeName = "Nil"
+	if _, ok := payload.(uuid.UUID); !ok {
+		return fmt.Errorf("illegal payload (type %T) for %v event. Expected uuid.UUID payload", payload, event)
 	}
 
-	switch event {
-	case INGEST_UPDATE:
-		fallthrough
-	case INGEST_COMPLETE:
-		fallthrough
-	case TRANSCODE_COMPLETE:
-		fallthrough
-	case TRANSCODE_TASK_PROGRESS:
-		fallthrough
-	case WORKFLOW_UPDATE:
-		fallthrough
-	case DOWNLOAD_UPDATE:
-		fallthrough
-	case DOWNLOAD_COMPLETE:
-		fallthrough
-	case DOWNLOAD_PROGRESS:
-		fallthrough
-	case NEW_MEDIA:
-		fallthrough
-	case TRANSCODE_UPDATE:
-		if _, ok := payload.(uuid.UUID); !ok {
-			return fmt.Errorf("illegal payload (type %s) for %s event. Expected uuid.UUID payload", payloadTypeName, event)
-		}
-
-		return nil
-	}
-
-	return errors.New("event type not recognized for validation")
+	return nil
 }

@@ -28,7 +28,7 @@ type (
 
 	RestGateway interface {
 		RunnableService
-		BroadcastTaskUpdate(taskID uuid.UUID) error
+		BroadcastTranscodeUpdate(taskID uuid.UUID) error
 		BroadcastTaskProgressUpdate(taskID uuid.UUID) error
 		BroadcastWorkflowUpdate(workflowID uuid.UUID) error
 		BroadcastMediaUpdate(mediaID uuid.UUID) error
@@ -41,6 +41,8 @@ type (
 		CancelTask(taskID uuid.UUID) error
 		AllTasks() []*transcode.TranscodeTask
 		Task(taskID uuid.UUID) *transcode.TranscodeTask
+		PauseTask(taskID uuid.UUID) error
+		ResumeTask(taskID uuid.UUID) error
 		ActiveTaskForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) *transcode.TranscodeTask
 		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
 		CancelTasksForMedia(mediaID uuid.UUID)

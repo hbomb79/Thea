@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -13,7 +14,11 @@ import (
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
-var log = logger.Get("TranscodeServ")
+var (
+	log = logger.Get("TranscodeServ")
+
+	ErrTaskNotFound = errors.New("no task found")
+)
 
 type (
 	DataStore interface {
@@ -61,8 +66,8 @@ func New(config Config, eventBus event.EventCoordinator, dataStore DataStore) (*
 		tasks:       make([]*TranscodeTask, 0),
 		eventBus:    eventBus,
 		dataStore:   dataStore,
-		queueChange: make(chan bool, 2),
-		taskChange:  make(chan uuid.UUID),
+		queueChange: make(chan bool, 128),
+		taskChange:  make(chan uuid.UUID, 128),
 	}, nil
 }
 
@@ -71,7 +76,7 @@ func New(config Config, eventBus event.EventCoordinator, dataStore DataStore) (*
 // Note: when context is cancelled this method will not immediately return as it
 // will wait for it's running transcode tasks to cancel.
 func (service *transcodeService) Run(ctx context.Context) error {
-	eventChannel := make(event.HandlerChannel, 2)
+	eventChannel := make(event.HandlerChannel, 100)
 	service.eventBus.RegisterHandlerChannel(eventChannel, event.NEW_MEDIA, event.DELETE_MEDIA)
 
 	for {
@@ -82,14 +87,15 @@ func (service *transcodeService) Run(ctx context.Context) error {
 			service.handleTaskUpdate(taskId)
 		case message := <-eventChannel:
 			ev := message.Event
-			if ev == event.NEW_MEDIA {
+			switch ev {
+			case event.NEW_MEDIA:
 				if mediaId, ok := message.Payload.(uuid.UUID); ok {
 					log.Emit(logger.DEBUG, "newly ingested media with ID %s detected\n", mediaId)
 					service.createWorkflowTasksForMedia(mediaId)
 				} else {
 					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
 				}
-			} else if ev == event.DELETE_MEDIA {
+			case event.DELETE_MEDIA:
 				if mediaId, ok := message.Payload.(uuid.UUID); ok {
 					log.Emit(logger.DEBUG, "media with ID %s deleted, cancelling any ongoing transcodes\n", mediaId)
 					service.CancelTasksForMedia(mediaId)
@@ -196,25 +202,62 @@ func (service *transcodeService) NewTask(mediaId uuid.UUID, targetId uuid.UUID) 
 // is not in a cancellable state, it will simply be removed from the service.
 func (service *transcodeService) CancelTask(id uuid.UUID) error {
 	task := service.Task(id)
-	isBeingMonitored := task.Status() == WORKING
-
 	if task == nil {
-		return fmt.Errorf("no task with ID %s", id)
+		return ErrTaskNotFound
 	}
 
-	if err := task.Cancel(); err != nil {
+	if err := task.cancel(); err != nil {
 		// This error usually indicates the task is not the right state to be cancelled, however
 		// we should still proceed with removing it from the queue
 		log.Warnf("failed to cancel task %s command: %s", task, err)
 	}
 
+	isBeingMonitored := task.Status() == WORKING || task.Status() == SUSPENDED
 	if !isBeingMonitored {
 		// Manually remove from the queue because the task was not being
 		// monitored by the service at the time of it's cancellation.
 		service.removeTaskFromQueue(id)
 	}
 
-	log.Emit(logger.STOP, "Task %s cancelled and cleaned up\n", task)
+	log.Emit(logger.STOP, "Cancelled %s\n", task)
+	return nil
+}
+
+// PauseTask searches the services for the task with the ID provided and suspends
+// the underlying ffmpeg command. If the task cannot be found, ErrTaskNotFound is returned.
+// If the task is not capable of being suspended (e.g. it's already suspended), then an
+// error describing the problem will be returned.
+func (service *transcodeService) PauseTask(id uuid.UUID) error {
+	task := service.Task(id)
+	if task == nil {
+		return ErrTaskNotFound
+	}
+
+	if err := task.pause(); err != nil {
+		return err
+	}
+
+	log.Infof("Paused %s\n", task)
+	service.taskChange <- id
+	return nil
+}
+
+// ResumeTake searches the services for the task with the ID provided and attempts to resume
+// the underlying ffmpeg command. If the task cannot be found, ErrTaskNotFound is returned.
+// If the task is not capable of being resumed (e.g. it's not already suspended), then an
+// error describing the problem will be returned.
+func (service *transcodeService) ResumeTask(id uuid.UUID) error {
+	task := service.Task(id)
+	if task == nil {
+		return ErrTaskNotFound
+	}
+
+	if err := task.resume(); err != nil {
+		return err
+	}
+
+	log.Infof("Resumed %s\n", task)
+	service.taskChange <- id
 	return nil
 }
 
@@ -248,11 +291,11 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 
 			updateHandler := func(prog *ffmpeg.Progress) {
 				taskToStart.lastProgress = prog
-				service.taskChange <- taskToStart.id
-				fmt.Printf("\rTask %s transcode progress: %d%%", taskToStart.Id(), int(prog.Progress))
+				service.eventBus.Dispatch(event.TRANSCODE_TASK_PROGRESS, taskToStart.Id())
 			}
 
 			taskToStart.status = WORKING
+			service.taskChange <- taskToStart.id
 			log.Emit(logger.DEBUG, "Starting task %s, consuming %d threads\n", taskToStart, threadCost)
 			if err := taskToStart.Run(ctx, updateHandler); err != nil {
 				log.Emit(logger.WARNING, "Task %s has concluded with error: %v\n", taskToStart, err)
@@ -260,18 +303,29 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 				log.Emit(logger.DEBUG, "Task %s has concluded nominally\n", taskToStart)
 			}
 
-			// Submit an update to ensure completed/cancelled tasks are correctly dealt with
-			service.taskChange <- taskToStart.id
+			// Submit a non-blocking update to ensure completed/cancelled tasks are correctly dealt with
+			// If the service is shutting down, then the above task will be automatically cancelled
+			// AND the thread responsible for draining this channel is no longer listening, so send these
+			// messages non-blocking
+			// TODO: consider being a bit smarter about this (e.g. only send non-blocking on cancellation, or
+			// perhaps avoid sending altogether if the service is closing).
+			select {
+			case service.taskChange <- taskToStart.id:
+			default:
+				log.Emit(logger.WARNING, "Failed to notify service of task change... this could be because the service is shutting down\n")
+			}
 
 			service.Lock()
 			defer service.Unlock()
 			service.consumedThreads -= threadCost
+			log.Emit(logger.DEBUG, "Task %s has released %d threads\n", taskToStart.Id(), threadCost)
 		}(task, service.taskWg, requiredBudget)
 	}
 }
 
 // handleTaskUpdate is the handler for any task updates in this service.
-// Any dead tasks are removed from the queue.
+// Any dead tasks are removed from the queue. Completed tasks are committed
+// to the database before being removed from the queue.
 func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 	task := service.Task(taskId)
 	if task == nil {
@@ -284,12 +338,14 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 			log.Errorf("failed to save transcode %s due to error: %v\n", task, err)
 		} else {
 			service.eventBus.Dispatch(event.TRANSCODE_COMPLETE, taskId)
+			service.removeTaskFromQueue(task.id)
+
+			return
 		}
 	}
 
-	if task.status == CANCELLED || task.status == COMPLETE {
+	if task.status == CANCELLED {
 		service.removeTaskFromQueue(task.id)
-		return
 	}
 
 	service.eventBus.Dispatch(event.TRANSCODE_UPDATE, taskId)
@@ -310,7 +366,7 @@ func (service *transcodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) 
 				}
 			}
 
-			log.Emit(logger.NEW, "Media %s met the conditions of workflow %s. Automated transcodes queued\n", mediaId, workflow)
+			log.Emit(logger.NEW, "Media %s met the conditions of workflow %v... Automated transcodes queued\n", mediaId, workflow)
 			return
 		}
 	}
@@ -337,7 +393,7 @@ func (service *transcodeService) spawnFfmpegTarget(m *media.Container, target *f
 		return fmt.Errorf("a completed task for media %s and target %s already exists", m.Id(), target.ID)
 	}
 
-	newTask, err := NewTranscodeTask(service.config.OutputPath, m, target, ffmpeg.Config{
+	newTask, err := NewTranscodeTask(m, target, ffmpeg.Config{
 		FfmpegBinPath:       service.config.FfmpegBinaryPath,
 		FfprobeBinPath:      service.config.FfprobeBinaryPath,
 		OutputBaseDirectory: service.config.OutputPath,

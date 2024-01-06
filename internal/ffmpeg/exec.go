@@ -91,24 +91,22 @@ func (cmd *TranscodeCmd) Run(ctx context.Context, ffmpegConfig transcoder.Option
 	}
 }
 
-func (cmd *TranscodeCmd) Suspend() {
+func (cmd *TranscodeCmd) Suspend() error {
 	if cmd.runningCommand == nil {
-		log.Emit(logger.ERROR, "Cannot suspend FFmpeg instance %v because command is not intialised\n", cmd)
-		return
+		return fmt.Errorf("cannot suspend FFmpeg instance %v because command is not intialised", cmd)
 	}
 
 	cmd.runningCommand.Process.Signal(syscall.SIGTSTP)
-	log.Emit(logger.SUCCESS, "Suspended transcode %v\n", cmd)
+	return nil
 }
 
-func (cmd *TranscodeCmd) Continue() {
+func (cmd *TranscodeCmd) Continue() error {
 	if cmd.runningCommand == nil {
-		log.Emit(logger.ERROR, "Cannot continue FFmpeg instance %v because command is not intialised\n", cmd)
-		return
+		return fmt.Errorf("cannot continue FFmpeg instance %v because command is not initialised", cmd)
 	}
 
 	cmd.runningCommand.Process.Signal(syscall.SIGCONT)
-	log.Emit(logger.SUCCESS, "Resumed transcode %v\n", cmd)
+	return nil
 }
 
 func (cmd *TranscodeCmd) RunningCommand() *exec.Cmd {

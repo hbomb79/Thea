@@ -1,7 +1,6 @@
 package media
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -105,8 +104,6 @@ type (
 
 var (
 	storeLogger = logger.Get("MediaStore")
-
-	ErrNoRowFound = errors.New("no rows found")
 )
 
 const (
@@ -626,17 +623,13 @@ func queryRowEpisode(db database.Queryable, table string, col string, val any) (
 // begin with 'AND ...').
 // If zero rows are returned, then 'ErrNoRowFound' is returned.
 func queryRow[T any](db database.Queryable, table string, col string, val any, additionalWhereClause string) (*T, error) {
-	var dest []T
+	var dest T
 	query := fmt.Sprintf(`SELECT * FROM %s WHERE %s=$1 %s LIMIT 1;`, table, col, additionalWhereClause)
-	if err := db.Select(&dest, query, val); err != nil {
+	if err := db.Get(&dest, query, val); err != nil {
 		return nil, fmt.Errorf("query for %s failed: %w", table, err)
 	}
 
-	if len(dest) == 0 {
-		return nil, ErrNoRowFound
-	}
-
-	return &dest[0], nil
+	return &dest, nil
 }
 
 func mediaToEpisode(m *media) *Episode {

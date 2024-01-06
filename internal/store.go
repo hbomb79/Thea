@@ -450,6 +450,18 @@ func (orchestrator *storeOrchestrator) GetAllTranscodes() ([]*transcode.Transcod
 func (orchestrator *storeOrchestrator) GetTranscodesForMedia(mediaId uuid.UUID) ([]*transcode.Transcode, error) {
 	return orchestrator.transcodeStore.GetForMedia(orchestrator.db.GetSqlxDb(), mediaId)
 }
+func (orchestrator *storeOrchestrator) DeleteTranscode(id uuid.UUID) error {
+	transcodePath, err := orchestrator.transcodeStore.Delete(orchestrator.db.GetSqlxDb(), id)
+	if err != nil {
+		return err
+	}
+
+	if err := os.Remove(transcodePath); err != nil {
+		log.Warnf("Cleanup of transcode at path '%s' failed: %v\n", transcodePath, err)
+	}
+
+	return nil
+}
 func (orchestrator *storeOrchestrator) DeleteTranscodesForMedia(mediaID uuid.UUID) error {
 	return orchestrator.DeleteTranscodesForMedias([]uuid.UUID{mediaID})
 }

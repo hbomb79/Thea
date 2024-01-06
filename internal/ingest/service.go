@@ -130,7 +130,7 @@ func (service *ingestService) Run(ctx context.Context) error {
 	}
 	defer service.workerPool.Close()
 
-	ev := make(event.HandlerChannel, 10)
+	ev := make(event.HandlerChannel, 100)
 	service.eventBus.RegisterHandlerChannel(ev, event.INGEST_COMPLETE)
 
 	service.DiscoverNewFiles()

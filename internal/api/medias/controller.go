@@ -1,6 +1,7 @@
 package medias
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -304,9 +305,9 @@ func (controller *Controller) getMediaWatchTargets(mediaID uuid.UUID) ([]*watchT
 
 func wrapErrorGenerator(message string) func(err error) error {
 	return func(err error) error {
-		if errors.Is(err, media.ErrNoRowFound) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return echo.ErrNotFound
 		}
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to fetch episode: %v", err))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("%s: %v", message, err))
 	}
 }

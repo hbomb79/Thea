@@ -73,6 +73,17 @@ func (store *Store) GetForMedia(db database.Queryable, mediaId uuid.UUID) ([]*Tr
 	return dest, nil
 }
 
+// Delete searches for and deletes the transcode with the ID provided. The path for this
+// transcode is returned from the DELETE query, allowing file-system cleanup to be performed.
+func (store *Store) Delete(db database.Queryable, id uuid.UUID) (string, error) {
+	var result string
+	if err := db.Get(&result, `DELETE FROM media_transcodes WHERE id=$1 RETURNING path`, id); err != nil {
+		return "", err
+	}
+
+	return result, nil
+}
+
 func (store *Store) GetForMediaAndTarget(db database.Queryable, mediaId uuid.UUID, targetId uuid.UUID) (*Transcode, error) {
 	dest := &Transcode{}
 	if err := db.Get(dest, `
@@ -81,7 +92,7 @@ func (store *Store) GetForMediaAndTarget(db database.Queryable, mediaId uuid.UUI
 		  AND transcode_target_id=$2`,
 		mediaId, targetId,
 	); err != nil {
-		return nil, fmt.Errorf("Failed to find transcode for media %s and target %s: %v\n", mediaId, targetId, err)
+		return nil, fmt.Errorf("failed to find transcode for media %s and target %s: %v", mediaId, targetId, err)
 	}
 
 	return dest, nil

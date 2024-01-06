@@ -26,6 +26,8 @@ var (
 
 type Command interface {
 	Run(context.Context, transcoder.Options, func(*ffmpeg.Progress)) error
+	Suspend() error
+	Continue() error
 }
 
 type TranscodeTaskStatus int
@@ -57,7 +59,7 @@ type TranscodeTask struct {
 	cancelHandle *context.CancelFunc
 }
 
-func NewTranscodeTask(outputPath string, m *media.Container, t *ffmpeg.Target, config ffmpeg.Config) (*TranscodeTask, error) {
+func NewTranscodeTask(m *media.Container, t *ffmpeg.Target, config ffmpeg.Config) (*TranscodeTask, error) {
 	dir := filepath.Join(config.GetOutputBaseDirectory(), m.Id().String(), t.ID.String())
 	if err := os.MkdirAll(filepath.Dir(dir), 0777); err != nil {
 		log.Errorf("Failed to create required directories (%s) for transcoding output: %v\n", filepath.Dir(dir), err)
@@ -122,7 +124,6 @@ func (task *TranscodeTask) Run(parentCtx context.Context, updateHandler func(*ff
 
 	if ctx.Err() != nil {
 		// Task was stopped because the context was cancelled,
-		log.Infof("Transcode %s was interrupted due to context cancellation (%v). Cleaning up...\n", task, ctx.Err())
 		task.status = CANCELLED
 		task.cleanup()
 		return ErrCancelled
@@ -150,14 +151,40 @@ func (task *TranscodeTask) Run(parentCtx context.Context, updateHandler func(*ff
 
 // Cancel will interrupt any running transcode, cleaning up any partially transcoded output
 // if applicable.
-func (task *TranscodeTask) Cancel() error {
-	if task.status != WORKING {
-		return fmt.Errorf("only 'WORKING' tasks can be cancelled, this task is of status %s and thus cannot be cancelled", task.status)
+func (task *TranscodeTask) cancel() error {
+	if task.status != WORKING && task.status != SUSPENDED {
+		return fmt.Errorf("only active tasks can be cancelled, this task is of status %s and thus cannot be cancelled", task.status)
 	} else if task.cancelHandle == nil {
 		return fmt.Errorf("task cannot be cancelled, no context cancel handle is available (this usually indicates the task is not running)")
 	}
 
 	(*task.cancelHandle)()
+	return nil
+}
+
+func (task *TranscodeTask) pause() error {
+	if task.status != WORKING || task.command == nil {
+		return fmt.Errorf("refusing to pause transcode %s, only active transcodes can be paused", task)
+	}
+
+	if err := task.command.Suspend(); err != nil {
+		return err
+	}
+
+	task.status = SUSPENDED
+	return nil
+}
+
+func (task *TranscodeTask) resume() error {
+	if task.status != SUSPENDED || task.command == nil {
+		return fmt.Errorf("refusing to resume transcode %s, only suspended transcodes can be resumed", task)
+	}
+
+	if err := task.command.Continue(); err != nil {
+		return err
+	}
+
+	task.status = WORKING
 	return nil
 }
 

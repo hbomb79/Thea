@@ -103,20 +103,20 @@ func (db *manager) Connect(config DatabaseConfig) error {
 		break
 	}
 
-	if err := db.ExecuteMigrations(); err != nil {
+	if err := db.executeMigrations(); err != nil {
 		return err
 	}
 
-	dbLogger.Emit(logger.SUCCESS, "Database connection complete!\n")
+	dbLogger.Emit(logger.SUCCESS, "Database connection established!\n")
 	return nil
 }
 
-// ExecuteMigrations uses the comp-time embedded SQL migrations (found in the 'migrations'
+// executeMigrations uses the comp-time embedded SQL migrations (found in the 'migrations'
 // dir in this package) and runs them against the current DB instance.
 //
 // Note that this method must only be called following a successful DB connection. If the connection
 // is not yet established, then this method panics.
-func (db *manager) ExecuteMigrations() error {
+func (db *manager) executeMigrations() error {
 	rawDb := db.rawDb
 	if rawDb == nil {
 		return fmt.Errorf("cannot execute migrations when DB manager has not yet connected")
@@ -134,7 +134,7 @@ func (db *manager) ExecuteMigrations() error {
 		return fmt.Errorf("failed to migrate DB: %w", err)
 	}
 
-	dbLogger.Emit(logger.SUCCESS, "DB Goose migration complete!\n")
+	dbLogger.Emit(logger.SUCCESS, "Outstanding database migrations complete!\n")
 	return nil
 }
 

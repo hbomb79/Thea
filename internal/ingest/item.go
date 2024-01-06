@@ -40,6 +40,7 @@ const (
 
 var (
 	ErrNoTrouble                     = errors.New("ingestion has no trouble")
+	ErrIngestNotFound                = errors.New("no ingest task could be found")
 	ErrResolutionIncompatible        = errors.New("provided resolution method is not valid for ingestion trouble")
 	ErrResolutionIncomplete          = errors.New("provided resolution context is missing information required to resolve the trouble")
 	ErrResolutionContextIncompatible = errors.New("trouble resolution failed, consult logs for further information")

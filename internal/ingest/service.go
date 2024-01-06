@@ -210,7 +210,7 @@ func (service *ingestService) DiscoverNewFiles() {
 
 	sourcePaths, err := service.dataStore.GetAllMediaSourcePaths()
 	if err != nil {
-		log.Fatalf("could not query DB for existing source paths: %v", err)
+		log.Fatalf("could not query DB for existing source paths: %v\n", err)
 		return
 	}
 
@@ -304,7 +304,7 @@ func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method Res
 
 	item := service.GetIngest(itemID)
 	if item == nil {
-		return errors.New("ingest with ID provided does not exist")
+		return ErrIngestNotFound
 	}
 
 	if item.Trouble == nil || item.State != TROUBLED {
@@ -318,7 +318,9 @@ func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method Res
 
 	switch v := res.(type) {
 	case *AbortResolution:
-		service.removeIngest(item.ID)
+		if err := service.removeIngest(item.ID); err != nil {
+			return err
+		}
 	case *RetryResolution:
 		item.State = IDLE
 		item.Trouble = nil
@@ -334,6 +336,7 @@ func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method Res
 		return fmt.Errorf("trouble resolution type of %T was not expected. This is likely a bug/should be unreachable", res)
 	}
 
+	service.eventBus.Dispatch(event.INGEST_UPDATE, item.ID)
 	return nil
 }
 

@@ -88,7 +88,7 @@ func (controller *Controller) create(ec echo.Context) error {
 
 func (controller *Controller) getActive(ec echo.Context) error {
 	tasks := controller.transcodeService.AllTasks()
-	taskDtos := make([]TranscodeDto, len(tasks))
+	taskDtos := make([]*TranscodeDto, len(tasks))
 	for i, v := range tasks {
 		taskDtos[i] = NewDtoFromTask(v)
 	}
@@ -102,7 +102,7 @@ func (controller *Controller) getComplete(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	taskDtos := make([]TranscodeDto, len(tasks))
+	taskDtos := make([]*TranscodeDto, len(tasks))
 	for i, v := range tasks {
 		taskDtos[i] = NewDtoFromModel(v)
 	}
@@ -196,8 +196,8 @@ func (controller *Controller) stream(ec echo.Context) error {
 	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
 }
 
-func NewDtoFromModel(model *transcode.Transcode) TranscodeDto {
-	return TranscodeDto{
+func NewDtoFromModel(model *transcode.Transcode) *TranscodeDto {
+	return &TranscodeDto{
 		ID:           model.Id,
 		MediaID:      model.MediaID,
 		TargetId:     model.TargetID,
@@ -207,8 +207,8 @@ func NewDtoFromModel(model *transcode.Transcode) TranscodeDto {
 	}
 }
 
-func NewDtoFromTask(model *transcode.TranscodeTask) TranscodeDto {
-	return TranscodeDto{
+func NewDtoFromTask(model *transcode.TranscodeTask) *TranscodeDto {
+	return &TranscodeDto{
 		ID:           model.Id(),
 		MediaID:      model.Media().Id(),
 		TargetId:     model.Target().ID,

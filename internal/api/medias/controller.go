@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -17,6 +20,7 @@ import (
 
 type (
 	Store interface {
+		GetMedia(mediaID uuid.UUID) *media.Container
 		GetMovie(movieID uuid.UUID) (*media.Movie, error)
 		GetEpisode(episodeID uuid.UUID) (*media.Episode, error)
 		GetInflatedSeries(seriesID uuid.UUID) (*media.InflatedSeries, error)
@@ -42,6 +46,7 @@ type (
 	Controller struct {
 		store            Store
 		transcodeService TranscodeService
+		config           *transcode.Config
 	}
 )
 
@@ -59,8 +64,8 @@ var (
 	}
 )
 
-func New(validate *validator.Validate, transcodeService TranscodeService, store Store) *Controller {
-	return &Controller{store: store, transcodeService: transcodeService}
+func New(validate *validator.Validate, transcodeService TranscodeService, store Store, config *transcode.Config) *Controller {
+	return &Controller{store: store, transcodeService: transcodeService, config: config}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
@@ -78,6 +83,7 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.DELETE("/episode/:id/", controller.deleteEpisode)
 
 	eg.GET("/:id/stream/direct/stream.m3u8/", controller.getDirectStreamPlaylist)
+	eg.GET("/:id/stream/direct/:file/", controller.getDirectStreamSegment)
 }
 
 // list is an endpoint used to retrieve a list of movies and series which have been
@@ -298,6 +304,48 @@ func (controller *Controller) getDirectStreamPlaylist(ec echo.Context) error {
 	return nil
 }
 
+func (controller *Controller) getDirectStreamSegment(ec echo.Context) error {
+	mediaID, err := uuid.Parse(ec.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Media ID is not a valid UUID")
+	}
+
+	tempDir := "/tmp/"
+	segmentOutputDir := tempDir + mediaID.String() + "/"
+	file := ec.Param("file")
+	segmentIndex, ext, _ := strings.Cut(file, ".")
+
+	if _, err := os.Stat(segmentOutputDir + file); err == nil {
+		return ec.File(segmentOutputDir + file)
+	} else if os.IsNotExist(err) && ext != "ts" {
+		return echo.ErrNotFound
+	}
+
+	// From this point on, the file request is a .ts file
+	if _, err := strconv.Atoi(segmentIndex); err != nil {
+		return echo.ErrNotFound
+	}
+
+	mediaContainer := controller.store.GetMedia(mediaID)
+	if mediaContainer == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "No Media found")
+	}
+
+	go media.GenerateHSLSegments(ec.Request().Context(), mediaContainer, ffmpeg.Config{
+		FfmpegBinPath:       controller.config.FfmpegBinaryPath,
+		FfprobeBinPath:      controller.config.FfprobeBinaryPath,
+		OutputBaseDirectory: segmentOutputDir,
+	})
+
+	waitErr := waitForFile(segmentOutputDir + file)
+	if waitErr != nil {
+		return ec.String(http.StatusInternalServerError, fmt.Sprintf("Error: %s", waitErr.Error()))
+	}
+
+	// Serve the file after it becomes available
+	return ec.File(segmentOutputDir + file)
+}
+
 func (controller *Controller) getMediaWatchTargets(mediaID uuid.UUID) ([]*watchTargetDto, error) {
 	targets := controller.store.GetAllTargets()
 	findTarget := func(tid uuid.UUID) *ffmpeg.Target {
@@ -353,5 +401,27 @@ func wrapErrorGenerator(message string) func(err error) error {
 			return echo.ErrNotFound
 		}
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("%s: %v", message, err))
+	}
+}
+
+func waitForFile(filePath string) error {
+	maxWaitDuration := 30 * time.Second // Maximum duration to wait for the file
+	pollingInterval := 1 * time.Second  // Interval for checking the file existence
+
+	startTime := time.Now()
+
+	for {
+		_, err := os.Stat(filePath)
+		if err == nil {
+			// File exists, return it
+			return nil
+		}
+
+		if time.Since(startTime) > maxWaitDuration {
+			// Timeout reached, file not found
+			return fmt.Errorf("file %s not found after waiting", filePath)
+		}
+
+		time.Sleep(pollingInterval)
 	}
 }

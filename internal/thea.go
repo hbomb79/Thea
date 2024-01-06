@@ -137,7 +137,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to construct transcode service due to error: %w", err)
 	}
 
-	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.storeOrchestrator)
+	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, &thea.config.Format, thea.storeOrchestrator)
 	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	wg := &sync.WaitGroup{}

@@ -13,6 +13,7 @@ import (
 	"github.com/hbomb79/Thea/internal/api/transcodes"
 	"github.com/hbomb79/Thea/internal/api/workflows"
 	"github.com/hbomb79/Thea/internal/http/websocket"
+	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -73,6 +74,7 @@ func NewRestGateway(
 	config *RestConfig,
 	ingestService ingests.IngestService,
 	transcodeService TranscodeService,
+	transcodeConfig *transcode.Config,
 	store Store,
 ) *RestGateway {
 	ec := echo.New()
@@ -93,7 +95,7 @@ func NewRestGateway(
 		transcodeController: transcodes.New(validate, transcodeService, store),
 		targetsController:   targets.New(validate, store),
 		workflowController:  workflows.New(validate, store),
-		mediaController:     medias.New(validate, transcodeService, store),
+		mediaController:     medias.New(validate, transcodeService, store, transcodeConfig),
 	}
 
 	ec.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{

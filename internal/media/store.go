@@ -152,7 +152,7 @@ func (store *Store) SaveMovie(db database.Queryable, movie *Movie) error {
 		ON CONFLICT(tmdb_id, type) DO UPDATE
 			SET (updated_at, title, adult, source_path, duration) = (current_timestamp, EXCLUDED.title, EXCLUDED.adult, EXCLUDED.source_path, EXCLUDED.duration)
 		RETURNING id, tmdb_id, title, adult, source_path, duration, created_at, updated_at;
-	`, movie.ID, "movie", movie.TmdbId, movie.Title, movie.Adult, movie.SourcePath, movie.Duration).StructScan(&updatedMovie); err != nil {
+	`, movie.ID, "movie", movie.TmdbID, movie.Title, movie.Adult, movie.SourcePath, movie.Duration).StructScan(&updatedMovie); err != nil {
 		return err
 	}
 
@@ -223,7 +223,7 @@ func (store *Store) SaveEpisode(db database.Queryable, episode *Episode) error {
 			SET (episode_number, title, source_path, duration, season_id, updated_at, adult) =
 				(EXCLUDED.episode_number, EXCLUDED.title, EXCLUDED.source_path, EXCLUDED.duration, EXCLUDED.season_id, current_timestamp, EXCLUDED.adult)
 		RETURNING id, tmdb_id, episode_number, title, source_path, duration, season_id, adult, created_at, updated_at;
-	`, episode.ID, "episode", episode.TmdbId, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.Duration, episode.SeasonID, episode.Adult).StructScan(&updatedEpisode); err != nil {
+	`, episode.ID, "episode", episode.TmdbID, episode.EpisodeNumber, episode.Title, episode.SourcePath, episode.Duration, episode.SeasonID, episode.Adult).StructScan(&updatedEpisode); err != nil {
 		return err
 	}
 

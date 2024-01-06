@@ -289,6 +289,26 @@ paths:
       responses:
         "204":
           description: Delete successful
+  /transcodes/{id}/pause:
+    post:
+      summary: Pause Task
+      description: Pauses an ffmpeg task, halting it's progress
+      operationId: pauseTask
+      tags:
+        - transcodeTasks
+      responses:
+        "200":
+          description: Paused
+  /transcodes/{id}/resume:
+    post:
+      summary: Resume Task
+      description: Resumes an already paused ffmpeg task
+      operationId: resumeTask
+      tags:
+        - transcodeTasks
+      responses:
+        "200":
+          description: Resumed
 
   /transcode-workflows:
     get:

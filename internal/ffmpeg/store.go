@@ -53,10 +53,8 @@ func (store *Store) GetMany(db database.Queryable, ids ...uuid.UUID) []*Target {
 		return nil
 	}
 
-	db.Rebind(query)
-
 	var results []*Target
-	err = db.Select(results, query, args)
+	err = db.Select(results, db.Rebind(query), args)
 	if err != nil {
 		log.Fatalf("Failed to batch get targets with IDs=%#v: %v\n", ids, err)
 		return nil

@@ -111,13 +111,6 @@ func (service *transcodeService) Run(ctx context.Context) error {
 	}
 }
 
-// RegisterEventCoordinator allows the consumer/manager of this service to
-// inject an event bus that we can use to send/receive messages with other
-// parts of the system.
-func (service *transcodeService) RegisterEventCoordinator(ev event.EventCoordinator) {
-	service.eventBus = ev
-}
-
 // AllTasks returns the array/slice of the transcode task pointers.
 func (service *transcodeService) AllTasks() []*TranscodeTask { return service.tasks }
 

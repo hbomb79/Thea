@@ -64,10 +64,7 @@ func (store *Store) GetMany(db database.Queryable, ids ...uuid.UUID) []*Target {
 }
 
 func (store *Store) Delete(db database.Queryable, id uuid.UUID) {
-	_, err := db.NamedExec(`--sql
-		DELETE FROM transcode_target WHERE id=$1;`,
-		id)
-	if err != nil {
+	if _, err := db.NamedExec(`DELETE FROM transcode_target WHERE id=$1`, id); err != nil {
 		log.Fatalf("Failed to delete target (ID=%s): %v\n", id, err)
 	}
 }

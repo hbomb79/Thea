@@ -57,12 +57,11 @@ type (
 	// Series represents the information Thea stores about a series. A one-to-many
 	// relationship exists between series and seasons, although the seasons themselves
 	// are not contained within this model.
-	Series struct {
-		Model
-	}
+	Series struct{ Model }
 
 	// SeriesStub is used to package information about a series which doesn't map one-to-one with
-	// it's databse representation. This return type is used by functions such as ListInflatedSeries (see Thea.store)
+	// it's databse representation.
+	//
 	// NB: this struct does not represent a table which exists in the DB, it is purely used to package
 	// query results that arise from joining multiple tables together.
 	SeriesStub struct {
@@ -97,6 +96,20 @@ type (
 	Movie struct {
 		Model
 		Watchable
+	}
+
+	MediaListResult struct {
+		Series *SeriesStub
+		Movie  *Movie
+	}
+	MediaListType        string
+	MediaListOrderColumn string
+	MediaListOrderBy     struct {
+		Column MediaListOrderColumn
+		// Descending controls the ordering for this column:
+		//  - true -> DESC order
+		//  - false -> ASC order
+		Descending bool
 	}
 
 	Store struct{}
@@ -270,76 +283,105 @@ func (store *Store) ListSeries(db database.Queryable) ([]*Series, error) {
 	return dest, nil
 }
 
-// ListLatestMedia is able to take a union of both movies and series (depending on the allowed types, which defaults
-// to including both if empty), and orders the union by it's updated_at timestamp in order to return a representation
-// of this list as a slice of containers. The containers will only be of type MOVIE or SERIES.
-//
-// The limit specified will be used, up to the maximum of 100. If no limit provided then the default of 15 will be used.
-//
-// NB: A container of type MOVIE will NOT have had it's 'Watchable' embedded struct populated. Only the 'Model' of
-// each result will be populated.
-func (store *Store) ListLatestMedia(db database.Queryable, allowedTypes []string, limit int) ([]*Container, error) {
-	// If allowedTypes is empty, default to including both movies and series
-	if len(allowedTypes) == 0 {
-		allowedTypes = []string{"movie", "series"}
+func (result *MediaListResult) IsMovie() bool  { return result.Movie != nil && result.Series == nil }
+func (result *MediaListResult) IsSeries() bool { return result.Movie == nil && result.Series != nil }
+
+func (ord *MediaListOrderBy) String() string {
+	dir := "ASC"
+	if ord.Descending {
+		dir = "DESC"
 	}
 
-	// Initially 'disallow' the types by specifiying false clauses
+	return fmt.Sprintf("%s %s", ord.Column, dir)
+}
+
+const (
+	MovieType  MediaListType = "movie"
+	SeriesType MediaListType = "series"
+)
+
+const (
+	IDColumn        MediaListOrderColumn = "id" // stable identifier for 'unsorted' media
+	UpdatedAtColumn MediaListOrderColumn = "updated_at"
+	CreatedAtColumn MediaListOrderColumn = "created_at"
+	TitleColumn     MediaListOrderColumn = "title"
+)
+
+// ListMedia allows for series/movies to be listed (controllable using allowedTypes). The query also
+// allows for an offset/limit to be provided, facilitating simple paging of the results.
+//   - allowedTypes -> defaults to movies and series
+//   - orderBy -> defaults to updated_at in ascending order
+//   - offset -> defaults to 0
+//   - limit -> default to 15, maximum 100
+func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListType, orderBy []MediaListOrderBy, offset int, limit int) ([]*MediaListResult, error) {
+	if len(allowedTypes) == 0 {
+		allowedTypes = []MediaListType{"movie", "series"}
+	}
+
 	movieEnabledClause := "AND false"
 	seriesAllowedClause := "WHERE false"
 	for _, v := range allowedTypes {
 		switch v {
-		case "movie":
+		case MovieType:
 			movieEnabledClause = ""
-		case "series":
+		case SeriesType:
 			seriesAllowedClause = ""
 		}
 	}
 
-	// Override default of 15 result limit if the user provided value
-	// is acceptable. Maximum is 100.
-	limitClause := "LIMIT 15"
+	limitClause := 15
 	if limit > 0 {
-		limitClause = fmt.Sprintf("LIMIT %d", min(limit, 100))
+		limitClause = min(limit, 100)
+	}
+
+	orderByClause := "updated_at ASC"
+	if len(orderBy) > 0 {
+		b := orderBy[0].String()
+		for _, s := range orderBy[1:] {
+			b = b + "," + s.String()
+		}
+		orderByClause = b
 	}
 
 	query := fmt.Sprintf(`
-		WITH joinedMedia AS (
-			SELECT id, title, tmdb_id, created_at, updated_at, 'movie' AS type
+		WITH joinedMedia(type, id, title, tmdb_id, created_at, updated_at, series_season_count) AS (
+			SELECT 'movie' AS type, id, title, tmdb_id, created_at, updated_at, 0
 			FROM media WHERE type='movie' %s 
 			UNION
-			SELECT id, title, tmdb_id, created_at, updated_at, 'series' AS type
+			SELECT 'series' AS type, id, title, tmdb_id, created_at, updated_at, (SELECT COUNT(*) FROM season WHERE season.series_id = series.id)
 			FROM series
 			%s
 		)
 		SELECT *
 		FROM joinedMedia
-		ORDER BY updated_at
-		%s
-	`, movieEnabledClause, seriesAllowedClause, limitClause)
+		ORDER BY %s
+		OFFSET %d
+		LIMIT %d
+	`, movieEnabledClause, seriesAllowedClause, orderByClause, max(offset, 0), limitClause)
 
 	var results []struct {
-		ID        uuid.UUID `db:"id"`
-		Title     string    `db:"title"`
-		TmdbID    string    `db:"tmdb_id"`
-		CreatedAt time.Time `db:"created_at"`
-		UpdatedAt time.Time `db:"updated_at"`
-		MediaType string    `db:"type"`
+		ID          uuid.UUID `db:"id"`
+		Title       string    `db:"title"`
+		TmdbID      string    `db:"tmdb_id"`
+		CreatedAt   time.Time `db:"created_at"`
+		UpdatedAt   time.Time `db:"updated_at"`
+		SeasonCount int       `db:"series_season_count"`
+		MediaType   string    `db:"type"`
 	}
 	if err := db.Select(&results, query); err != nil {
 		return nil, err
 	}
 
-	out := make([]*Container, len(results))
+	out := make([]*MediaListResult, len(results))
 	for k, v := range results {
 		model := Model{ID: v.ID, TmdbID: v.TmdbID, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, Title: v.Title}
 		switch v.MediaType {
 		case "movie":
-			out[k] = &Container{Type: MOVIE, Movie: &Movie{Model: model}}
+			out[k] = &MediaListResult{Movie: &Movie{Model: model}}
 		case "series":
-			out[k] = &Container{Type: SERIES, Series: &Series{Model: model}}
+			out[k] = &MediaListResult{Series: &SeriesStub{Series: &Series{model}, SeasonCount: v.SeasonCount}}
 		default:
-			return nil, fmt.Errorf("type of list result %s is illegal. Expected 'movie' or 'series', found %s", v, v.MediaType)
+			return nil, fmt.Errorf("type of list result %v is illegal. Expected 'movie' or 'series', found '%s'", v, v.MediaType)
 		}
 	}
 

@@ -116,8 +116,8 @@ func (orchestrator *storeOrchestrator) ListSeries() ([]*media.Series, error) {
 	return orchestrator.mediaStore.ListSeries(orchestrator.db.GetSqlxDb())
 }
 
-func (orchestrator *storeOrchestrator) ListLatestMedia(allowedTypes []string, limit int) ([]*media.Container, error) {
-	return orchestrator.mediaStore.ListLatestMedia(orchestrator.db.GetSqlxDb(), allowedTypes, limit)
+func (orchestrator *storeOrchestrator) ListMedia(includeTypes []media.MediaListType, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error) {
+	return orchestrator.mediaStore.ListMedia(orchestrator.db.GetSqlxDb(), includeTypes, orderBy, offset, limit)
 }
 
 func (orchestrator *storeOrchestrator) CountSeasonsInSeries(seriesIDs []uuid.UUID) (map[uuid.UUID]int, error) {

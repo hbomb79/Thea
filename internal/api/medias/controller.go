@@ -23,9 +23,7 @@ type (
 		GetTranscodesForMedia(uuid.UUID) ([]*transcode.Transcode, error)
 		GetAllTargets() []*ffmpeg.Target
 
-		ListLatestMedia(allowedTypes []string, limit int) ([]*media.Container, error)
-		ListMovie() ([]*media.Movie, error)
-		ListSeriesStubs() ([]*media.SeriesStub, error)
+		ListMedia(includeTypes []media.MediaListType, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error)
 
 		DeleteEpisode(episodeID uuid.UUID) error
 		DeleteSeries(seriesID uuid.UUID) error
@@ -43,18 +41,30 @@ type (
 	}
 )
 
+var (
+	mediaListTypeMapping = map[string]media.MediaListType{
+		"movie":  media.MovieType,
+		"series": media.SeriesType,
+	}
+
+	mediaListOrderColumnMapping = map[string]media.MediaListOrderColumn{
+		"id":        media.IDColumn,
+		"updatedAt": media.UpdatedAtColumn,
+		"createdAt": media.CreatedAtColumn,
+		"title":     media.TitleColumn,
+	}
+)
+
 func New(validate *validator.Validate, transcodeService TranscodeService, store Store) *Controller {
 	return &Controller{store: store, transcodeService: transcodeService}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
-	eg.GET("/latest/", controller.listLatest)
+	eg.GET("/", controller.list)
 
-	eg.GET("/movie/", controller.listMovies)
 	eg.GET("/movie/:id/", controller.getMovie)
 	eg.DELETE("/movie/:id/", controller.deleteMovie)
 
-	eg.GET("/series/", controller.listSeries)
 	eg.GET("/series/:id/", controller.getSeries)
 
 	eg.GET("/episode/:id/", controller.getEpisode)
@@ -64,25 +74,66 @@ func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.DELETE("/episode/:id/", controller.deleteEpisode)
 }
 
-// listLatest is an endpoint used to retrieve a list of movies and series which have been
+// list is an endpoint used to retrieve a list of movies and series which have been
 // updated recently (this includes episodes being added to a series). The caller of this endpoint
 // can specify filtering options such as the type (movie|series), a limit to the number
 // of results, or the genres which apply to the content
 //
 // TODO: the genre stuff!
-func (controller *Controller) listLatest(ec echo.Context) error {
+func (controller *Controller) list(ec echo.Context) error {
 	params := ec.QueryParams()
-	allowedTypes, ok := params["allowedType"]
+	allowedTypesRaw, ok := params["allowedType"]
 	if !ok {
-		allowedTypes = []string{}
+		allowedTypesRaw = []string{}
+	}
+
+	allowedTypes := make([]media.MediaListType, len(allowedTypesRaw))
+	for k, v := range allowedTypesRaw {
+		if vv, ok := mediaListTypeMapping[v]; ok {
+			allowedTypes[k] = vv
+			continue
+		}
+
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("allowedType '%v' is not recognized", v))
+	}
+
+	orderByRaw, ok := params["orderBy"]
+	if !ok {
+		orderByRaw = []string{}
+	}
+
+	orderBy := make([]media.MediaListOrderBy, len(orderByRaw))
+	for k, v := range orderByRaw {
+		// If value begins with a '+/-', then this dictates the ordering
+		// and should be stripped from the mapping lookup. Default ordering
+		// is ascending (+).
+		isDecending := false
+		switch v[:1] {
+		case "+":
+			v = v[1:]
+		case "-":
+			v = v[1:]
+			isDecending = true
+		}
+
+		if vv, ok := mediaListOrderColumnMapping[v]; ok {
+			orderBy[k] = media.MediaListOrderBy{Column: vv, Descending: isDecending}
+			continue
+		}
+
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("orderBy column '%v' is not recognized", v))
 	}
 
 	limit, err := strconv.Atoi(params.Get("limit"))
-	if err != nil {
+	if err != nil || limit < 0 {
 		limit = 0
 	}
+	offset, err := strconv.Atoi(params.Get("offset"))
+	if err != nil || offset < 0 {
+		offset = 0
+	}
 
-	results, err := controller.store.ListLatestMedia(allowedTypes, limit)
+	results, err := controller.store.ListMedia(allowedTypes, orderBy, offset, limit)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
@@ -90,39 +141,6 @@ func (controller *Controller) listLatest(ec echo.Context) error {
 	dtos, err := newListDtos(results)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
-	}
-
-	return ec.JSON(http.StatusOK, dtos)
-}
-
-// listMovies returns a list of 'MovieStubDto's, which is an uninflated version
-// of 'MovieDto' (which can be obtained via getMovie).
-func (controller *Controller) listMovies(ec echo.Context) error {
-	movies, err := controller.store.ListMovie()
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Error occurred while listing movies: %v", err))
-	}
-
-	dtos := make([]movieStubDto, len(movies))
-	for k, v := range movies {
-		dtos[k] = movieModelToDto(v)
-	}
-
-	return ec.JSON(http.StatusOK, dtos)
-}
-
-// listSeasons returns a list of 'SeasonStubDto's, which is essentially
-// an uninflated 'SeasonDto'. A fully inflated season DTO can be obtained
-// via 'getSeries', which returns all seasons (and episode stubs) embedded within
-func (controller *Controller) listSeries(ec echo.Context) error {
-	series, err := controller.store.ListSeriesStubs()
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Error occurred while listing series: %v", err))
-	}
-
-	dtos := make([]seriesStubDto, len(series))
-	for k, v := range series {
-		dtos[k] = inflatedSeriesModelToDto(v)
 	}
 
 	return ec.JSON(http.StatusOK, dtos)

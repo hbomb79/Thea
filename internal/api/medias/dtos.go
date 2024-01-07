@@ -53,12 +53,12 @@ type (
 	}
 
 	listDto struct {
-		Type      string    `json:"type"`
-		ID        uuid.UUID `json:"id"`
-		Title     string    `json:"title"`
-		TmdbID    string    `json:"tmdb_id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
+		Type        string    `json:"type"`
+		ID          uuid.UUID `json:"id"`
+		Title       string    `json:"title"`
+		TmdbID      string    `json:"tmdb_id"`
+		UpdatedAt   time.Time `json:"updated_at"`
+		SeasonCount *int      `json:"season_count,omitempty"`
 		// TODO poster path, optional movie/series specific information such as runtime and season count
 	}
 
@@ -104,7 +104,7 @@ func newWatchTarget(target *ffmpeg.Target, t watchTargetType, ready bool) *watch
 	return &watchTargetDto{Name: target.Label, Ready: ready, Type: t, TargetID: &target.ID, Enabled: true}
 }
 
-func newListDtos(results []*media.Container) ([]*listDto, error) {
+func newListDtos(results []*media.MediaListResult) ([]*listDto, error) {
 	dtos := make([]*listDto, len(results))
 	for k, v := range results {
 		dto, err := newListDto(v)
@@ -117,18 +117,16 @@ func newListDtos(results []*media.Container) ([]*listDto, error) {
 	return dtos, nil
 }
 
-func newListDto(container *media.Container) (*listDto, error) {
-	var ty string
-	switch container.Type {
-	case media.SERIES:
-		ty = "series"
-	case media.MOVIE:
-		ty = "movie"
-	default:
-		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Media %v found during listing has an illegal type %v. Expected movie or series.", container, container.Type))
+func newListDto(result *media.MediaListResult) (*listDto, error) {
+	if result.IsMovie() {
+		movie := result.Movie
+		return &listDto{Type: "movie", ID: movie.ID, Title: movie.Title, TmdbID: movie.TmdbID, UpdatedAt: movie.UpdatedAt, SeasonCount: nil}, nil
+	} else if result.IsSeries() {
+		series := result.Series
+		return &listDto{Type: "series", ID: series.ID, Title: series.Title, TmdbID: series.TmdbID, UpdatedAt: series.UpdatedAt, SeasonCount: &series.SeasonCount}, nil
 	}
 
-	return &listDto{Type: ty, ID: container.Id(), Title: container.Title(), TmdbID: container.TmdbId(), CreatedAt: container.CreatedAt(), UpdatedAt: container.UpdatedAt()}, nil
+	return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Media %v found during listing has an illegal type. Expected movie or series.", result))
 }
 
 func inflatedSeriesModelToDto(model *media.SeriesStub) seriesStubDto {

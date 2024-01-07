@@ -21,17 +21,6 @@ type (
 		Series  *Series
 		Season  *Season
 	}
-
-	// Stub represents the minimal information required to represent
-	// a partials search result entry from a media searcher. This information
-	// is mainly used when a searcher encounters multiple results and needs to
-	// prompt the user to select the correct one.
-	Stub struct {
-		Type       ContainerType
-		PosterPath string
-		Title      string
-		SourceID   string
-	}
 )
 
 const (

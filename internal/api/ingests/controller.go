@@ -68,7 +68,7 @@ const (
 	TMDB_FAILURE_UNKNOWN TroubleTypeDto = "TMDB_FAILURE_UNKNOWN"
 	TMDB_FAILURE_MULTI   TroubleTypeDto = "TMDB_FAILURE_MULTI_RESULT"
 	TMDB_FAILURE_NONE    TroubleTypeDto = "TMDB_FAILURE_NO_RESULT"
-	GENERIC_FAILURE      TroubleTypeDto = "GENERIC_FAILURE"
+	UNKNOWN_FAILURE      TroubleTypeDto = "UNKNOWN_FAILURE"
 )
 
 func New(validate *validator.Validate, serv IngestService) *Controller {
@@ -270,8 +270,8 @@ func TroubleTypeModelToDto(troubleType ingest.TroubleType) TroubleTypeDto {
 		return TMDB_FAILURE_NONE
 	case ingest.TMDB_FAILURE_MULTI:
 		return TMDB_FAILURE_MULTI
-	case ingest.GENERIC_FAILURE:
-		return GENERIC_FAILURE
+	case ingest.UNKNOWN_FAILURE:
+		return UNKNOWN_FAILURE
 	}
 
 	panic(fmt.Sprintf("ingest trouble type %s is not recognized by API layer, DTO cannot be created. Please report this error.", troubleType))

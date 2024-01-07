@@ -29,8 +29,9 @@ const (
 	TMDB_FAILURE_UNKNOWN
 	TMDB_FAILURE_MULTI
 	TMDB_FAILURE_NONE
-	GENERIC_FAILURE
+	UNKNOWN_FAILURE
 )
+
 const (
 	RETRY ResolutionType = iota
 	SPECIFY_TMDB_ID
@@ -40,6 +41,7 @@ const (
 var (
 	allowedResolutionTypes = map[TroubleType][]ResolutionType{
 		METADATA_FAILURE:     {ABORT, RETRY},
+		UNKNOWN_FAILURE:      {ABORT, RETRY},
 		TMDB_FAILURE_UNKNOWN: {ABORT, RETRY, SPECIFY_TMDB_ID},
 		TMDB_FAILURE_MULTI:   {ABORT, RETRY, SPECIFY_TMDB_ID},
 		TMDB_FAILURE_NONE:    {ABORT, RETRY, SPECIFY_TMDB_ID},
@@ -56,7 +58,7 @@ func newTrouble(err error) Trouble {
 		return Trouble{error: err, tType: TMDB_FAILURE_UNKNOWN}
 	}
 
-	return Trouble{error: err, tType: GENERIC_FAILURE}
+	return Trouble{error: err, tType: UNKNOWN_FAILURE}
 }
 
 func (t *Trouble) Type() TroubleType { return t.tType }

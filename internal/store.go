@@ -96,16 +96,82 @@ func (orchestrator *storeOrchestrator) GetAllMediaSourcePaths() ([]string, error
 	return orchestrator.mediaStore.GetAllSourcePaths(orchestrator.db.GetSqlxDb())
 }
 
+// SaveMovie transactionally saves the given Movie model and it's genre
+// information to the database.
 func (orchestrator *storeOrchestrator) SaveMovie(movie *media.Movie) error {
-	return orchestrator.mediaStore.SaveMovie(orchestrator.db.GetSqlxDb(), movie)
+	return orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+		if err := orchestrator.mediaStore.SaveMovie(tx, movie); err != nil {
+			return err
+		}
+
+		log.Verbosef("Saving genres %v\n", movie.Genres)
+		genres, err := orchestrator.mediaStore.SaveGenres(tx, movie.Genres)
+		if err != nil {
+			return err
+		}
+
+		log.Verbosef("Saving genres assocations %v for movie_id=%s\n", genres, movie.ID)
+		return orchestrator.mediaStore.SaveMovieGenreAssociations(tx, movie.ID, genres)
+	})
 }
 
-func (orchestrator *storeOrchestrator) SaveSeries(series *media.Series) error {
-	return orchestrator.mediaStore.SaveSeries(orchestrator.db.GetSqlxDb(), series)
-}
+// SaveEpisode transactionally saves the episode provided, as well as the season and series
+// it's associatted with. Existing models are updating ON CONFLICT with the TmdbID unique
+// identifier. The PK's and relational FK's of the models will automatically be
+// set during saving.
+//
+// Note: If the season/series are not provided, and the FK-constraint of the episode cannot
+// be fulfilled because of this, then the save will fail. It is recommended to supply all parameters.
+func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, season *media.Season, series *media.Series) error {
+	// Store old PK/FKs so we can rollback on transaction failure
+	episodeId := episode.ID
+	seasonId := season.ID
+	seriesId := series.ID
+	episodeFk := episode.SeasonID
+	seasonFk := season.SeriesID
 
-func (orchestrator *storeOrchestrator) SaveSeason(season *media.Season) error {
-	return orchestrator.mediaStore.SaveSeason(orchestrator.db.GetSqlxDb(), season)
+	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+		log.Verbosef("Saving series %#v\n", series)
+		if err := orchestrator.mediaStore.SaveSeries(tx, series); err != nil {
+			return err
+		}
+
+		log.Verbosef("Saving genres %v\n", series.Genres)
+		genres, err := orchestrator.mediaStore.SaveGenres(tx, series.Genres)
+		if err != nil {
+			return err
+		}
+
+		log.Verbosef("Saving genres associations %v for series_id=%s\n", genres, series.ID)
+		if err := orchestrator.mediaStore.SaveSeriesGenreAssociations(tx, series.ID, genres); err != nil {
+			return err
+		}
+
+		log.Verbosef("Saving season %#v with series_id=%s\n", season, series.ID)
+		season.SeriesID = series.ID
+		if err := orchestrator.mediaStore.SaveSeason(tx, season); err != nil {
+			return err
+		}
+
+		log.Verbosef("Saving episode %#v with season_id=%s\n", episode, seasonId)
+		episode.SeasonID = season.ID
+		return orchestrator.mediaStore.SaveEpisode(tx, episode)
+	}); err != nil {
+		log.Warnf(
+			"Episode save failed, rolling back model keys (epID=%s, epFK=%s, seasonID=%s, seasonFK=%s, seriesID=%s)",
+			episodeId, episodeFk, seasonId, seasonFk, seriesId,
+		)
+
+		episode.ID = episodeId
+		season.ID = seasonId
+		series.ID = seriesId
+
+		episode.SeasonID = episodeFk
+		season.SeriesID = seasonFk
+		return err
+	}
+
+	return nil
 }
 
 func (orchestrator *storeOrchestrator) ListMovie() ([]*media.Movie, error) {
@@ -241,54 +307,6 @@ func (orchestrator *storeOrchestrator) ListSeriesStubs() ([]*media.SeriesStub, e
 	}
 
 	return inflated, nil
-}
-
-// SaveEpisode transactionally saves the episode provided, as well as the season and series
-// it's associatted with. Existing models are updating ON CONFLICT with the TmdbID unique
-// identifier. The PK's and relational FK's of the models will automatically be
-// set during saving.
-//
-// Note: If the season/series are not provided, and the FK-constraint of the episode cannot
-// be fulfilled because of this, then the save will fail. It is recommended to supply all parameters.
-func (orchestrator *storeOrchestrator) SaveEpisode(episode *media.Episode, season *media.Season, series *media.Series) error {
-	// Store old PK/FKs so we can rollback on transaction failure
-	episodeId := episode.ID
-	seasonId := season.ID
-	seriesId := series.ID
-	episodeFk := episode.SeasonID
-	seasonFk := season.SeriesID
-
-	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
-		log.Verbosef("Saving series %#v\n", series)
-		if err := orchestrator.mediaStore.SaveSeries(tx, series); err != nil {
-			return err
-		}
-
-		log.Verbosef("Saving season %#v with series_id=%s\n", season, series.ID)
-		season.SeriesID = series.ID
-		if err := orchestrator.mediaStore.SaveSeason(tx, season); err != nil {
-			return err
-		}
-
-		log.Verbosef("Saving episode %#v with season_id=%s\n", episode, seasonId)
-		episode.SeasonID = season.ID
-		return orchestrator.mediaStore.SaveEpisode(tx, episode)
-	}); err != nil {
-		log.Warnf(
-			"Episode save failed, rolling back model keys (epID=%s, epFK=%s, seasonID=%s, seasonFK=%s, seriesID=%s)",
-			episodeId, episodeFk, seasonId, seasonFk, seriesId,
-		)
-
-		episode.ID = episodeId
-		season.ID = seasonId
-		series.ID = seriesId
-
-		episode.SeasonID = episodeFk
-		season.SeriesID = seasonFk
-		return err
-	}
-
-	return nil
 }
 
 // ** Media deletion is a little bit tricky, but the general shape is:

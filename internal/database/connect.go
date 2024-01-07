@@ -194,7 +194,7 @@ func WrapTx(db *sqlx.DB, f func(tx *sqlx.Tx) error) error {
 // and the `Exec` of the output query. Rebinding of the
 // query is handled automatically, and errors resulting from
 // either step will be returned.
-func InExec(db *sqlx.Tx, query string, arg any) error {
+func InExec(db Queryable, query string, arg any) error {
 	if q, a, e := sqlx.In(query, arg); e == nil {
 		if _, err := db.Exec(db.Rebind(q), a...); err != nil {
 			return err

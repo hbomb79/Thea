@@ -48,6 +48,31 @@ CREATE TABLE media(
     )
 );
 
+CREATE TABLE genre(
+    id BIGSERIAL PRIMARY KEY,
+    label TEXT UNIQUE
+);
+
+CREATE TABLE movie_genres(
+    id UUID PRIMARY KEY,
+    movie_id UUID NOT NULL,
+    genre_id BIGSERIAL NOT NULL,
+
+    CONSTRAINT movie_genres_fk_movie_id FOREIGN KEY(movie_id) REFERENCES media(id) ON DELETE CASCADE,
+    CONSTRAINT movie_genres_fk_genre_id FOREIGN KEY(genre_id) REFERENCES genre(id) ON DELETE CASCADE,
+    CONSTRAINT movie_genres_uk_movie_genre UNIQUE (movie_id, genre_id)
+);
+
+CREATE TABLE series_genres(
+    id UUID PRIMARY KEY,
+    series_id UUID NOT NULL,
+    genre_id BIGSERIAL NOT NULL,
+
+    CONSTRAINT series_genres_fk_series_id FOREIGN KEY(series_id) REFERENCES series(id) ON DELETE CASCADE,
+    CONSTRAINT series_genres_fk_genre_id FOREIGN KEY(genre_id) REFERENCES genre(id) ON DELETE CASCADE,
+    CONSTRAINT series_genres_uk_series_genre UNIQUE (series_id, genre_id)
+);
+
 
 CREATE TABLE transcode_target(
     id UUID NOT NULL PRIMARY KEY,

@@ -18,55 +18,22 @@ tags:
   - name: media
     description: Media (movies/series/seasons/episodes) that Thea is tracking
 paths:
-  /media/latest/:
+  /media/:
     get:
-      summary: List Latest Media
-      description: Allows a client to fetch a list of recently added/updated movies and tv series.
-      operationId: listLatestMedia
+      summary: List Media
+      description: Allows a client to fetch a list of movies/series using various filtering, ordering and paging paramaters
+      operationId: listMedia
       tags:
         - media
       responses:
         "200":
-          description: List of latest tv series/movies
+          description: Curated list of movies/series
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/MediaStub"
-  /media/movie/:
-    get:
-      summary: List Movies
-      description: Returns a list of all known movies as a stubbed DTO. Full versions of the movie must be retrieved using the /media/movie/:id endpoint
-      operationId: listMovie
-      tags:
-        - media
-      responses:
-        "200":
-          description: List of movies
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/MovieStub"
-  /media/series/:
-    get:
-      summary: List Series
-      description: Returns a list of all known series as a stubbed DTO. Full versions of the series must be retrieved using the /media/series/:id endpoint
-      operationId: listSeries
-      tags:
-        - media
-      responses:
-        "200":
-          description: List of series
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/SeriesStub"
-
 
   /media/movie/{id}/:
     get:
@@ -520,10 +487,6 @@ components:
       type: object
 
     MediaStub:
-      type: object
-    MovieStub:
-      type: object
-    SeriesStub:
       type: object
     Series:
       type: object

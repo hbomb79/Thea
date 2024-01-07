@@ -545,6 +545,15 @@ func (store *Store) SaveGenres(db database.Queryable, genres []*Genre) ([]*Genre
 	return results, nil
 }
 
+func (store *Store) ListGenres(db database.Queryable) ([]*Genre, error) {
+	var results []*Genre
+	if err := db.Select(&results, `SELECT * FROM genre`); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
 // CountSeasonsInSeries queries the database for the number of seasons associated with
 // each of the given series, and constructs a mapping from seriesID -> season count.
 // NB: series which did not exist in the database will be omitted from the result mapping

@@ -24,6 +24,7 @@ type (
 		GetAllTargets() []*ffmpeg.Target
 
 		ListMedia(includeTypes []media.MediaListType, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error)
+		ListGenres() ([]*media.Genre, error)
 
 		DeleteEpisode(episodeID uuid.UUID) error
 		DeleteSeries(seriesID uuid.UUID) error
@@ -61,6 +62,7 @@ func New(validate *validator.Validate, transcodeService TranscodeService, store 
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.GET("/", controller.list)
+	eg.GET("/genres/", controller.listGenres)
 
 	eg.GET("/movie/:id/", controller.getMovie)
 	eg.DELETE("/movie/:id/", controller.deleteMovie)
@@ -144,6 +146,15 @@ func (controller *Controller) list(ec echo.Context) error {
 	}
 
 	return ec.JSON(http.StatusOK, dtos)
+}
+
+func (controller *Controller) listGenres(ec echo.Context) error {
+	genres, err := controller.store.ListGenres()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return ec.JSON(http.StatusOK, genreModelsToDtos(genres))
 }
 
 func (controller *Controller) getMovie(ec echo.Context) error {

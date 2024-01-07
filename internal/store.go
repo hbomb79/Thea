@@ -182,6 +182,10 @@ func (orchestrator *storeOrchestrator) ListSeries() ([]*media.Series, error) {
 	return orchestrator.mediaStore.ListSeries(orchestrator.db.GetSqlxDb())
 }
 
+func (orchestrator *storeOrchestrator) ListGenres() ([]*media.Genre, error) {
+	return orchestrator.mediaStore.ListGenres(orchestrator.db.GetSqlxDb())
+}
+
 func (orchestrator *storeOrchestrator) ListMedia(includeTypes []media.MediaListType, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error) {
 	return orchestrator.mediaStore.ListMedia(orchestrator.db.GetSqlxDb(), includeTypes, orderBy, offset, limit)
 }

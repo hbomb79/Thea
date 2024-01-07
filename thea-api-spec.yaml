@@ -34,6 +34,22 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/MediaStub"
+  /media/genres/:
+    get:
+      summary: List Genres
+      description: Returns all known genres
+      operationId: listGenres
+      tags:
+        - media
+      responses:
+        "200":
+          description: List of genres, with their label (human readable) and ID (used for the input to any endpoint which allows filtering on genres)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Genre"
 
   /media/movie/{id}/:
     get:
@@ -491,6 +507,8 @@ components:
     Series:
       type: object
     Movie:
+      type: object
+    Genre:
       type: object
 
     CreateTranscodeTask:

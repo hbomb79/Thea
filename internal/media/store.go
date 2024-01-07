@@ -407,10 +407,12 @@ const (
 // ListMedia allows for series/movies to be listed (controllable using allowedTypes). The query also
 // allows for an offset/limit to be provided, facilitating simple paging of the results.
 //   - allowedTypes -> defaults to movies and series
+//   - allowedGenres -> defaults to no filtering (any/all genres), if any genre IDs are provided then only
+//     media which is associated with ALL of the genres specified
 //   - orderBy -> defaults to updated_at in ascending order
 //   - offset -> defaults to 0
 //   - limit -> default to 15, maximum 100
-func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListType, orderBy []MediaListOrderBy, offset int, limit int) ([]*MediaListResult, error) {
+func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListType, allowedGenres []int, orderBy []MediaListOrderBy, offset int, limit int) ([]*MediaListResult, error) {
 	if len(allowedTypes) == 0 {
 		allowedTypes = []MediaListType{"movie", "series"}
 	}
@@ -440,16 +442,19 @@ func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListTyp
 		orderByClause = b
 	}
 
+	genreFilterClause := ""
+	if len(allowedGenres) > 0 {
+		genreFilterClause = `
+		WHERE (
+			SELECT ARRAY_agg(CAST(genre_data->>'id' AS bigint))
+			FROM jsonb_array_elements(joinedMedia.genres) AS genre_data
+		) @> $1`
+	}
+
 	query := fmt.Sprintf(`
 		WITH joinedMedia(type, id, title, tmdb_id, created_at, updated_at, series_season_count, genres) AS (
 			SELECT 
-				'movie' AS type,
-				id,
-				title,
-				tmdb_id,
-				created_at,
-				updated_at,
-				0,
+				'movie' AS type, id, title, tmdb_id, created_at, updated_at, 0,
 				(
 					SELECT COALESCE(JSONB_AGG(DISTINCT genre.*) FILTER (WHERE genre.id IS NOT NULL), '[]')
 					FROM movie_genres mg
@@ -457,15 +462,13 @@ func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListTyp
 					ON genre.id = mg.genre_id
 					WHERE mg.movie_id = media.id
 				)
-			FROM media WHERE type='movie' %s 
+			FROM media
+			WHERE type='movie' %s
+
 			UNION
+
 			SELECT
-				'series' AS type,
-				id,
-				title,
-				tmdb_id,
-				created_at,
-				updated_at,
+				'series' AS type, id, title, tmdb_id, created_at, updated_at,
 				(SELECT COUNT(*) FROM season WHERE season.series_id = series.id),
 				(
 					SELECT COALESCE(JSONB_AGG(DISTINCT genre.*) FILTER (WHERE genre.id IS NOT NULL), '[]')
@@ -479,10 +482,11 @@ func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListTyp
 		)
 		SELECT *
 		FROM joinedMedia
+		%s
 		ORDER BY %s
 		OFFSET %d
 		LIMIT %d
-	`, movieEnabledClause, seriesAllowedClause, orderByClause, max(offset, 0), limitClause)
+	`, movieEnabledClause, seriesAllowedClause, genreFilterClause, orderByClause, max(offset, 0), limitClause)
 
 	var results []struct {
 		ID          uuid.UUID            `db:"id"`
@@ -494,8 +498,16 @@ func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListTyp
 		MediaType   string               `db:"type"`
 		Genres      jsonColumn[[]*Genre] `db:"genres"`
 	}
-	if err := db.Select(&results, query); err != nil {
-		return nil, err
+
+	if len(allowedGenres) > 0 {
+
+		if err := db.Select(&results, query, pq.Array(allowedGenres)); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := db.Select(&results, query); err != nil {
+			return nil, err
+		}
 	}
 
 	out := make([]*MediaListResult, len(results))

@@ -23,7 +23,7 @@ type (
 		GetTranscodesForMedia(uuid.UUID) ([]*transcode.Transcode, error)
 		GetAllTargets() []*ffmpeg.Target
 
-		ListMedia(includeTypes []media.MediaListType, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error)
+		ListMedia(includeTypes []media.MediaListType, includeGenres []int, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error)
 		ListGenres() ([]*media.Genre, error)
 
 		DeleteEpisode(episodeID uuid.UUID) error
@@ -99,6 +99,20 @@ func (controller *Controller) list(ec echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("allowedType '%v' is not recognized", v))
 	}
 
+	allowedGenresRaw, ok := params["genre"]
+	if !ok {
+		allowedGenresRaw = []string{}
+	}
+
+	allowedGenres := make([]int, len(allowedGenresRaw))
+	for k, v := range allowedGenresRaw {
+		vv, err := strconv.Atoi(v)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("genre '%v' is not recognized", v))
+		}
+		allowedGenres[k] = vv
+	}
+
 	orderByRaw, ok := params["orderBy"]
 	if !ok {
 		orderByRaw = []string{}
@@ -135,7 +149,7 @@ func (controller *Controller) list(ec echo.Context) error {
 		offset = 0
 	}
 
-	results, err := controller.store.ListMedia(allowedTypes, orderBy, offset, limit)
+	results, err := controller.store.ListMedia(allowedTypes, allowedGenres, orderBy, offset, limit)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}

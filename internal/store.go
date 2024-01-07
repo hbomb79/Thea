@@ -65,7 +65,27 @@ func (orchestrator *storeOrchestrator) GetMedia(mediaId uuid.UUID) *media.Contai
 }
 
 func (orchestrator *storeOrchestrator) GetMovie(movieId uuid.UUID) (*media.Movie, error) {
-	return orchestrator.mediaStore.GetMovie(orchestrator.db.GetSqlxDb(), movieId)
+	var movie *media.Movie
+	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+		m, err := orchestrator.mediaStore.GetMovie(tx, movieId)
+		if err != nil {
+			return err
+		}
+
+		genres, err := orchestrator.mediaStore.GetGenresForMovie(tx, movieId)
+		if err != nil {
+			return err
+		}
+
+		m.Genres = genres
+		movie = m
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return movie, nil
 }
 
 func (orchestrator *storeOrchestrator) GetEpisode(episodeId uuid.UUID) (*media.Episode, error) {
@@ -232,6 +252,12 @@ func (orchestrator *storeOrchestrator) GetInflatedSeries(seriesID uuid.UUID) (*m
 		if err != nil {
 			return err
 		}
+
+		genres, err := orchestrator.mediaStore.GetGenresForSeries(tx, seriesID)
+		if err != nil {
+			return err
+		}
+		series.Genres = genres
 
 		// Fetch all seasons for series
 		seasons, err := orchestrator.mediaStore.GetSeasonsForSeries(tx, seriesID)

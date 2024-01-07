@@ -554,6 +554,34 @@ func (store *Store) ListGenres(db database.Queryable) ([]*Genre, error) {
 	return results, nil
 }
 
+func (store *Store) GetGenresForMovie(db database.Queryable, movieID uuid.UUID) ([]*Genre, error) {
+	var results []*Genre
+	if err := db.Select(&results, `
+		SELECT genre.* FROM movie_genres
+		INNER JOIN genre
+		ON genre.id = movie_genres.genre_id
+		WHERE movie_genres.movie_id = $1
+		`, movieID); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+func (store *Store) GetGenresForSeries(db database.Queryable, seriesID uuid.UUID) ([]*Genre, error) {
+	var results []*Genre
+	if err := db.Select(&results, `
+		SELECT genre.* FROM series_genres
+		INNER JOIN genre
+		ON genre.id = series_genres.genre_id
+		WHERE series_genres.series_id = $1
+		`, seriesID); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
 // CountSeasonsInSeries queries the database for the number of seasons associated with
 // each of the given series, and constructs a mapping from seriesID -> season count.
 // NB: series which did not exist in the database will be omitted from the result mapping

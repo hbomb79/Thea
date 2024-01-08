@@ -3,6 +3,7 @@ package media
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -127,7 +128,9 @@ type (
 		val *T
 	}
 
-	Store struct{}
+	Store struct {
+		mediaGenreStore
+	}
 )
 
 var (
@@ -190,40 +193,6 @@ func (store *Store) SaveMovie(db database.Queryable, movie *Movie) error {
 	return nil
 }
 
-// SaveMovieGenreAssociations handles only the upserting of the genre associations
-// for a given movie model.
-//
-// NB: This query will FAIL if any of the given genres do not have a row in the genre table
-func (store *Store) SaveMovieGenreAssociations(db database.Queryable, movieID uuid.UUID, genres []*Genre) error {
-	if len(genres) > 0 {
-		type genreAssoc struct {
-			ID      uuid.UUID `db:"id"`
-			MovieID uuid.UUID `db:"movie_id"`
-			GenreID int       `db:"genre_id"`
-		}
-		genreAssocs := make([]genreAssoc, len(genres))
-		for k, v := range genres {
-			genreAssocs[k] = genreAssoc{uuid.New(), movieID, v.Id}
-		}
-
-		if err := database.InExec(db, `DELETE FROM movie_genres mg WHERE mg.movie_id=$1`, movieID); err != nil {
-			return err
-		}
-
-		_, err := db.NamedExec(`
-			INSERT INTO movie_genres(id, movie_id, genre_id)
-			VALUES(:id, :movie_id, :genre_id)
-			ON CONFLICT(movie_id, genre_id) DO NOTHING
-		`, genreAssocs)
-
-		return err
-	}
-
-	_, err := db.Exec(`
-		DELETE FROM movie_genres WHERE media_id=$1`, movieID)
-	return err
-}
-
 // SaveSeries upserts the provided Series model to the database. Existing models
 // to update are found using the 'TmdbID' as this is expected to be a stable
 // identifier.
@@ -245,40 +214,6 @@ func (store *Store) SaveSeries(db database.Queryable, series *Series) error {
 	// an existing model doesn't change these as they're immutable)
 	series.ID = updatedSeries.ID
 	return nil
-}
-
-// SaveMovieGenreAssociations handles only the upserting of the genre associations
-// for a given movie model.
-//
-// NB: This query will FAIL if any of the given genres do not have a row in the genre table
-func (store *Store) SaveSeriesGenreAssociations(db database.Queryable, seriesID uuid.UUID, genres []*Genre) error {
-	if len(genres) > 0 {
-		type genreAssoc struct {
-			ID       uuid.UUID `db:"id"`
-			SeriesID uuid.UUID `db:"series_id"`
-			GenreID  int       `db:"genre_id"`
-		}
-		genreAssocs := make([]genreAssoc, len(genres))
-		for k, v := range genres {
-			genreAssocs[k] = genreAssoc{uuid.New(), seriesID, v.Id}
-		}
-
-		if err := database.InExec(db, `DELETE FROM series_genres sg WHERE sg.series_id=$1`, seriesID); err != nil {
-			return err
-		}
-
-		_, err := db.NamedExec(`
-			INSERT INTO series_genres(id, series_id, genre_id)
-			VALUES(:id, :series_id, :genre_id)
-			ON CONFLICT(series_id, genre_id) DO NOTHING
-		`, genreAssocs)
-
-		return err
-	}
-
-	_, err := db.Exec(`
-		DELETE FROM series_genres WHERE series_id=$1`, seriesID)
-	return err
 }
 
 // SaveSeason upserts the provided Season model to the database. Existing models
@@ -451,42 +386,52 @@ func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListTyp
 		) @> $1`
 	}
 
-	query := fmt.Sprintf(`
-		WITH joinedMedia(type, id, title, tmdb_id, created_at, updated_at, series_season_count, genres) AS (
-			SELECT 
-				'movie' AS type, id, title, tmdb_id, created_at, updated_at, 0,
-				(
-					SELECT COALESCE(JSONB_AGG(DISTINCT genre.*) FILTER (WHERE genre.id IS NOT NULL), '[]')
-					FROM movie_genres mg
-					INNER JOIN genre
-					ON genre.id = mg.genre_id
-					WHERE mg.movie_id = media.id
-				)
-			FROM media
-			WHERE type='movie' %s
+	getCoalescedGenresSql := func(assocTableName string, tableName string, tableColumn string) string {
+		template := `
+			SELECT COALESCE(JSONB_AGG(DISTINCT genre.*) FILTER (WHERE genre.id IS NOT NULL), '[]')
+			FROM ASSOCTABLENAME mg
+			INNER JOIN genre
+			ON genre.id = mg.genre_id
+			WHERE mg.TABLECOLUMN = TABLENAME.id
+		`
 
-			UNION
+		return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(template, "ASSOCTABLENAME", assocTableName), "TABLECOLUMN", tableColumn), "TABLENAME", tableName)
+	}
 
-			SELECT
-				'series' AS type, id, title, tmdb_id, created_at, updated_at,
-				(SELECT COUNT(*) FROM season WHERE season.series_id = series.id),
-				(
-					SELECT COALESCE(JSONB_AGG(DISTINCT genre.*) FILTER (WHERE genre.id IS NOT NULL), '[]')
-					FROM series_genres sg
-					INNER JOIN genre
-					ON genre.id = sg.genre_id
-					WHERE sg.series_id = series.id
-				)
-			FROM series
-			%s
-		)
-		SELECT *
-		FROM joinedMedia
-		%s
-		ORDER BY %s
-		OFFSET %d
-		LIMIT %d
-	`, movieEnabledClause, seriesAllowedClause, genreFilterClause, orderByClause, max(offset, 0), limitClause)
+	query := fmt.Sprintf(
+		`
+			WITH joinedMedia(type, id, title, tmdb_id, created_at, updated_at, series_season_count, genres) AS (
+				SELECT 
+					'movie' AS type, id, title, tmdb_id, created_at, updated_at,
+					0, -- season_count forced to zero for movies (it's ignored when reading result rows)
+					(%s) -- coalesced genre clause for movies
+				FROM media
+				WHERE type='movie' %s -- movieEnabledClause
+
+				UNION
+
+				SELECT 
+					'series' AS type, id, title, tmdb_id, created_at, updated_at,
+					(SELECT COUNT(*) FROM season WHERE season.series_id = series.id),
+					(%s) -- coalesced genres clause for series
+				FROM series
+				%s -- seriesAllowedClause
+			)
+			SELECT *
+			FROM joinedMedia
+			%s -- genreFilterClause
+			ORDER BY %s -- orderByClause
+			OFFSET %d -- offset
+			LIMIT %d -- limitClause
+		`,
+		getCoalescedGenresSql("movie_genres", "media", "movie_id"),
+		movieEnabledClause,
+		getCoalescedGenresSql("series_genres", "series", "series_id"),
+		seriesAllowedClause,
+		genreFilterClause,
+		orderByClause,
+		max(offset, 0),
+		limitClause)
 
 	var results []struct {
 		ID          uuid.UUID            `db:"id"`
@@ -524,74 +469,6 @@ func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListTyp
 	}
 
 	return out, nil
-}
-
-// SaveGenres saves the given genre labels to the database, ignoring any which
-// already exist in the database (determined based on label conflicts). This function
-// will return back all the genres referenced by this query, either as a result
-// of insertion or because they were already inside the database.
-//
-// NB: This query should be executed inside of a transaction
-func (store *Store) SaveGenres(db database.Queryable, genres []*Genre) ([]*Genre, error) {
-	if len(genres) == 0 {
-		return []*Genre{}, nil
-	}
-
-	if _, err := db.NamedExec(
-		`INSERT INTO genre(label) VALUES (:label) ON CONFLICT(label) DO NOTHING`,
-		genres,
-	); err != nil {
-		return nil, fmt.Errorf("failed to insert bulk genres: %w", err)
-	}
-
-	query, args, err := sqlx.Named(`SELECT * FROM genre WHERE label = any(:label)`, genres)
-	if err != nil {
-		return nil, fmt.Errorf("failed to construct named query: %w", err)
-	}
-
-	var results []*Genre
-	if err := db.Select(&results, db.Rebind(query), pq.Array(args)); err != nil {
-		return nil, fmt.Errorf("failed to select saved genres: %w [query %s and args %#v]", err, query, args)
-	}
-
-	return results, nil
-}
-
-func (store *Store) ListGenres(db database.Queryable) ([]*Genre, error) {
-	var results []*Genre
-	if err := db.Select(&results, `SELECT * FROM genre`); err != nil {
-		return nil, err
-	}
-
-	return results, nil
-}
-
-func (store *Store) GetGenresForMovie(db database.Queryable, movieID uuid.UUID) ([]*Genre, error) {
-	var results []*Genre
-	if err := db.Select(&results, `
-		SELECT genre.* FROM movie_genres
-		INNER JOIN genre
-		ON genre.id = movie_genres.genre_id
-		WHERE movie_genres.movie_id = $1
-		`, movieID); err != nil {
-		return nil, err
-	}
-
-	return results, nil
-}
-
-func (store *Store) GetGenresForSeries(db database.Queryable, seriesID uuid.UUID) ([]*Genre, error) {
-	var results []*Genre
-	if err := db.Select(&results, `
-		SELECT genre.* FROM series_genres
-		INNER JOIN genre
-		ON genre.id = series_genres.genre_id
-		WHERE series_genres.series_id = $1
-		`, seriesID); err != nil {
-		return nil, err
-	}
-
-	return results, nil
 }
 
 // CountSeasonsInSeries queries the database for the number of seasons associated with

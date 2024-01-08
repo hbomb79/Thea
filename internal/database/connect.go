@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -204,4 +205,22 @@ func InExec(db Queryable, query string, arg any) error {
 	}
 
 	return nil
+}
+
+type JsonColumn[T any] struct {
+	val *T
+}
+
+func (j *JsonColumn[T]) Scan(src any) error {
+	if src == nil {
+		j.val = nil
+		return nil
+	}
+
+	j.val = new(T)
+	return json.Unmarshal(src.([]byte), j.val)
+}
+
+func (j *JsonColumn[T]) Get() *T {
+	return j.val
 }

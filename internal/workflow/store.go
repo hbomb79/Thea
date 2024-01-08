@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -14,23 +13,19 @@ import (
 
 type (
 	workflowModel struct {
-		ID        uuid.UUID                    `db:"id"`
-		UpdatedAt time.Time                    `db:"updated_at"`
-		CreatedAt time.Time                    `db:"created_at"`
-		Enabled   bool                         `db:"enabled"`
-		Label     string                       `db:"label"`
-		Criteria  jsonColumn[[]match.Criteria] `db:"criteria"`
-		Targets   jsonColumn[[]*ffmpeg.Target] `db:"targets"`
+		ID        uuid.UUID                             `db:"id"`
+		UpdatedAt time.Time                             `db:"updated_at"`
+		CreatedAt time.Time                             `db:"created_at"`
+		Enabled   bool                                  `db:"enabled"`
+		Label     string                                `db:"label"`
+		Criteria  database.JsonColumn[[]match.Criteria] `db:"criteria"`
+		Targets   database.JsonColumn[[]*ffmpeg.Target] `db:"targets"`
 	}
 
 	workflowTargetAssoc struct {
 		ID         uuid.UUID `db:"id"`
 		WorkflowID uuid.UUID `db:"workflow_id"`
 		TargetID   uuid.UUID `db:"target_id"`
-	}
-
-	jsonColumn[T any] struct {
-		val *T
 	}
 
 	Store struct{}
@@ -221,20 +216,6 @@ func getWorkflowSql(whereClause string) string {
 		%s
 		GROUP BY w.id
 	`, whereClause)
-}
-
-func (j *jsonColumn[T]) Scan(src any) error {
-	if src == nil {
-		j.val = nil
-		return nil
-	}
-
-	j.val = new(T)
-	return json.Unmarshal(src.([]byte), j.val)
-}
-
-func (j *jsonColumn[T]) Get() *T {
-	return j.val
 }
 
 func buildWorkflowTargetAssocs(workflowID uuid.UUID, targetIDs []uuid.UUID) []workflowTargetAssoc {

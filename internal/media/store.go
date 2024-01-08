@@ -1,11 +1,11 @@
 package media
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/pkg/logger"
@@ -124,10 +124,6 @@ type (
 		Descending bool
 	}
 
-	jsonColumn[T any] struct {
-		val *T
-	}
-
 	Store struct {
 		mediaGenreStore
 	}
@@ -155,20 +151,6 @@ const (
 	episodeType mediaType = iota
 	movieType
 )
-
-func (j *jsonColumn[T]) Scan(src any) error {
-	if src == nil {
-		j.val = nil
-		return nil
-	}
-
-	j.val = new(T)
-	return json.Unmarshal(src.([]byte), j.val)
-}
-
-func (j *jsonColumn[T]) Get() *T {
-	return j.val
-}
 
 // SaveMovie upserts the provided Movie model to the database. Existing models
 // to update are found using the 'TmdbId' as this is expected to be a stable
@@ -339,51 +321,16 @@ const (
 	TitleColumn     MediaListOrderColumn = "title"
 )
 
-// ListMedia allows for series/movies to be listed (controllable using allowedTypes). The query also
-// allows for an offset/limit to be provided, facilitating simple paging of the results.
-//   - allowedTypes -> defaults to movies and series
-//   - allowedGenres -> defaults to no filtering (any/all genres), if any genre IDs are provided then only
-//     media which is associated with ALL of the genres specified
-//   - orderBy -> defaults to updated_at in ascending order
-//   - offset -> defaults to 0
-//   - limit -> default to 15, maximum 100
-func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListType, allowedGenres []int, orderBy []MediaListOrderBy, offset int, limit int) ([]*MediaListResult, error) {
-	if len(allowedTypes) == 0 {
-		allowedTypes = []MediaListType{"movie", "series"}
-	}
-
+func getMediaListCte(includeTypes []MediaListType) string {
 	movieEnabledClause := "AND false"
 	seriesAllowedClause := "WHERE false"
-	for _, v := range allowedTypes {
+	for _, v := range includeTypes {
 		switch v {
 		case MovieType:
 			movieEnabledClause = ""
 		case SeriesType:
 			seriesAllowedClause = ""
 		}
-	}
-
-	limitClause := 15
-	if limit > 0 {
-		limitClause = min(limit, 100)
-	}
-
-	orderByClause := "updated_at ASC"
-	if len(orderBy) > 0 {
-		b := orderBy[0].String()
-		for _, s := range orderBy[1:] {
-			b = b + "," + s.String()
-		}
-		orderByClause = b
-	}
-
-	genreFilterClause := ""
-	if len(allowedGenres) > 0 {
-		genreFilterClause = `
-		WHERE (
-			SELECT ARRAY_agg(CAST(genre_data->>'id' AS bigint))
-			FROM jsonb_array_elements(joinedMedia.genres) AS genre_data
-		) @> $1`
 	}
 
 	getCoalescedGenresSql := func(assocTableName string, tableName string, tableColumn string) string {
@@ -398,61 +345,98 @@ func (store *Store) ListMedia(db database.Queryable, allowedTypes []MediaListTyp
 		return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(template, "ASSOCTABLENAME", assocTableName), "TABLECOLUMN", tableColumn), "TABLENAME", tableName)
 	}
 
-	query := fmt.Sprintf(
-		`
-			WITH joinedMedia(type, id, title, tmdb_id, created_at, updated_at, series_season_count, genres) AS (
-				SELECT 
-					'movie' AS type, id, title, tmdb_id, created_at, updated_at,
-					0, -- season_count forced to zero for movies (it's ignored when reading result rows)
-					(%s) -- coalesced genre clause for movies
-				FROM media
-				WHERE type='movie' %s -- movieEnabledClause
+	return fmt.Sprintf(`
+		WITH joinedMedia(type, id, title, tmdb_id, created_at, updated_at, series_season_count, genres) AS (
+			SELECT 
+				'movie' AS type, id, title, tmdb_id, created_at, updated_at,
+				0, -- season_count forced to zero for movies (it's ignored when reading result rows)
+				(%s) -- coalesced genre clause for movies
+			FROM media
+			WHERE type='movie' %s -- movieEnabledClause
 
-				UNION
+			UNION
 
-				SELECT 
-					'series' AS type, id, title, tmdb_id, created_at, updated_at,
-					(SELECT COUNT(*) FROM season WHERE season.series_id = series.id),
-					(%s) -- coalesced genres clause for series
-				FROM series
-				%s -- seriesAllowedClause
-			)
-			SELECT *
-			FROM joinedMedia
-			%s -- genreFilterClause
-			ORDER BY %s -- orderByClause
-			OFFSET %d -- offset
-			LIMIT %d -- limitClause
+			SELECT 
+				'series' AS type, id, title, tmdb_id, created_at, updated_at,
+				(SELECT COUNT(*) FROM season WHERE season.series_id = series.id),
+				(%s) -- coalesced genres clause for series
+			FROM series
+			%s -- seriesAllowedClause
+		)
 		`,
 		getCoalescedGenresSql("movie_genres", "media", "movie_id"),
 		movieEnabledClause,
 		getCoalescedGenresSql("series_genres", "series", "series_id"),
-		seriesAllowedClause,
-		genreFilterClause,
-		orderByClause,
-		max(offset, 0),
-		limitClause)
+		seriesAllowedClause)
 
-	var results []struct {
-		ID          uuid.UUID            `db:"id"`
-		Title       string               `db:"title"`
-		TmdbID      string               `db:"tmdb_id"`
-		CreatedAt   time.Time            `db:"created_at"`
-		UpdatedAt   time.Time            `db:"updated_at"`
-		SeasonCount int                  `db:"series_season_count"`
-		MediaType   string               `db:"type"`
-		Genres      jsonColumn[[]*Genre] `db:"genres"`
+}
+
+// ListMedia allows for series/movies to be listed (controllable using allowedTypes). The query also
+// allows for an offset/limit to be provided, facilitating simple paging of the results.
+//   - allowedTypes -> defaults to movies and series
+//   - allowedGenres -> defaults to no filtering (any/all genres), if any genre IDs are provided then only
+//     media which is associated with ALL of the genres specified
+//   - orderBy -> defaults to updated_at in ascending order
+//   - offset -> defaults to 0
+//   - limit -> default to 15, maximum 100
+func (store *Store) ListMedia(db database.Queryable, titleFilter string, allowedTypes []MediaListType, allowedGenres []int, orderBy []MediaListOrderBy, offset int, limit int) ([]*MediaListResult, error) {
+	if len(allowedTypes) == 0 {
+		allowedTypes = []MediaListType{"movie", "series"}
+	}
+	cte := getMediaListCte(allowedTypes)
+	q := sq.Select("*").From("joinedMedia").Prefix(cte)
+
+	// Optional genre filtering
+	if len(allowedGenres) > 0 {
+		q = q.Where(`
+			(
+				SELECT ARRAY_agg(CAST(genre_data->>'id' AS bigint))
+				FROM jsonb_array_elements(joinedMedia.genres)
+				AS genre_data
+			) @> $1`,
+			pq.Array(allowedGenres))
 	}
 
-	if len(allowedGenres) > 0 {
+	// Optional title filtering
+	trimmedTitleFilter := strings.TrimSpace(titleFilter)
+	if len(trimmedTitleFilter) > 0 {
+		q = q.Where(`LOWER(joinedMedia.title) LIKE LOWER('%?%')`, trimmedTitleFilter)
+	}
 
-		if err := db.Select(&results, query, pq.Array(allowedGenres)); err != nil {
-			return nil, err
-		}
+	// Ordering, defaulting to updated_at ascending
+	if len(orderBy) == 0 {
+		orderBy = append(orderBy, MediaListOrderBy{Column: UpdatedAtColumn, Descending: false})
+	}
+	for _, s := range orderBy {
+		q = q.OrderByClause(s.String())
+	}
+
+	// Optional limiting, maximum of 100, defaulting to 15
+	if limit > 0 {
+		q = q.Limit(uint64(min(limit, 100)))
 	} else {
-		if err := db.Select(&results, query); err != nil {
-			return nil, err
-		}
+		q = q.Limit(15)
+	}
+
+	// Optional Offsetting, default to 0
+	query, args, err := q.Offset(uint64(max(offset, 0))).ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build media list query: %w", err)
+	}
+
+	var results []struct {
+		ID          uuid.UUID                     `db:"id"`
+		Title       string                        `db:"title"`
+		TmdbID      string                        `db:"tmdb_id"`
+		CreatedAt   time.Time                     `db:"created_at"`
+		UpdatedAt   time.Time                     `db:"updated_at"`
+		SeasonCount int                           `db:"series_season_count"`
+		MediaType   string                        `db:"type"`
+		Genres      database.JsonColumn[[]*Genre] `db:"genres"`
+	}
+
+	if err := db.Select(&results, db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("failed to query media with built query: %w", err)
 	}
 
 	out := make([]*MediaListResult, len(results))

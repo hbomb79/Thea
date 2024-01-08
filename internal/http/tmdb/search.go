@@ -11,6 +11,7 @@ import (
 	"github.com/adrg/strutil"
 	"github.com/adrg/strutil/metrics"
 	"github.com/hbomb79/Thea/internal/media"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 const (
@@ -25,10 +26,17 @@ const (
 	tmdbGetEpisodeTemplate = "%s/tv/%s/season/%d/episode/%d?api_key=%s"
 )
 
+var log = logger.Get("TMDB")
+
 type (
 	Date   struct{ time.Time }
 	Config struct {
 		ApiKey string
+	}
+
+	Genre struct {
+		ID   json.Number `json:"id"`
+		Name string      `json:"name"`
 	}
 
 	SearchResult struct {
@@ -54,6 +62,7 @@ type (
 		Name        string      `json:"title"`
 		Tagline     string      `json:"tagline"`
 		Overview    string      `json:"overview"`
+		Genres      []Genre     `json:"genres"`
 	}
 
 	Episode struct {
@@ -73,6 +82,7 @@ type (
 		Adult    bool        `json:"adult"`
 		Name     string      `json:"name"`
 		Overview string      `json:"overview"`
+		Genres   []Genre     `json:"genres"`
 	}
 
 	// tmdbSearcher is the primary search method for the Ingest and
@@ -89,54 +99,56 @@ func NewSearcher(config Config) *tmdbSearcher {
 }
 
 // SearchForEpisode will search the TMDB API for a match using the
-// provided file media metadata. An error will be raised if:
+// provided file media metadata, returning it's ID on success.
+// An error will be raised if:
 //   - A query to TMDB fails
 //   - A search returns zero results
 //   - A search returns multiple results
-func (searcher *tmdbSearcher) SearchForSeries(metadata *media.FileMediaMetadata) (*Series, error) {
+func (searcher *tmdbSearcher) SearchForSeries(metadata *media.FileMediaMetadata) (string, error) {
 	season := metadata.SeasonNumber
 	episode := metadata.EpisodeNumber
 	if !metadata.Episodic {
-		return nil, &IllegalRequestError{"metadata provided claims media is not-episodic, but request is searching for an episode"}
+		return "", &IllegalRequestError{"metadata provided claims media is not-episodic, but request is searching for an episode"}
 	} else if season == -1 || episode == -1 {
-		return nil, &IllegalRequestError{"metadata provided fails to supply valid season/episode information for an episodic media file"}
+		return "", &IllegalRequestError{"metadata provided fails to supply valid season/episode information for an episodic media file"}
 	}
 
 	// Search for the series
 	path := fmt.Sprintf(tmdbSearchSeriesTemplate, tmdbBaseUrl, url.QueryEscape(metadata.Title), searcher.config.ApiKey)
 	var searchResult SearchResult
 	if err := httpGetJsonResponse(path, &searchResult); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	if result, err := searcher.handleSearchResults(searchResult.Results, metadata); err == nil {
-		return &Series{Id: result.Id}, nil
+		return result.Id.String(), nil
 	} else {
-		return nil, err
+		return "", err
 	}
 }
 
 // SearchForMovie will search the TMDB API for a match using the
-// provided file media metadata. An error will be raised if:
+// provided file media metadata, returning it's ID on success.
+// An error will be raised if:
 //   - A query to TMDB fails
 //   - A search returns zero results
 //   - A search returns multiple results and the searcher cannot decide which is correct
-func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) (*Movie, error) {
+func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) (string, error) {
 	if metadata.Episodic {
-		return nil, &IllegalRequestError{"metadata provided claims media is episodic, but request is searching for a movie"}
+		return "", &IllegalRequestError{"metadata provided claims media is episodic, but request is searching for a movie"}
 	}
 
 	// Search for the movie stub
 	path := fmt.Sprintf(tmdbSearchMovieTemplate, tmdbBaseUrl, url.QueryEscape(metadata.Title), searcher.config.ApiKey)
 	var searchResult SearchResult
 	if err := httpGetJsonResponse(path, &searchResult); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	if result, err := searcher.handleSearchResults(searchResult.Results, metadata); err == nil {
-		return &Movie{Id: result.Id}, nil
+		return result.Id.String(), nil
 	} else {
-		return nil, err
+		return "", err
 	}
 }
 
@@ -265,7 +277,7 @@ func filterResultsInPlace(results *[]SearchResultItem, metadata *media.FileMedia
 }
 
 func httpGetJsonResponse(urlPath string, targetInterface interface{}) error {
-	fmt.Printf("GET -> %s\n", urlPath)
+	log.Verbosef("GET -> %s\n", urlPath)
 	resp, err := http.Get(urlPath)
 	if err != nil {
 		return &UnknownRequestError{fmt.Sprintf("failed to perform GET(%s) to TMDB: %v", urlPath, err)}

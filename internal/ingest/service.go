@@ -27,8 +27,8 @@ type (
 	}
 
 	searcher interface {
-		SearchForSeries(*media.FileMediaMetadata) (*tmdb.Series, error)
-		SearchForMovie(*media.FileMediaMetadata) (*tmdb.Movie, error)
+		SearchForSeries(*media.FileMediaMetadata) (string, error)
+		SearchForMovie(*media.FileMediaMetadata) (string, error)
 		GetSeason(string, int) (*tmdb.Season, error)
 		GetSeries(string) (*tmdb.Series, error)
 		GetEpisode(string, int, int) (*tmdb.Episode, error)
@@ -41,8 +41,6 @@ type (
 		GetSeriesWithTmdbId(string) (*media.Series, error)
 		GetEpisodeWithTmdbId(string) (*media.Episode, error)
 
-		SaveSeries(*media.Series) error
-		SaveSeason(*media.Season) error
 		SaveEpisode(*media.Episode, *media.Season, *media.Series) error
 		SaveMovie(*media.Movie) error
 	}

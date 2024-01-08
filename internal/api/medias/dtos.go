@@ -52,13 +52,19 @@ type (
 		// TODO: poster path, runtime
 	}
 
+	genreDto struct {
+		ID    int    `json:"id"`
+		Label string `json:"label"`
+	}
+
 	listDto struct {
-		Type        string    `json:"type"`
-		ID          uuid.UUID `json:"id"`
-		Title       string    `json:"title"`
-		TmdbID      string    `json:"tmdb_id"`
-		UpdatedAt   time.Time `json:"updated_at"`
-		SeasonCount *int      `json:"season_count,omitempty"`
+		Type        string     `json:"type"`
+		ID          uuid.UUID  `json:"id"`
+		Title       string     `json:"title"`
+		TmdbID      string     `json:"tmdb_id"`
+		UpdatedAt   time.Time  `json:"updated_at"`
+		SeasonCount *int       `json:"season_count,omitempty"`
+		Genres      []genreDto `json:"genres"`
 		// TODO poster path, optional movie/series specific information such as runtime and season count
 	}
 
@@ -120,13 +126,22 @@ func newListDtos(results []*media.MediaListResult) ([]*listDto, error) {
 func newListDto(result *media.MediaListResult) (*listDto, error) {
 	if result.IsMovie() {
 		movie := result.Movie
-		return &listDto{Type: "movie", ID: movie.ID, Title: movie.Title, TmdbID: movie.TmdbID, UpdatedAt: movie.UpdatedAt, SeasonCount: nil}, nil
+		return &listDto{Type: "movie", ID: movie.ID, Title: movie.Title, TmdbID: movie.TmdbID, UpdatedAt: movie.UpdatedAt, SeasonCount: nil, Genres: genreModelsToDtos(movie.Genres)}, nil
 	} else if result.IsSeries() {
 		series := result.Series
-		return &listDto{Type: "series", ID: series.ID, Title: series.Title, TmdbID: series.TmdbID, UpdatedAt: series.UpdatedAt, SeasonCount: &series.SeasonCount}, nil
+		return &listDto{Type: "series", ID: series.ID, Title: series.Title, TmdbID: series.TmdbID, UpdatedAt: series.UpdatedAt, SeasonCount: &series.SeasonCount, Genres: genreModelsToDtos(series.Genres)}, nil
 	}
 
 	return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Media %v found during listing has an illegal type. Expected movie or series.", result))
+}
+
+func genreModelsToDtos(genres []*media.Genre) []genreDto {
+	dtos := make([]genreDto, len(genres))
+	for k, v := range genres {
+		dtos[k] = genreDto{ID: v.Id, Label: v.Label}
+	}
+
+	return dtos
 }
 
 func inflatedSeriesModelToDto(model *media.SeriesStub) seriesStubDto {

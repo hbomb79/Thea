@@ -52,11 +52,14 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.3.0 // indirect
+	github.com/Masterminds/squirrel v1.5.4
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
+	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
+	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.7 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect

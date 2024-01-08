@@ -23,7 +23,8 @@ type (
 		GetTranscodesForMedia(uuid.UUID) ([]*transcode.Transcode, error)
 		GetAllTargets() []*ffmpeg.Target
 
-		ListMedia(includeTypes []media.MediaListType, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error)
+		ListMedia(includeTypes []media.MediaListType, titleFilter string, includeGenres []int, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error)
+		ListGenres() ([]*media.Genre, error)
 
 		DeleteEpisode(episodeID uuid.UUID) error
 		DeleteSeries(seriesID uuid.UUID) error
@@ -61,6 +62,7 @@ func New(validate *validator.Validate, transcodeService TranscodeService, store 
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.GET("/", controller.list)
+	eg.GET("/genres/", controller.listGenres)
 
 	eg.GET("/movie/:id/", controller.getMovie)
 	eg.DELETE("/movie/:id/", controller.deleteMovie)
@@ -95,6 +97,20 @@ func (controller *Controller) list(ec echo.Context) error {
 		}
 
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("allowedType '%v' is not recognized", v))
+	}
+
+	allowedGenresRaw, ok := params["genre"]
+	if !ok {
+		allowedGenresRaw = []string{}
+	}
+
+	allowedGenres := make([]int, len(allowedGenresRaw))
+	for k, v := range allowedGenresRaw {
+		vv, err := strconv.Atoi(v)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("genre '%v' is not recognized", v))
+		}
+		allowedGenres[k] = vv
 	}
 
 	orderByRaw, ok := params["orderBy"]
@@ -133,7 +149,9 @@ func (controller *Controller) list(ec echo.Context) error {
 		offset = 0
 	}
 
-	results, err := controller.store.ListMedia(allowedTypes, orderBy, offset, limit)
+	titleFilter := params.Get("titleFilter")
+
+	results, err := controller.store.ListMedia(allowedTypes, titleFilter, allowedGenres, orderBy, offset, limit)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
@@ -144,6 +162,15 @@ func (controller *Controller) list(ec echo.Context) error {
 	}
 
 	return ec.JSON(http.StatusOK, dtos)
+}
+
+func (controller *Controller) listGenres(ec echo.Context) error {
+	genres, err := controller.store.ListGenres()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return ec.JSON(http.StatusOK, genreModelsToDtos(genres))
 }
 
 func (controller *Controller) getMovie(ec echo.Context) error {

@@ -81,11 +81,16 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 				series = found
 			}
 		} else {
-			if found, err := searcher.SearchForSeries(meta); err != nil {
+			seriesID, err := searcher.SearchForSeries(meta)
+			if err != nil {
 				return newTrouble(err)
-			} else {
-				series = found
 			}
+
+			found, err := searcher.GetSeries(seriesID)
+			if err != nil {
+				return newTrouble(err)
+			}
+			series = found
 		}
 
 		season, err := searcher.GetSeason(series.Id.String(), meta.SeasonNumber)
@@ -124,11 +129,16 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 				movie = found
 			}
 		} else {
-			if found, err := searcher.SearchForMovie(item.ScrapedMetadata); err != nil {
+			movieID, err := searcher.SearchForMovie(item.ScrapedMetadata)
+			if err != nil {
 				return newTrouble(err)
-			} else {
-				movie = found
 			}
+
+			found, err := searcher.GetMovie(movieID)
+			if err != nil {
+				return newTrouble(err)
+			}
+			movie = found
 		}
 
 		log.Emit(logger.DEBUG, "Saving newly ingested MOVIE: %v\n", movie)

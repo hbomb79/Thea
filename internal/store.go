@@ -206,8 +206,8 @@ func (orchestrator *storeOrchestrator) ListGenres() ([]*media.Genre, error) {
 	return orchestrator.mediaStore.ListGenres(orchestrator.db.GetSqlxDb())
 }
 
-func (orchestrator *storeOrchestrator) ListMedia(includeTypes []media.MediaListType, includeGenres []int, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error) {
-	return orchestrator.mediaStore.ListMedia(orchestrator.db.GetSqlxDb(), "", includeTypes, includeGenres, orderBy, offset, limit)
+func (orchestrator *storeOrchestrator) ListMedia(includeTypes []media.MediaListType, titleFilter string, includeGenres []int, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error) {
+	return orchestrator.mediaStore.ListMedia(orchestrator.db.GetSqlxDb(), titleFilter, includeTypes, includeGenres, orderBy, offset, limit)
 }
 
 func (orchestrator *storeOrchestrator) CountSeasonsInSeries(seriesIDs []uuid.UUID) (map[uuid.UUID]int, error) {

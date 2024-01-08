@@ -109,24 +109,6 @@ type (
 		Watchable
 		Genres []*Genre
 	}
-
-	MediaListResult struct {
-		Series *SeriesStub
-		Movie  *Movie
-	}
-	MediaListType        string
-	MediaListOrderColumn string
-	MediaListOrderBy     struct {
-		Column MediaListOrderColumn
-		// Descending controls the ordering for this column:
-		//  - true -> DESC order
-		//  - false -> ASC order
-		Descending bool
-	}
-
-	Store struct {
-		mediaGenreStore
-	}
 )
 
 var (
@@ -145,12 +127,46 @@ const (
 	MediaEpisodeClause = "AND type='episode'"
 )
 
+type MediaListResult struct {
+	Series *SeriesStub
+	Movie  *Movie
+}
+
+func (result *MediaListResult) IsMovie() bool  { return result.Movie != nil && result.Series == nil }
+func (result *MediaListResult) IsSeries() bool { return result.Movie == nil && result.Series != nil }
+
+type MediaListType string
+
+const (
+	MovieType  MediaListType = "movie"
+	SeriesType MediaListType = "series"
+)
+
+type MediaListOrderColumn string
+
+const (
+	IDColumn        MediaListOrderColumn = "id" // stable identifier for 'unsorted' media
+	UpdatedAtColumn MediaListOrderColumn = "updated_at"
+	CreatedAtColumn MediaListOrderColumn = "created_at"
+	TitleColumn     MediaListOrderColumn = "title"
+)
+
+type MediaListOrderBy struct {
+	Column MediaListOrderColumn
+	// Descending controls the ordering for this column:
+	//  - true -> DESC order
+	//  - false -> ASC order
+	Descending bool
+}
+
 type mediaType int
 
 const (
 	episodeType mediaType = iota
 	movieType
 )
+
+type Store struct{ mediaGenreStore }
 
 // SaveMovie upserts the provided Movie model to the database. Existing models
 // to update are found using the 'TmdbId' as this is expected to be a stable
@@ -297,9 +313,6 @@ func (store *Store) ListSeries(db database.Queryable) ([]*Series, error) {
 	return dest, nil
 }
 
-func (result *MediaListResult) IsMovie() bool  { return result.Movie != nil && result.Series == nil }
-func (result *MediaListResult) IsSeries() bool { return result.Movie == nil && result.Series != nil }
-
 func (ord *MediaListOrderBy) String() string {
 	dir := "ASC"
 	if ord.Descending {
@@ -308,19 +321,6 @@ func (ord *MediaListOrderBy) String() string {
 
 	return fmt.Sprintf("%s %s", ord.Column, dir)
 }
-
-const (
-	MovieType  MediaListType = "movie"
-	SeriesType MediaListType = "series"
-)
-
-const (
-	IDColumn        MediaListOrderColumn = "id" // stable identifier for 'unsorted' media
-	UpdatedAtColumn MediaListOrderColumn = "updated_at"
-	CreatedAtColumn MediaListOrderColumn = "created_at"
-	TitleColumn     MediaListOrderColumn = "title"
-)
-
 func getMediaListCte(includeTypes []MediaListType) string {
 	movieEnabledClause := "AND false"
 	seriesAllowedClause := "WHERE false"
@@ -373,6 +373,7 @@ func getMediaListCte(includeTypes []MediaListType) string {
 
 // ListMedia allows for series/movies to be listed (controllable using allowedTypes). The query also
 // allows for an offset/limit to be provided, facilitating simple paging of the results.
+//   - titleFilter -> only returns results where their title is 'LIKE' the one provided
 //   - allowedTypes -> defaults to movies and series
 //   - allowedGenres -> defaults to no filtering (any/all genres), if any genre IDs are provided then only
 //     media which is associated with ALL of the genres specified
@@ -393,14 +394,14 @@ func (store *Store) ListMedia(db database.Queryable, titleFilter string, allowed
 				SELECT ARRAY_agg(CAST(genre_data->>'id' AS bigint))
 				FROM jsonb_array_elements(joinedMedia.genres)
 				AS genre_data
-			) @> $1`,
+			) @> ?`,
 			pq.Array(allowedGenres))
 	}
 
 	// Optional title filtering
 	trimmedTitleFilter := strings.TrimSpace(titleFilter)
 	if len(trimmedTitleFilter) > 0 {
-		q = q.Where(`LOWER(joinedMedia.title) LIKE LOWER('%?%')`, trimmedTitleFilter)
+		q = q.Where(`LOWER(joinedMedia.title) LIKE LOWER('%' || ? || '%')`, trimmedTitleFilter)
 	}
 
 	// Ordering, defaulting to updated_at ascending
@@ -423,6 +424,7 @@ func (store *Store) ListMedia(db database.Queryable, titleFilter string, allowed
 	if err != nil {
 		return nil, fmt.Errorf("failed to build media list query: %w", err)
 	}
+	storeLogger.Verbosef("Built query: %s\nArgs: %#v\n", query, args)
 
 	var results []struct {
 		ID          uuid.UUID                     `db:"id"`

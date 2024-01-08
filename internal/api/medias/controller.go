@@ -23,7 +23,7 @@ type (
 		GetTranscodesForMedia(uuid.UUID) ([]*transcode.Transcode, error)
 		GetAllTargets() []*ffmpeg.Target
 
-		ListMedia(includeTypes []media.MediaListType, includeGenres []int, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error)
+		ListMedia(includeTypes []media.MediaListType, titleFilter string, includeGenres []int, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error)
 		ListGenres() ([]*media.Genre, error)
 
 		DeleteEpisode(episodeID uuid.UUID) error
@@ -149,7 +149,9 @@ func (controller *Controller) list(ec echo.Context) error {
 		offset = 0
 	}
 
-	results, err := controller.store.ListMedia(allowedTypes, allowedGenres, orderBy, offset, limit)
+	titleFilter := params.Get("titleFilter")
+
+	results, err := controller.store.ListMedia(allowedTypes, titleFilter, allowedGenres, orderBy, offset, limit)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}

@@ -46,8 +46,8 @@ func (store *mediaGenreStore) SaveMovieGenreAssociations(db database.Queryable, 
 	return err
 }
 
-// SaveMovieGenreAssociations handles only the upserting of the genre associations
-// for a given movie model.
+// SaveSeriesGenreAssociations handles only the upserting of the genre associations
+// for a given series model.
 //
 // NB: This query will FAIL if any of the given genres do not have a row in the genre table
 func (store *mediaGenreStore) SaveSeriesGenreAssociations(db database.Queryable, seriesID uuid.UUID, genres []*Genre) error {
@@ -81,17 +81,15 @@ func (store *mediaGenreStore) SaveSeriesGenreAssociations(db database.Queryable,
 }
 
 // SaveGenres saves the given genre labels to the database, ignoring any which
-// already exist in the database (determined based on label conflicts). This function
-// will return back all the genres referenced by this query, either as a result
-// of insertion or because they were already inside the database.
-//
-// NB: This query should be executed inside of a transaction
-func (store *Store) SaveGenres(db database.Queryable, genres []*Genre) ([]*Genre, error) {
+// already exist in the database (determined based on label conflicts).
+// This function will return back all the genres referenced by the labels provided,
+// regardless of whether the genres were already present in the database.
+func (store *mediaGenreStore) SaveGenres(tx *sqlx.Tx, genres []*Genre) ([]*Genre, error) {
 	if len(genres) == 0 {
 		return []*Genre{}, nil
 	}
 
-	if _, err := db.NamedExec(
+	if _, err := tx.NamedExec(
 		`INSERT INTO genre(label) VALUES (:label) ON CONFLICT(label) DO NOTHING`,
 		genres,
 	); err != nil {
@@ -104,14 +102,14 @@ func (store *Store) SaveGenres(db database.Queryable, genres []*Genre) ([]*Genre
 	}
 
 	var results []*Genre
-	if err := db.Select(&results, db.Rebind(query), pq.Array(args)); err != nil {
+	if err := tx.Select(&results, tx.Rebind(query), pq.Array(args)); err != nil {
 		return nil, fmt.Errorf("failed to select saved genres: %w [query %s and args %#v]", err, query, args)
 	}
 
 	return results, nil
 }
 
-func (store *Store) ListGenres(db database.Queryable) ([]*Genre, error) {
+func (store *mediaGenreStore) ListGenres(db database.Queryable) ([]*Genre, error) {
 	var results []*Genre
 	if err := db.Select(&results, `SELECT * FROM genre`); err != nil {
 		return nil, err
@@ -120,7 +118,7 @@ func (store *Store) ListGenres(db database.Queryable) ([]*Genre, error) {
 	return results, nil
 }
 
-func (store *Store) GetGenresForMovie(db database.Queryable, movieID uuid.UUID) ([]*Genre, error) {
+func (store *mediaGenreStore) GetGenresForMovie(db database.Queryable, movieID uuid.UUID) ([]*Genre, error) {
 	var results []*Genre
 	if err := db.Select(&results, getGenresForSql("movie_genres", "movie_id"), movieID); err != nil {
 		return nil, err
@@ -129,7 +127,7 @@ func (store *Store) GetGenresForMovie(db database.Queryable, movieID uuid.UUID) 
 	return results, nil
 }
 
-func (store *Store) GetGenresForSeries(db database.Queryable, seriesID uuid.UUID) ([]*Genre, error) {
+func (store *mediaGenreStore) GetGenresForSeries(db database.Queryable, seriesID uuid.UUID) ([]*Genre, error) {
 	var results []*Genre
 	if err := db.Select(&results, getGenresForSql("series_genres", "series_id"), seriesID); err != nil {
 		return nil, err

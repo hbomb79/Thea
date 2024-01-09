@@ -11,6 +11,7 @@ import (
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/transcode"
+	"github.com/hbomb79/Thea/internal/user"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
 	"github.com/jmoiron/sqlx"
@@ -42,6 +43,7 @@ type (
 		transcodeStore *transcode.Store
 		workflowStore  *workflow.Store
 		targetStore    *ffmpeg.Store
+		userStore      *user.Store
 	}
 )
 
@@ -57,6 +59,7 @@ func newStoreOrchestrator(db database.Manager, eventBus event.EventDispatcher) (
 		transcodeStore: &transcode.Store{},
 		workflowStore:  &workflow.Store{},
 		targetStore:    &ffmpeg.Store{},
+		userStore:      user.NewStore(),
 	}, nil
 }
 
@@ -551,4 +554,30 @@ func (orchestrator *storeOrchestrator) GetManyTargets(ids ...uuid.UUID) []*ffmpe
 
 func (orchestrator *storeOrchestrator) DeleteTarget(id uuid.UUID) {
 	orchestrator.targetStore.Delete(orchestrator.db.GetSqlxDb(), id)
+}
+
+// User Management
+
+func (orchestrator *storeOrchestrator) GetUserWithUsernameAndPassword(username []byte, password []byte) (*user.User, error) {
+	return orchestrator.userStore.GetWithUsernameAndPassword(orchestrator.db.GetSqlxDb(), username, password)
+}
+
+func (orchestrator *storeOrchestrator) GetUserWithID(id uuid.UUID) (*user.User, error) {
+	return orchestrator.userStore.GetWithId(orchestrator.db.GetSqlxDb(), id)
+}
+
+func (orchestrator *storeOrchestrator) CreateUser(username []byte, password []byte) error {
+	return orchestrator.userStore.Create(orchestrator.db.GetSqlxDb(), username, password)
+}
+
+func (orchestrator *storeOrchestrator) ListUsers() ([]*user.User, error) {
+	return orchestrator.userStore.List(orchestrator.db.GetSqlxDb())
+}
+
+func (orchestrator *storeOrchestrator) RecordUserLogin(userID uuid.UUID) error {
+	return orchestrator.userStore.RecordLogin(orchestrator.db.GetSqlxDb(), userID)
+}
+
+func (orchestrator *storeOrchestrator) RecordUserRefresh(userID uuid.UUID) error {
+	return orchestrator.userStore.RecordRefresh(orchestrator.db.GetSqlxDb(), userID)
 }

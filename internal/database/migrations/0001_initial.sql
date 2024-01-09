@@ -124,3 +124,14 @@ CREATE TABLE media_transcodes(
     CONSTRAINT media_transcodes_fk_media_id FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE RESTRICT,
     CONSTRAINT media_transcodes_fk_transcode_target_id FOREIGN KEY(transcode_target_id) REFERENCES transcode_target(id)
 );
+
+CREATE TABLE users(
+    id UUID NOT NULL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    last_login TIMESTAMPTZ,
+    last_refresh TIMESTAMPTZ,
+    username BYTEA NOT NULL UNIQUE,
+    password BYTEA NOT NULL,
+    salt BYTEA NOT NULL
+);

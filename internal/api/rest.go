@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/hbomb79/Thea/internal/api/auth"
 	"github.com/hbomb79/Thea/internal/api/ingests"
 	"github.com/hbomb79/Thea/internal/api/medias"
 	"github.com/hbomb79/Thea/internal/api/targets"
@@ -36,6 +37,12 @@ type (
 		SetRoutes(*echo.Group)
 	}
 
+	AuthController interface {
+		Controller
+		GetJwtRefreshMiddleware() echo.MiddlewareFunc
+		GetJwtVerifierMiddleware() echo.MiddlewareFunc
+	}
+
 	// Store represents a union of all the controller store requirements, typically
 	// fulfilled by Thea's store orchestrator
 	Store interface {
@@ -43,6 +50,7 @@ type (
 		workflows.Store
 		transcodes.Store
 		medias.Store
+		auth.Store
 	}
 
 	TranscodeService interface {
@@ -63,6 +71,7 @@ type (
 		targetsController   Controller
 		workflowController  Controller
 		mediaController     Controller
+		authController      AuthController
 	}
 )
 
@@ -94,32 +103,39 @@ func NewRestGateway(
 		targetsController:   targets.New(validate, store),
 		workflowController:  workflows.New(validate, store),
 		mediaController:     medias.New(validate, transcodeService, store),
+		authController:      auth.New(store),
 	}
 
+	ec.Pre(middleware.AddTrailingSlash())
 	ec.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "[Request] ${time_rfc3339} :: ${method} ${uri} -> ${status} ${error} {ip=${remote_ip}, user_agent=${user_agent}}\n",
 	}))
 	ec.Use(middleware.Recover())
-	ec.Pre(middleware.AddTrailingSlash())
+
+	auth := ec.Group("/api/thea/v1/auth")
+	gateway.authController.SetRoutes(auth)
+
+	autoRefresh := gateway.authController.GetJwtRefreshMiddleware()
+	protected := gateway.authController.GetJwtVerifierMiddleware()
 
 	ec.GET("/api/thea/v1/activity/ws/", func(ec echo.Context) error {
 		gateway.socket.UpgradeToSocket(ec.Response(), ec.Request())
 		return nil
-	})
+	}, protected, autoRefresh)
 
-	ingests := ec.Group("/api/thea/v1/ingests")
+	ingests := ec.Group("/api/thea/v1/ingests", protected, autoRefresh)
 	gateway.ingestController.SetRoutes(ingests)
 
-	transcodes := ec.Group("/api/thea/v1/transcodes")
+	transcodes := ec.Group("/api/thea/v1/transcodes", protected, autoRefresh)
 	gateway.transcodeController.SetRoutes(transcodes)
 
-	transcodeTargets := ec.Group("/api/thea/v1/transcode-targets")
+	transcodeTargets := ec.Group("/api/thea/v1/transcode-targets", protected, autoRefresh)
 	gateway.targetsController.SetRoutes(transcodeTargets)
 
-	transcodeWorkflows := ec.Group("/api/thea/v1/transcode-workflows")
+	transcodeWorkflows := ec.Group("/api/thea/v1/transcode-workflows", protected, autoRefresh)
 	gateway.workflowController.SetRoutes(transcodeWorkflows)
 
-	media := ec.Group("/api/thea/v1/media")
+	media := ec.Group("/api/thea/v1/media", protected, autoRefresh)
 	gateway.mediaController.SetRoutes(media)
 
 	return gateway

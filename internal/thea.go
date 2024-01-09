@@ -122,6 +122,9 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to construct data orchestrator: %w", err)
 	}
 	thea.storeOrchestrator = store
+	if err := thea.createInitialUserIfNonePresent(); err != nil {
+		return fmt.Errorf("failed to create initial user: %w", err)
+	}
 
 	searcher := tmdb.NewSearcher(tmdb.Config{ApiKey: thea.config.OmdbKey})
 	scraper := media.NewScraper(media.ScraperConfig{FfprobeBinPath: thea.config.Format.FfprobeBinaryPath})
@@ -195,4 +198,18 @@ func (thea *theaImpl) initialiseDockerServices(config TheaConfig, crashHandler f
 	}
 
 	return nil
+}
+
+func (thea *theaImpl) createInitialUserIfNonePresent() error {
+	users, err := thea.storeOrchestrator.ListUsers()
+	if err != nil {
+		log.Warnf("Failed to check for existing users due to error: %s\n", err)
+		return nil
+	} else if len(users) > 0 {
+		log.Debugf("Existing users found (%d), not creating initial user\n", len(users))
+		return nil
+	}
+
+	log.Emit(logger.NEW, "No existing users found, creating initial user [username='admin', password=REDACTED {refer to your configuration}]\n")
+	return thea.storeOrchestrator.CreateUser([]byte("admin"), []byte("admin"))
 }

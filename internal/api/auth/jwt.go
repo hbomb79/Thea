@@ -13,13 +13,17 @@ import (
 )
 
 var (
-	log             = logger.Get("JWT")
+	log             = logger.Get("Auth")
 	errUnauthorized = echo.NewHTTPError(http.StatusUnauthorized)
 )
 
 const (
 	authTokenCookieName    = "auth-token"
 	refreshTokenCookieName = "refresh-token"
+
+	authTokenLifespan    = time.Hour * 1
+	refreshTokenLifespan = time.Hour * 24
+	autoRefreshThreshold = time.Minute * 15
 )
 
 type (
@@ -27,6 +31,7 @@ type (
 		jwt.RegisteredClaims
 		UserID uuid.UUID `json:"user_id"`
 	}
+
 	jwtAuthProvider struct {
 		store              Store
 		authTokenSecret    []byte
@@ -65,47 +70,6 @@ func (auth *jwtAuthProvider) generateTokensAndSetCookies(ec echo.Context, userID
 	}()
 
 	return nil
-}
-
-func (auth *jwtAuthProvider) getUserIdFromClaims(claims jwt.MapClaims) (*uuid.UUID, error) {
-	if userID, ok := claims["user_id"]; ok {
-		if id, err := uuid.Parse(userID.(string)); err != nil {
-			return nil, fmt.Errorf("failed to extract user ID from JWT claims: %w", err)
-		} else {
-			return &id, nil
-		}
-	} else {
-		return nil, errors.New("failed to extract user ID from JWT claims: missing")
-	}
-}
-
-func (auth *jwtAuthProvider) getJwtClaimsFromContext(ec echo.Context) (*jwt.MapClaims, error) {
-	if ec.Get("user") == nil {
-		return nil, errors.New("no user found in request context")
-	}
-
-	u := ec.Get("user").(*jwt.Token)
-	claims := u.Claims.(jwt.MapClaims)
-	return &claims, nil
-}
-
-func (auth *jwtAuthProvider) getJwtClaimsFromToken(token *jwt.Token) *jwt.MapClaims {
-	claims := token.Claims.(*jwt.MapClaims)
-	return claims
-}
-
-func (auth *jwtAuthProvider) getUserIDFromContext(ec echo.Context) (*uuid.UUID, error) {
-	claims, err := auth.getJwtClaimsFromContext(ec)
-	if err != nil {
-		return nil, err
-	}
-
-	userID, err := auth.getUserIdFromClaims(*claims)
-	if err != nil {
-		return nil, err
-	}
-
-	return userID, nil
 }
 
 func (auth *jwtAuthProvider) validateToken(ec echo.Context, tokenName string, secret []byte) (*jwt.Token, error) {
@@ -172,7 +136,7 @@ func (auth *jwtAuthProvider) jwtTokenRefresherMiddleware(next echo.HandlerFunc) 
 			log.Errorf("Failed to extract expiration time from user JWT: %s", err)
 		}
 
-		if time.Until(exp.Time) < 15*time.Minute {
+		if time.Until(exp.Time) < autoRefreshThreshold {
 			_, err := auth.validateToken(ec, refreshTokenCookieName, auth.refreshTokenSecret)
 			if err != nil {
 				log.Errorf("Unable to auto-refresh token for allegedUserID %s due to error: %s\n", allegedUserID, err)
@@ -188,13 +152,51 @@ func (auth *jwtAuthProvider) jwtTokenRefresherMiddleware(next echo.HandlerFunc) 
 }
 
 func (auth *jwtAuthProvider) generateAccessToken(userID uuid.UUID) (string, time.Time, error) {
-	expirationTime := time.Now().Add(1 * time.Hour)
-	return generateToken(userID, expirationTime, auth.authTokenSecret)
+	return generateToken(userID, time.Now().Add(authTokenLifespan), auth.authTokenSecret)
 }
 
 func (auth *jwtAuthProvider) generateRefreshToken(userID uuid.UUID) (string, time.Time, error) {
-	expirationTime := time.Now().Add(24 * time.Hour)
-	return generateToken(userID, expirationTime, auth.refreshTokenSecret)
+	return generateToken(userID, time.Now().Add(refreshTokenLifespan), auth.refreshTokenSecret)
+}
+
+func (auth *jwtAuthProvider) getUserIdFromClaims(claims jwt.MapClaims) (*uuid.UUID, error) {
+	if userID, ok := claims["user_id"]; ok {
+		if id, err := uuid.Parse(userID.(string)); err != nil {
+			return nil, fmt.Errorf("failed to extract user ID from JWT claims: %w", err)
+		} else {
+			return &id, nil
+		}
+	} else {
+		return nil, errors.New("failed to extract user ID from JWT claims: missing")
+	}
+}
+
+func (auth *jwtAuthProvider) getJwtClaimsFromContext(ec echo.Context) (*jwt.MapClaims, error) {
+	if ec.Get("user") == nil {
+		return nil, errors.New("no user found in request context")
+	}
+
+	u := ec.Get("user").(*jwt.Token)
+	claims := u.Claims.(jwt.MapClaims)
+	return &claims, nil
+}
+
+func (auth *jwtAuthProvider) getJwtClaimsFromToken(token *jwt.Token) *jwt.MapClaims {
+	return token.Claims.(*jwt.MapClaims)
+}
+
+func (auth *jwtAuthProvider) getUserIDFromContext(ec echo.Context) (*uuid.UUID, error) {
+	claims, err := auth.getJwtClaimsFromContext(ec)
+	if err != nil {
+		return nil, err
+	}
+
+	userID, err := auth.getUserIdFromClaims(*claims)
+	if err != nil {
+		return nil, err
+	}
+
+	return userID, nil
 }
 
 func setTokenCookie(ec echo.Context, name, token string, expiration time.Time) {
@@ -211,17 +213,11 @@ func setTokenCookie(ec echo.Context, name, token string, expiration time.Time) {
 func generateToken(userID uuid.UUID, expirationTime time.Time, secret []byte) (string, time.Time, error) {
 	// Create the JWT claims, which includes the username and expiry time
 	claims := &customClaims{
-		UserID: userID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			// In JWT, the expiry time is expressed as unix milliseconds
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
-		},
+		UserID:           userID,
+		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(expirationTime)},
 	}
-
-	// Declare the token with the algorithm used for signing, and the claims
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	// Create the JWT string
 	tokenString, err := token.SignedString(secret)
 	if err != nil {
 		return "", time.Now(), err

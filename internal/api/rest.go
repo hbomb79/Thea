@@ -12,6 +12,7 @@ import (
 	"github.com/hbomb79/Thea/internal/api/medias"
 	"github.com/hbomb79/Thea/internal/api/targets"
 	"github.com/hbomb79/Thea/internal/api/transcodes"
+	"github.com/hbomb79/Thea/internal/api/users"
 	"github.com/hbomb79/Thea/internal/api/workflows"
 	"github.com/hbomb79/Thea/internal/http/websocket"
 	"github.com/hbomb79/Thea/pkg/logger"
@@ -51,6 +52,7 @@ type (
 		transcodes.Store
 		medias.Store
 		auth.Store
+		users.Store
 	}
 
 	TranscodeService interface {
@@ -71,6 +73,7 @@ type (
 		targetsController   Controller
 		workflowController  Controller
 		mediaController     Controller
+		userController      Controller
 		authController      AuthController
 	}
 )
@@ -103,6 +106,7 @@ func NewRestGateway(
 		targetsController:   targets.New(validate, store),
 		workflowController:  workflows.New(validate, store),
 		mediaController:     medias.New(validate, transcodeService, store),
+		userController:      users.NewController(store),
 		authController:      auth.New(store),
 	}
 
@@ -137,6 +141,9 @@ func NewRestGateway(
 
 	media := ec.Group("/api/thea/v1/media", protected, autoRefresh)
 	gateway.mediaController.SetRoutes(media)
+
+	users := ec.Group("/api/thea/v1/users", protected, autoRefresh)
+	gateway.userController.SetRoutes(users)
 
 	return gateway
 }

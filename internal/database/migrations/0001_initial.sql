@@ -135,3 +135,15 @@ CREATE TABLE users(
     password BYTEA NOT NULL,
     salt BYTEA NOT NULL
 );
+
+CREATE TABLE permissions(
+    id UUID NOT NULL PRIMARY KEY,
+    label TEXT UNIQUE
+);
+
+CREATE TABLE users_permissions(
+    user_id UUID NOT NULL,
+    permission_id UUID NOT NULL,
+
+    CONSTRAINT users_permissions_uk_user_permission UNIQUE(user_id, permission_id)
+);

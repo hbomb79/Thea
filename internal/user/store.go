@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
 	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/jmoiron/sqlx"
 )
 
 var ErrUserNotFound = errors.New("user does not exist")
@@ -15,7 +17,9 @@ var ErrUserNotFound = errors.New("user does not exist")
 var log = logger.Get("UserStore")
 
 type (
-	User struct {
+	Permissions []string
+
+	userBase struct {
 		ID             uuid.UUID  `db:"id"`
 		Username       string     `db:"username"`
 		HashedPassword []byte     `db:"password" json:"-"`
@@ -24,7 +28,24 @@ type (
 		UpdatedAt      time.Time  `db:"updated_at"`
 		LastLoginAt    *time.Time `db:"last_login"`
 		LastRefreshAt  *time.Time `db:"last_refresh"`
-		//TODO Permissions []string
+	}
+
+	// userModel is a combination of the users table columns, combined with
+	// a JSON representation of the coalesced permission rows which are
+	// joined in to the query. We use a separate struct as part of
+	// the public API of this store to hide the use of the JsonColumn container
+	// to prevent against breakages if we change this in the future
+	userModel struct {
+		userBase
+		Permissions database.JsonColumn[[]string] `db:"permissions"`
+	}
+
+	// User is the external/public API for the user model. It uses a special
+	// Permissions type for the users permissions which allows for common
+	// operations to be performed against the set of permissions
+	User struct {
+		userBase
+		Permissions Permissions
 	}
 
 	Store struct {
@@ -57,12 +78,22 @@ func (store *Store) Create(db database.Queryable, username []byte, rawPassword [
 }
 
 func (store *Store) List(db database.Queryable) ([]*User, error) {
-	var results []*User
-	if err := db.Select(&results, `SELECT * FROM users`); err != nil {
+	query, args, err := selectUserBuilder().ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct list users query: %w", err)
+	}
+
+	var results []userModel
+	if err := db.Select(&results, query, args...); err != nil {
 		return nil, err
 	}
 
-	return results, nil
+	output := make([]*User, len(results))
+	for k, v := range results {
+		output[k] = userModelToUser(&v)
+	}
+
+	return output, nil
 }
 
 // GetWithUsernameAndPassword finds a user with the matching
@@ -70,8 +101,13 @@ func (store *Store) List(db database.Queryable) ([]*User, error) {
 // provided is able to be hashed with the same salt as was used with
 // the existing user (if any), and the hashes MATCH.
 func (store *Store) GetWithUsernameAndPassword(db database.Queryable, username []byte, rawPassword []byte) (*User, error) {
-	var user User
-	if err := db.Get(&user, `SELECT * FROM users WHERE username=$1`, username); err != nil {
+	query, args, err := selectUserBuilder().Where("users.username=?", username).ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct select user query: %w", err)
+	}
+
+	var user userModel
+	if err := db.Get(&user, db.Rebind(query), args...); err != nil {
 		return nil, fmt.Errorf("failed to find user with username %s: %w", username, err)
 	}
 
@@ -79,16 +115,26 @@ func (store *Store) GetWithUsernameAndPassword(db database.Queryable, username [
 		return nil, fmt.Errorf("password supplied for user %s is invalid: %v", username, err)
 	}
 
-	return &user, nil
+	return userModelToUser(&user), nil
 }
 
 func (store *Store) GetWithId(db database.Queryable, id uuid.UUID) (*User, error) {
-	var user User
-	if err := db.Get(&user, `SELECT * FROM users WHERE id=$1`, id); err != nil {
+	query, args, err := selectUserBuilder().Where("users.id=?", id).ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct select user query: %w", err)
+	}
+
+	var user userModel
+	if err := db.Get(&user, db.Rebind(query), args...); err != nil {
 		return nil, ErrUserNotFound
 	}
 
-	return &user, nil
+	return userModelToUser(&user), nil
+}
+
+func (store *Store) RecordUpdate(db database.Queryable, userID uuid.UUID) error {
+	_, err := db.Exec(`UPDATE users SET updated_at=current_timestamp WHERE id = $1`, userID)
+	return err
 }
 
 func (store *Store) RecordLogin(db database.Queryable, userID uuid.UUID) error {
@@ -101,4 +147,51 @@ func (store *Store) RecordRefresh(db database.Queryable, userID uuid.UUID) error
 	return err
 }
 
-//TODO func (store *store) UpdatePermissions(username string, permissions []string) error {}
+func (store *Store) DropUserPermissions(db database.Queryable, userID uuid.UUID) error {
+	_, err := db.Exec(`DELETE FROM users_permissions WHERE user_id=$1`, userID)
+	return err
+}
+
+type Permission struct {
+	ID    uuid.UUID `db:"id"`
+	Label string    `db:"label"`
+}
+
+func (store *Store) GetPermissionsByLabel(db database.Queryable, permissionLabels []string) ([]Permission, error) {
+	var results []Permission
+	query, args, err := sqlx.In(`SELECT * FROM permissions WHERE label IN (?)`, permissionLabels)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Select(&results, db.Rebind(query), args...); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+func (store *Store) InsertUserPermissions(db database.Queryable, userID uuid.UUID, permissions []Permission) error {
+	_, err := db.NamedExec(`
+		INSERT INTO users_permissions(user_id, permission_id)
+		VALUES('`+userID.String()+`', :id)
+		ON CONFLICT(user_id, permission_id) DO NOTHING
+	`, permissions)
+	return err
+}
+
+func selectUserBuilder() squirrel.SelectBuilder {
+	return squirrel.
+		Select("users.*", "COALESCE(JSONB_AGG(DISTINCT permissions.label) FILTER (WHERE permissions.id IS NOT NULL), '[]') AS permissions").
+		From("users").
+		LeftJoin("users_permissions ON users_permissions.user_id = users.id").
+		LeftJoin("permissions ON permissions.id = users_permissions.permission_id").
+		GroupBy("users.id")
+}
+
+func userModelToUser(model *userModel) *User {
+	return &User{
+		userBase:    model.userBase,
+		Permissions: *model.Permissions.Get(),
+	}
+}

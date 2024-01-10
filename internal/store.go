@@ -581,3 +581,32 @@ func (orchestrator *storeOrchestrator) RecordUserLogin(userID uuid.UUID) error {
 func (orchestrator *storeOrchestrator) RecordUserRefresh(userID uuid.UUID) error {
 	return orchestrator.userStore.RecordRefresh(orchestrator.db.GetSqlxDb(), userID)
 }
+
+func (orchestrator *storeOrchestrator) UpdateUserPermissions(userID uuid.UUID, newPermissions []string) error {
+	return orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+		if err := orchestrator.userStore.DropUserPermissions(tx, userID); err != nil {
+			return err
+		}
+
+		if err := orchestrator.userStore.RecordUpdate(tx, userID); err != nil {
+			return err
+		}
+
+		if len(newPermissions) > 0 {
+			perms, err := orchestrator.userStore.GetPermissionsByLabel(tx, newPermissions)
+			if err != nil {
+				return err
+			}
+
+			if len(perms) != len(newPermissions) {
+				return errors.New("permissions provided are invalid")
+			}
+
+			if err := orchestrator.userStore.InsertUserPermissions(tx, userID, perms); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}

@@ -27,7 +27,13 @@ const (
 )
 
 type (
-	customClaims struct {
+	authTokenClaims struct {
+		jwt.RegisteredClaims
+		Permissions []string  `json:"permissions"`
+		UserID      uuid.UUID `json:"user_id"`
+	}
+
+	refreshTokenClaims struct {
 		jwt.RegisteredClaims
 		UserID uuid.UUID `json:"user_id"`
 	}
@@ -212,7 +218,7 @@ func setTokenCookie(ec echo.Context, name, token string, expiration time.Time) {
 
 func generateToken(userID uuid.UUID, expirationTime time.Time, secret []byte) (string, time.Time, error) {
 	// Create the JWT claims, which includes the username and expiry time
-	claims := &customClaims{
+	claims := &refreshTokenClaims{
 		UserID:           userID,
 		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(expirationTime)},
 	}

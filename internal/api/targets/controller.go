@@ -36,15 +36,17 @@ type (
 		GetAllTargets() []*ffmpeg.Target
 		DeleteTarget(uuid.UUID)
 	}
+	AuthProvider interface{}
 
 	Controller struct {
-		store     Store
-		validator *validator.Validate
+		store        Store
+		validator    *validator.Validate
+		authProvider AuthProvider
 	}
 )
 
-func New(validate *validator.Validate, store Store) *Controller {
-	return &Controller{store: store, validator: validate}
+func New(authProvider AuthProvider, validate *validator.Validate, store Store) *Controller {
+	return &Controller{authProvider: authProvider, store: store, validator: validate}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {

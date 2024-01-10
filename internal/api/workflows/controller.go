@@ -50,15 +50,17 @@ type (
 		UpdateWorkflow(uuid.UUID, *string, *[]match.Criteria, *[]uuid.UUID, *bool) (*workflow.Workflow, error)
 		GetManyTargets(...uuid.UUID) []*ffmpeg.Target
 	}
+	AuthProvider interface{}
 
 	Controller struct {
-		store    Store
-		validate *validator.Validate
+		store        Store
+		validate     *validator.Validate
+		authProvider AuthProvider
 	}
 )
 
-func New(validate *validator.Validate, store Store) *Controller {
-	return &Controller{store: store, validate: validate}
+func New(authProvider AuthProvider, validate *validator.Validate, store Store) *Controller {
+	return &Controller{authProvider: authProvider, store: store, validate: validate}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {

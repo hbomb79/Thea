@@ -17,8 +17,6 @@ var ErrUserNotFound = errors.New("user does not exist")
 var log = logger.Get("UserStore")
 
 type (
-	Permissions []string
-
 	userBase struct {
 		ID             uuid.UUID  `db:"id"`
 		Username       string     `db:"username"`
@@ -45,7 +43,7 @@ type (
 	// operations to be performed against the set of permissions
 	User struct {
 		userBase
-		Permissions Permissions
+		Permissions []string
 	}
 
 	Store struct {

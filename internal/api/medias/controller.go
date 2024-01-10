@@ -35,10 +35,12 @@ type (
 	TranscodeService interface {
 		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
 	}
+	AuthProvider interface{}
 
 	Controller struct {
 		store            Store
 		transcodeService TranscodeService
+		authProvider     AuthProvider
 	}
 )
 
@@ -56,8 +58,8 @@ var (
 	}
 )
 
-func New(validate *validator.Validate, transcodeService TranscodeService, store Store) *Controller {
-	return &Controller{store: store, transcodeService: transcodeService}
+func New(authProvider AuthProvider, validate *validator.Validate, transcodeService TranscodeService, store Store) *Controller {
+	return &Controller{authProvider: authProvider, store: store, transcodeService: transcodeService}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {

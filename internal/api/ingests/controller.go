@@ -48,11 +48,14 @@ type (
 		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
 	}
 
+	AuthProvider interface{}
+
 	// Controller is the struct which is responsible for defining the
 	// routes for this controller. Additionally, it holds the reference to
 	// the store used to retrieve information about ingests from Thea
 	Controller struct {
-		service IngestService
+		service      IngestService
+		authProvider AuthProvider
 	}
 )
 
@@ -71,8 +74,8 @@ const (
 	UNKNOWN_FAILURE      TroubleTypeDto = "UNKNOWN_FAILURE"
 )
 
-func New(validate *validator.Validate, serv IngestService) *Controller {
-	return &Controller{service: serv}
+func New(authProvider AuthProvider, validate *validator.Validate, serv IngestService) *Controller {
+	return &Controller{authProvider: authProvider, service: serv}
 }
 
 // Init accepts the Echo group for the ingest endpoints

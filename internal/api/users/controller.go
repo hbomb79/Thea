@@ -19,11 +19,21 @@ type (
 	UpdatePermissionsRequest struct {
 		Permissions []string `json:"permissions"`
 	}
+	AuthProvider interface{}
 
-	controller struct{ store Store }
+	controller struct {
+		authProvider AuthProvider
+
+		store Store
+	}
 )
 
-func NewController(store Store) *controller { return &controller{store} }
+func NewController(authProvider AuthProvider, store Store) *controller {
+	return &controller{
+		authProvider: authProvider,
+		store:        store,
+	}
+}
 
 func (controller *controller) SetRoutes(eg *echo.Group) {
 	eg.GET("/", controller.list)

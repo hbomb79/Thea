@@ -1,13 +1,17 @@
 package auth
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/user"
-	echojwt "github.com/labstack/echo-jwt/v4"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/labstack/echo/v4"
+)
+
+var (
+	errUnauthorized = echo.NewHTTPError(http.StatusUnauthorized)
+	log             = logger.Get("AuthController")
 )
 
 type (
@@ -16,6 +20,15 @@ type (
 		RecordUserRefresh(userID uuid.UUID) error
 		GetUserWithUsernameAndPassword(username []byte, rawPassword []byte) (*user.User, error)
 		GetUserWithID(ID uuid.UUID) (*user.User, error)
+	}
+
+	AuthProvider interface {
+		GetJwtRefreshMiddleware() echo.MiddlewareFunc
+		GetJwtVerifierMiddleware() echo.MiddlewareFunc
+		GetUserPermissionVerifierMiddleware(requiredPermissions []string) echo.MiddlewareFunc
+		Refresh(echo.Context) error
+		GenerateTokensAndSetCookies(ec echo.Context, userID uuid.UUID) error
+		GetUserIDFromContext(ec echo.Context) (*uuid.UUID, error)
 	}
 
 	LoginRequest struct {
@@ -28,31 +41,19 @@ type (
 	}
 
 	Controller struct {
-		store   Store
-		jwtAuth *jwtAuthProvider
+		store        Store
+		authProvider AuthProvider
 	}
 )
 
-func New(store Store) *Controller {
-	return &Controller{store, newJwtAuth(store, "myspecialsecret", "myevenmorespecialsecret")}
-}
-
-func (controller *Controller) GetJwtRefreshMiddleware() echo.MiddlewareFunc {
-	return controller.jwtAuth.jwtTokenRefresherMiddleware
-}
-
-func (controller *Controller) GetJwtVerifierMiddleware() echo.MiddlewareFunc {
-	return echojwt.WithConfig(echojwt.Config{
-		SigningKey:   []byte(controller.jwtAuth.authTokenSecret),
-		TokenLookup:  fmt.Sprintf("cookie:%s", authTokenCookieName),
-		ErrorHandler: func(ec echo.Context, err error) error { return echo.NewHTTPError(http.StatusUnauthorized) },
-	})
+func New(authProvider AuthProvider, store Store) *Controller {
+	return &Controller{store, authProvider}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.POST("/login/", controller.login)
 	eg.POST("/refresh/", controller.refresh)
-	eg.GET("/current-user/", controller.currentUser, controller.GetJwtVerifierMiddleware())
+	eg.GET("/current-user/", controller.currentUser, controller.authProvider.GetJwtVerifierMiddleware())
 }
 
 // login accepts a POST request containing the
@@ -74,7 +75,7 @@ func (controller *Controller) login(ec echo.Context) error {
 		return errUnauthorized
 	}
 
-	if err := controller.jwtAuth.generateTokensAndSetCookies(ec, user.ID); err != nil {
+	if err := controller.authProvider.GenerateTokensAndSetCookies(ec, user.ID); err != nil {
 		log.Warnf("Failed to authenticate due to error: %v\n", err)
 		return errUnauthorized
 	}
@@ -86,7 +87,7 @@ func (controller *Controller) login(ec echo.Context) error {
 // providing a valid refresh token. The new tokens are stored
 // in the requests cookies, same as login.
 func (controller *Controller) refresh(ec echo.Context) error {
-	if err := controller.jwtAuth.refresh(ec); err != nil {
+	if err := controller.authProvider.Refresh(ec); err != nil {
 		log.Errorf("Failed to refresh: %s\n", err)
 		return errUnauthorized
 	}
@@ -95,7 +96,7 @@ func (controller *Controller) refresh(ec echo.Context) error {
 }
 
 func (controller *Controller) currentUser(ec echo.Context) error {
-	userID, err := controller.jwtAuth.getUserIDFromContext(ec)
+	userID, err := controller.authProvider.GetUserIDFromContext(ec)
 	if err != nil {
 		log.Errorf("Failed to get current user due to error %v\n", err)
 		return errUnauthorized

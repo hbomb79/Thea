@@ -44,15 +44,17 @@ type (
 		GetAllTranscodes() ([]*transcode.Transcode, error)
 		DeleteTranscode(id uuid.UUID) error
 	}
+	AuthProvider interface{}
 
 	Controller struct {
 		transcodeService TranscodeService
 		store            Store
+		authProvider     AuthProvider
 	}
 )
 
-func New(validate *validator.Validate, transcodeService TranscodeService, store Store) *Controller {
-	return &Controller{transcodeService: transcodeService, store: store}
+func New(authProvider AuthProvider, validate *validator.Validate, transcodeService TranscodeService, store Store) *Controller {
+	return &Controller{authProvider: authProvider, transcodeService: transcodeService, store: store}
 }
 
 func (controller *Controller) SetRoutes(eg *echo.Group) {

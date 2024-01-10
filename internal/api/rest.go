@@ -38,12 +38,6 @@ type (
 		SetRoutes(*echo.Group)
 	}
 
-	AuthController interface {
-		Controller
-		GetJwtRefreshMiddleware() echo.MiddlewareFunc
-		GetJwtVerifierMiddleware() echo.MiddlewareFunc
-	}
-
 	// Store represents a union of all the controller store requirements, typically
 	// fulfilled by Thea's store orchestrator
 	Store interface {
@@ -74,7 +68,7 @@ type (
 		workflowController  Controller
 		mediaController     Controller
 		userController      Controller
-		authController      AuthController
+		authController      Controller
 	}
 )
 
@@ -96,18 +90,19 @@ func NewRestGateway(
 
 	validate := newValidator()
 	socket := websocket.New()
+	authProvider := NewJwtAuth(store, "myspecialsecret", "myevenmorespecialsecret")
 	gateway := &RestGateway{
 		broadcaster:         newBroadcaster(socket, ingestService, transcodeService, store),
 		config:              config,
 		ec:                  ec,
 		socket:              socket,
-		ingestController:    ingests.New(validate, ingestService),
-		transcodeController: transcodes.New(validate, transcodeService, store),
-		targetsController:   targets.New(validate, store),
-		workflowController:  workflows.New(validate, store),
-		mediaController:     medias.New(validate, transcodeService, store),
-		userController:      users.NewController(store),
-		authController:      auth.New(store),
+		ingestController:    ingests.New(authProvider, validate, ingestService),
+		transcodeController: transcodes.New(authProvider, validate, transcodeService, store),
+		targetsController:   targets.New(authProvider, validate, store),
+		workflowController:  workflows.New(authProvider, validate, store),
+		mediaController:     medias.New(authProvider, validate, transcodeService, store),
+		userController:      users.NewController(authProvider, store),
+		authController:      auth.New(authProvider, store),
 	}
 
 	ec.Pre(middleware.AddTrailingSlash())
@@ -119,8 +114,8 @@ func NewRestGateway(
 	auth := ec.Group("/api/thea/v1/auth")
 	gateway.authController.SetRoutes(auth)
 
-	autoRefresh := gateway.authController.GetJwtRefreshMiddleware()
-	protected := gateway.authController.GetJwtVerifierMiddleware()
+	autoRefresh := authProvider.GetJwtRefreshMiddleware()
+	protected := authProvider.GetJwtVerifierMiddleware()
 
 	ec.GET("/api/thea/v1/activity/ws/", func(ec echo.Context) error {
 		gateway.socket.UpgradeToSocket(ec.Response(), ec.Request())

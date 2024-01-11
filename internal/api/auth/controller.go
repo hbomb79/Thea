@@ -23,21 +23,18 @@ type (
 	}
 
 	AuthProvider interface {
-		GetJwtRefreshMiddleware() echo.MiddlewareFunc
-		GetJwtVerifierMiddleware() echo.MiddlewareFunc
-		GetUserPermissionVerifierMiddleware(requiredPermissions []string) echo.MiddlewareFunc
-		Refresh(echo.Context) error
+		GetAuthenticatedMiddleware() echo.MiddlewareFunc
+		GetPermissionAuthorizerMiddleware(requiredPermissions []string) echo.MiddlewareFunc
+		RefreshTokens(echo.Context) error
 		GenerateTokensAndSetCookies(ec echo.Context, userID uuid.UUID) error
 		GetUserIDFromContext(ec echo.Context) (*uuid.UUID, error)
+		RevokeTokensInContext(ec echo.Context)
+		RevokeAllForUser(userID uuid.UUID) error
 	}
 
 	LoginRequest struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
-	}
-
-	RefreshRequest struct {
-		RefreshToken string `json:"refresh_token"`
 	}
 
 	Controller struct {
@@ -53,7 +50,11 @@ func New(authProvider AuthProvider, store Store) *Controller {
 func (controller *Controller) SetRoutes(eg *echo.Group) {
 	eg.POST("/login/", controller.login)
 	eg.POST("/refresh/", controller.refresh)
-	eg.GET("/current-user/", controller.currentUser, controller.authProvider.GetJwtVerifierMiddleware())
+
+	authenticated := controller.authProvider.GetAuthenticatedMiddleware()
+	eg.GET("/logout/", controller.logoutSession, authenticated)
+	eg.GET("/logout-all/", controller.logoutAll, authenticated)
+	eg.GET("/current-user/", controller.currentUser, authenticated)
 }
 
 // login accepts a POST request containing the
@@ -83,11 +84,26 @@ func (controller *Controller) login(ec echo.Context) error {
 	return ec.JSON(http.StatusOK, user)
 }
 
+func (controller *Controller) logoutSession(ec echo.Context) error {
+	controller.authProvider.RevokeTokensInContext(ec)
+	return ec.NoContent(http.StatusOK)
+}
+
+func (controller *Controller) logoutAll(ec echo.Context) error {
+	id, err := controller.authProvider.GetUserIDFromContext(ec)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	controller.authProvider.RevokeAllForUser(*id)
+	return ec.NoContent(http.StatusOK)
+}
+
 // refresh allows a client to obtain a new auth and refresh token by
 // providing a valid refresh token. The new tokens are stored
 // in the requests cookies, same as login.
 func (controller *Controller) refresh(ec echo.Context) error {
-	if err := controller.authProvider.Refresh(ec); err != nil {
+	if err := controller.authProvider.RefreshTokens(ec); err != nil {
 		log.Errorf("Failed to refresh: %s\n", err)
 		return errUnauthorized
 	}

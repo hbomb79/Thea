@@ -23,7 +23,7 @@ const (
 	refreshTokenCookieName = "refresh-token"
 
 	authTokenLifespan    = time.Minute * 30
-	refreshTokenLifespan = time.Hour * 24
+	refreshTokenLifespan = time.Hour * 24 * 30 // 30 days
 )
 
 type (
@@ -39,14 +39,17 @@ type (
 	}
 
 	jwtAuthProvider struct {
-		store              Store
-		authTokenSecret    []byte
-		refreshTokenSecret []byte
-		refreshRoutePath   string
+		store                  Store
+		authTokenSecret        []byte
+		refreshTokenSecret     []byte
+		refreshTokenCookiePath string
 
 		// This map (acting as a set) is used to keep track of
 		// any token which we have explicitly revoked (for example,
 		// when a user logs out, the auth and refresh token are revoked).
+		//
+		// NB: Tokens are removed from this set when they are cleaned up
+		// (which happens automatically some time after their expiration).
 		blacklistedTokens *sync.TypedSyncMap[string, struct{}]
 
 		// This map is used to keep track of which tokens are currently
@@ -54,6 +57,13 @@ type (
 		// by the auth provider to clear out tokens shortly after they expire.
 		// When we wish to revoke all tokens associated with a specific user, we
 		// can use this map to fetch the tokens.
+		//
+		// NB: A token does NOT need to exist here in order to be valid, this
+		// is simply a mechanism to track active tokens for the purpose of
+		// revocation if requested.
+		//
+		// NB': Tokens are removed from this map when they are cleaned up
+		// (which happens automatically some time after their expiration).
 		userTokens *sync.TypedSyncMap[uuid.UUID, []string]
 	}
 )
@@ -75,29 +85,6 @@ func NewJwtAuth(store Store, refreshRoutePath string, authTokenSecret []byte, re
 		refreshRoutePath,
 		new(sync.TypedSyncMap[string, struct{}]),
 		new(sync.TypedSyncMap[uuid.UUID, []string])}
-}
-
-// scheduleUserTokenCleanup will remove the specified token from the users token map
-// at the time specified. This allows for us to store any newly generated
-// user tokens inside the map without worrying about the size of the map
-// growing with no limit
-func (auth *jwtAuthProvider) scheduleUserTokenCleanup(userID uuid.UUID, token string, expiry time.Time) {
-	until := time.Until(expiry.Add(time.Second * 5))
-	log.Debugf("Scheduling cleanup of a token for user %s in %s\n", userID, until)
-
-	time.AfterFunc(until, func() {
-		log.Debugf("Cleaning up token %s for user %s as it has expired (~5 seconds ago)\n", token, userID)
-
-		// Clear from blacklist as it won't be accepted now due to expiring anyway
-		auth.blacklistedTokens.Delete(token)
-
-		// Clear from our user tokens mapping as the token will not need to be revoked now that it has expired
-		userTokens, ok := auth.userTokens.Load(userID)
-		if ok && len(userTokens) > 0 {
-			newUserTokens := slices.DeleteFunc(userTokens, func(tk string) bool { return tk == token })
-			auth.userTokens.Store(userID, newUserTokens)
-		}
-	})
 }
 
 // generateTokensAndSetCookies generates an auth token and a refresh token
@@ -126,7 +113,7 @@ func (auth *jwtAuthProvider) GenerateTokensAndSetCookies(ec echo.Context, userID
 
 	// Update client cookies
 	setTokenCookie(ec, authTokenCookieName, "/", authToken, authTokenExp)
-	setTokenCookie(ec, refreshTokenCookieName, auth.refreshRoutePath, refreshToken, refreshTokenExp)
+	setTokenCookie(ec, refreshTokenCookieName, auth.refreshTokenCookiePath, refreshToken, refreshTokenExp)
 
 	// Update our tracked list of tokens for this user, and schedule cleanup
 	// of this token
@@ -158,6 +145,9 @@ func (auth *jwtAuthProvider) revokeToken(token string) {
 	auth.blacklistedTokens.Store(token, struct{}{})
 }
 
+// RevokeAllForUser finds all the tokens we've granted to a specified
+// user ID and revokes all of them (if any). This will require that the
+// specified user logs in again on all of their devices.
 func (auth *jwtAuthProvider) RevokeAllForUser(userID uuid.UUID) error {
 	grantedTokens, ok := auth.userTokens.Load(userID)
 	if !ok || len(grantedTokens) == 0 {
@@ -179,7 +169,7 @@ func (auth *jwtAuthProvider) RefreshTokens(ec echo.Context) error {
 		return fmt.Errorf("failed to refresh: %w", err)
 	}
 
-	claims := auth.GetJwtClaimsFromToken(token)
+	claims := token.Claims.(*jwt.MapClaims)
 	userID, err := auth.GetUserIdFromClaims(*claims)
 	if err != nil {
 		return fmt.Errorf("failed to refresh: %w", err)
@@ -200,29 +190,6 @@ func (auth *jwtAuthProvider) GetUserIdFromClaims(claims jwt.MapClaims) (*uuid.UU
 	}
 }
 
-func (auth *jwtAuthProvider) GetPermissionsFromClaims(claims jwt.MapClaims) ([]string, error) {
-	if permissions, ok := claims["permissions"]; ok {
-		perms, ok := permissions.([]interface{})
-		if !ok {
-			return nil, fmt.Errorf("failed to extract permissions from JWT claims: not of type []string")
-		}
-
-		outputPerms := make([]string, len(perms))
-		for k, v := range perms {
-			p, ok := v.(string)
-			if !ok {
-				return nil, fmt.Errorf("failed to extract permissions from JWT claims: value %v could not be cast to string", v)
-			}
-
-			outputPerms[k] = p
-		}
-
-		return outputPerms, nil
-	} else {
-		return nil, errors.New("failed to extract permissions from JWT claims: missing")
-	}
-}
-
 func (auth *jwtAuthProvider) GetJwtClaimsFromContext(ec echo.Context) (*jwt.MapClaims, error) {
 	if ec.Get("user") == nil {
 		return nil, errors.New("no user found in request context")
@@ -231,10 +198,6 @@ func (auth *jwtAuthProvider) GetJwtClaimsFromContext(ec echo.Context) (*jwt.MapC
 	u := ec.Get("user").(*jwt.Token)
 	claims := u.Claims.(*jwt.MapClaims)
 	return claims, nil
-}
-
-func (auth *jwtAuthProvider) GetJwtClaimsFromToken(token *jwt.Token) *jwt.MapClaims {
-	return token.Claims.(*jwt.MapClaims)
 }
 
 func (auth *jwtAuthProvider) GetUserIDFromContext(ec echo.Context) (*uuid.UUID, error) {
@@ -276,7 +239,7 @@ func (auth *jwtAuthProvider) GetPermissionAuthorizerMiddleware(requiredPermissio
 				return errUnauthorized
 			}
 
-			permissions, err := auth.GetPermissionsFromClaims(*claims)
+			permissions, err := auth.getPermissionsFromClaims(*claims)
 			if err != nil {
 				log.Errorf("Failed to extract user permissions from user JWT claims: %s\n", err)
 				return errUnauthorized
@@ -291,6 +254,29 @@ func (auth *jwtAuthProvider) GetPermissionAuthorizerMiddleware(requiredPermissio
 
 			return next(ec)
 		}
+	}
+}
+
+func (auth *jwtAuthProvider) getPermissionsFromClaims(claims jwt.MapClaims) ([]string, error) {
+	if permissions, ok := claims["permissions"]; ok {
+		perms, ok := permissions.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("failed to extract permissions from JWT claims: not of type []string")
+		}
+
+		outputPerms := make([]string, len(perms))
+		for k, v := range perms {
+			p, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("failed to extract permissions from JWT claims: value %v could not be cast to string", v)
+			}
+
+			outputPerms[k] = p
+		}
+
+		return outputPerms, nil
+	} else {
+		return nil, errors.New("failed to extract permissions from JWT claims: missing")
 	}
 }
 
@@ -341,6 +327,14 @@ func (auth *jwtAuthProvider) validateTokenFromCookies(ec echo.Context, tokenName
 	return auth.validateToken(cookieToken.Value, secret)
 }
 
+// generateAccessToken accepts a userID and generates a short-term token
+// which can be used to authenticate against protected API endpoints. This
+// token also includes the associated user permissions at the time of
+// generation, which allows for the server to restrict access to certain
+// endpoints if the user does not have the required permissions.
+//
+// (Shortly) before this token expires, it is expected that the client will
+// refresh their tokens using their refreshToken.
 func (auth *jwtAuthProvider) generateAccessToken(userID uuid.UUID) (string, time.Time, error) {
 	user, err := auth.store.GetUserWithID(userID)
 	if err != nil {
@@ -362,6 +356,8 @@ func (auth *jwtAuthProvider) generateAccessToken(userID uuid.UUID) (string, time
 	return token, exp, nil
 }
 
+// generateRefreshToken accepts a userID and generates a long-life token
+// which can be used to generate more auth tokens by the client.
 func (auth *jwtAuthProvider) generateRefreshToken(userID uuid.UUID) (string, time.Time, error) {
 	_, err := auth.store.GetUserWithID(userID)
 	if err != nil {
@@ -380,6 +376,29 @@ func (auth *jwtAuthProvider) generateRefreshToken(userID uuid.UUID) (string, tim
 	}
 
 	return token, exp, nil
+}
+
+// scheduleUserTokenCleanup will remove the specified token from the users token map
+// at the time specified. This allows for us to store any newly generated
+// user tokens inside the map without worrying about the size of the map
+// growing with no limit
+func (auth *jwtAuthProvider) scheduleUserTokenCleanup(userID uuid.UUID, token string, expiry time.Time) {
+	until := time.Until(expiry.Add(time.Second * 5))
+	log.Debugf("Scheduling cleanup of a token for user %s in %s\n", userID, until)
+
+	time.AfterFunc(until, func() {
+		log.Debugf("Cleaning up token %s for user %s as it has expired (~5 seconds ago)\n", token, userID)
+
+		// Clear from blacklist as it won't be accepted now due to expiring anyway
+		auth.blacklistedTokens.Delete(token)
+
+		// Clear from our user tokens mapping as the token will not need to be revoked now that it has expired
+		userTokens, ok := auth.userTokens.Load(userID)
+		if ok && len(userTokens) > 0 {
+			newUserTokens := slices.DeleteFunc(userTokens, func(tk string) bool { return tk == token })
+			auth.userTokens.Store(userID, newUserTokens)
+		}
+	})
 }
 
 func setTokenCookie(ec echo.Context, name string, path string, token string, expiration time.Time) {

@@ -24,7 +24,7 @@ type (
 
 	AuthProvider interface {
 		GetAuthenticatedMiddleware() echo.MiddlewareFunc
-		GetPermissionAuthorizerMiddleware(requiredPermissions []string) echo.MiddlewareFunc
+		GetPermissionAuthorizerMiddleware(requiredPermissions ...string) echo.MiddlewareFunc
 		RefreshTokens(echo.Context) error
 		GenerateTokensAndSetCookies(ec echo.Context, userID uuid.UUID) error
 		GetUserIDFromContext(ec echo.Context) (*uuid.UUID, error)

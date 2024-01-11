@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/media"
+	"github.com/hbomb79/Thea/internal/user/permissions"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/labstack/echo/v4"
 )
@@ -48,7 +49,9 @@ type (
 		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
 	}
 
-	AuthProvider interface{}
+	AuthProvider interface {
+		GetPermissionAuthorizerMiddleware(requiredPermissions ...string) echo.MiddlewareFunc
+	}
 
 	// Controller is the struct which is responsible for defining the
 	// routes for this controller. Additionally, it holds the reference to
@@ -81,11 +84,12 @@ func New(authProvider AuthProvider, validate *validator.Validate, serv IngestSer
 // Init accepts the Echo group for the ingest endpoints
 // and sets the routes on them.
 func (controller *Controller) SetRoutes(eg *echo.Group) {
-	eg.GET("/", controller.list)
-	eg.POST("/poll/", controller.performPoll)
-	eg.GET("/:id/", controller.get)
-	eg.DELETE("/:id/", controller.delete)
-	eg.POST("/:id/trouble-resolution/", controller.postTroubleResolution)
+	hasPerms := controller.authProvider.GetPermissionAuthorizerMiddleware
+	eg.GET("/", controller.list, hasPerms(permissions.ViewIngestsPermission))
+	eg.POST("/poll/", controller.performPoll, hasPerms(permissions.PollNewIngestsPermission))
+	eg.GET("/:id/", controller.get, hasPerms(permissions.ViewIngestsPermission))
+	eg.DELETE("/:id/", controller.delete, hasPerms(permissions.DeleteIngestsPermission))
+	eg.POST("/:id/trouble-resolution/", controller.postTroubleResolution, hasPerms(permissions.ResolveTroubledIngestsPermission))
 }
 
 // list returns all the ingests - represented as DTOs - from the underlying store.

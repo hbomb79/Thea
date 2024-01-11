@@ -58,21 +58,22 @@ func NewStore() *Store {
 	}
 }
 
-func (store *Store) Create(db database.Queryable, username []byte, rawPassword []byte) error {
+func (store *Store) Create(db database.Queryable, username []byte, rawPassword []byte) (*User, error) {
 	hash, err := store.hasher.GenerateHash(rawPassword, []byte{})
 	if err != nil {
-		return fmt.Errorf("provided password is invalid: %w", err)
+		return nil, fmt.Errorf("provided password is invalid: %w", err)
 	}
 
-	_, err = db.Exec(`
+	var user userBase
+	if err := db.Get(&user, `
 		INSERT INTO users(id, username, password, salt, created_at, updated_at, last_login, last_refresh)
 		VALUES ($1, $2, $3, $4, current_timestamp, current_timestamp, NULL, NULL)
-	`, uuid.New(), username, hash.hash, hash.salt)
-	if err != nil {
-		return fmt.Errorf("failed to insert new user: %w", err)
+		RETURNING *
+	`, uuid.New(), username, hash.hash, hash.salt); err != nil {
+		return nil, fmt.Errorf("failed to insert new user: %w", err)
 	}
 
-	return nil
+	return &User{user, []string{}}, nil
 }
 
 func (store *Store) List(db database.Queryable) ([]*User, error) {

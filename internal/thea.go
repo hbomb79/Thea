@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/transcode"
+	"github.com/hbomb79/Thea/internal/user/permissions"
 	"github.com/hbomb79/Thea/pkg/docker"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
@@ -122,6 +124,9 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to construct data orchestrator: %w", err)
 	}
 	thea.storeOrchestrator = store
+	if err := thea.syncDbPermissions(); err != nil {
+		return fmt.Errorf("failed to sync db permissions: %w", err)
+	}
 	if err := thea.createInitialUserIfNonePresent(); err != nil {
 		return fmt.Errorf("failed to create initial user: %w", err)
 	}
@@ -200,16 +205,31 @@ func (thea *theaImpl) initialiseDockerServices(config TheaConfig, crashHandler f
 	return nil
 }
 
+func (thea *theaImpl) syncDbPermissions() error {
+	// Raise an error if a permission has been removed - a manual DB migration should be performed
+	// to protect against accidental removal of a permission
+	allPerms := permissions.All()
+	outstanding, err := thea.storeOrchestrator.anyOutstandingPermissions(allPerms...)
+	if err != nil {
+		return err
+	}
+	if outstanding {
+		return errors.New("permissions have been removed from code but still exist in db, manual migration required")
+	}
+
+	return thea.storeOrchestrator.createPermissions(permissions.All()...)
+}
+
 func (thea *theaImpl) createInitialUserIfNonePresent() error {
 	users, err := thea.storeOrchestrator.ListUsers()
 	if err != nil {
-		log.Warnf("Failed to check for existing users due to error: %s\n", err)
-		return nil
+		return fmt.Errorf("failed to check for existing users during bootstrapping: %w", err)
 	} else if len(users) > 0 {
 		log.Debugf("Existing users found (%d), not creating initial user\n", len(users))
 		return nil
 	}
 
 	log.Emit(logger.NEW, "No existing users found, creating initial user [username='admin', password=REDACTED {refer to your configuration}]\n")
-	return thea.storeOrchestrator.CreateUser([]byte("admin"), []byte("admin"))
+	_, err = thea.storeOrchestrator.CreateUser([]byte("admin"), []byte("admin"), permissions.All()...)
+	return err
 }

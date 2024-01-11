@@ -224,7 +224,7 @@ func (auth *jwtAuthProvider) GetAuthenticatedMiddleware() echo.MiddlewareFunc {
 	})
 }
 
-func (auth *jwtAuthProvider) GetPermissionAuthorizerMiddleware(requiredPermissions []string) echo.MiddlewareFunc {
+func (auth *jwtAuthProvider) GetPermissionAuthorizerMiddleware(requiredPermissions ...string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(ec echo.Context) error {
 			claims, err := auth.GetJwtClaimsFromContext(ec)

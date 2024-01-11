@@ -566,8 +566,25 @@ func (orchestrator *storeOrchestrator) GetUserWithID(id uuid.UUID) (*user.User, 
 	return orchestrator.userStore.GetWithId(orchestrator.db.GetSqlxDb(), id)
 }
 
-func (orchestrator *storeOrchestrator) CreateUser(username []byte, password []byte) error {
-	return orchestrator.userStore.Create(orchestrator.db.GetSqlxDb(), username, password)
+func (orchestrator *storeOrchestrator) CreateUser(username []byte, password []byte, permissions ...string) (*user.User, error) {
+	if len(permissions) == 0 {
+		return orchestrator.userStore.Create(orchestrator.db.GetSqlxDb(), username, password)
+	}
+
+	var outputUser *user.User
+	if err := orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
+		user, err := orchestrator.userStore.Create(tx, username, password)
+		if err != nil {
+			return err
+		}
+
+		outputUser = user
+		return orchestrator.updateUserPermissionsQuery(tx, user.ID, permissions)
+	}); err != nil {
+		return nil, err
+	}
+
+	return outputUser, nil
 }
 
 func (orchestrator *storeOrchestrator) ListUsers() ([]*user.User, error) {
@@ -583,30 +600,65 @@ func (orchestrator *storeOrchestrator) RecordUserRefresh(userID uuid.UUID) error
 }
 
 func (orchestrator *storeOrchestrator) UpdateUserPermissions(userID uuid.UUID, newPermissions []string) error {
-	return orchestrator.db.WrapTx(func(tx *sqlx.Tx) error {
-		if err := orchestrator.userStore.DropUserPermissions(tx, userID); err != nil {
+	return orchestrator.db.WrapTx(func(tx *sqlx.Tx) error { return orchestrator.updateUserPermissionsQuery(tx, userID, newPermissions) })
+}
+
+func (orchestrator *storeOrchestrator) updateUserPermissionsQuery(tx *sqlx.Tx, userID uuid.UUID, newPermissions []string) error {
+	if err := orchestrator.userStore.DropUserPermissions(tx, userID); err != nil {
+		return err
+	}
+
+	if err := orchestrator.userStore.RecordUpdate(tx, userID); err != nil {
+		return err
+	}
+
+	if len(newPermissions) > 0 {
+		perms, err := orchestrator.userStore.GetPermissionsByLabel(tx, newPermissions)
+		if err != nil {
 			return err
 		}
 
-		if err := orchestrator.userStore.RecordUpdate(tx, userID); err != nil {
+		if len(perms) != len(newPermissions) {
+			return errors.New("permissions provided are invalid")
+		}
+
+		if err := orchestrator.userStore.InsertUserPermissions(tx, userID, perms); err != nil {
 			return err
 		}
+	}
 
-		if len(newPermissions) > 0 {
-			perms, err := orchestrator.userStore.GetPermissionsByLabel(tx, newPermissions)
-			if err != nil {
-				return err
-			}
+	return nil
+}
+func (orchestrator *storeOrchestrator) anyOutstandingPermissions(permissions ...string) (bool, error) {
+	query, args, err := sqlx.In(`SELECT COUNT(*) FROM permissions WHERE label NOT IN(?)`, permissions)
+	if err != nil {
+		return false, err
+	}
 
-			if len(perms) != len(newPermissions) {
-				return errors.New("permissions provided are invalid")
-			}
+	var count int
+	db := orchestrator.db.GetSqlxDb()
+	if err := db.Get(&count, db.Rebind(query), args...); err != nil {
+		return false, err
+	}
 
-			if err := orchestrator.userStore.InsertUserPermissions(tx, userID, perms); err != nil {
-				return err
-			}
-		}
+	return count > 0, nil
+}
 
-		return nil
-	})
+func (orchestrator *storeOrchestrator) createPermissions(permissions ...string) error {
+	type p struct {
+		ID    uuid.UUID `db:"id"`
+		Label string    `db:"label"`
+	}
+
+	perms := make([]p, len(permissions))
+	for k, v := range permissions {
+		perms[k] = p{uuid.New(), v}
+	}
+
+	_, err := orchestrator.db.GetSqlxDb().NamedExec(
+		`INSERT INTO permissions(id, label) VALUES (:id, :label) ON CONFLICT(label) DO NOTHING`,
+		perms,
+	)
+
+	return err
 }

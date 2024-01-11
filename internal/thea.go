@@ -14,6 +14,7 @@ import (
 	"github.com/hbomb79/Thea/internal/http/tmdb"
 	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/media"
+	"github.com/hbomb79/Thea/internal/stream"
 	"github.com/hbomb79/Thea/internal/transcode"
 	"github.com/hbomb79/Thea/pkg/docker"
 	"github.com/hbomb79/Thea/pkg/logger"
@@ -56,6 +57,12 @@ type (
 		DiscoverNewFiles()
 		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
 	}
+
+	StreamService interface {
+		RunnableService
+		GetStreamManifestContent(*media.Container, stream.StreamMethod) (string, error)
+		GetStreamSegmentContent(*media.Container, stream.StreamMethod, int) ([]byte, error)
+	}
 )
 
 const (
@@ -75,6 +82,7 @@ type theaImpl struct {
 	restGateway      RestGateway
 	ingestService    IngestService
 	transcodeService TranscodeService
+	streamService    StreamService
 }
 
 func New(config TheaConfig) *theaImpl {
@@ -137,7 +145,17 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to construct transcode service due to error: %w", err)
 	}
 
-	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, &thea.config.Format, thea.storeOrchestrator)
+	streamConfig := stream.StreamConfig{
+		FfprobeBinPath: thea.config.Format.FfprobeBinaryPath,
+		FfmpegBinPath:  thea.config.Format.FfmpegBinaryPath,
+	}
+	if serv, err := stream.New(streamConfig); err == nil {
+		thea.streamService = serv
+	} else {
+		return fmt.Errorf("failed to construct transcode service due to error: %w", err)
+	}
+
+	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.streamService, thea.storeOrchestrator)
 	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
 
 	wg := &sync.WaitGroup{}
@@ -146,6 +164,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	go thea.spawnService(ctx, wg, thea.transcodeService, "transcode-service", crashHandler)
 	go thea.spawnService(ctx, wg, thea.restGateway, "rest-gateway", crashHandler)
 	go thea.spawnService(ctx, wg, thea.activityManager, "activity-manager", crashHandler)
+	go thea.spawnService(ctx, wg, thea.streamService, "stream-service", crashHandler)
 	log.Emit(logger.SUCCESS, "Thea services spawned! [CTRL+C to stop]\n")
 
 	wg.Wait()

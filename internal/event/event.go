@@ -4,6 +4,7 @@ package event
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/pkg/logger"
@@ -42,6 +43,7 @@ type (
 	}
 
 	eventHandler struct {
+		sync.Mutex
 		fnHandlers   map[Event][]handlerMethod
 		chanHandlers map[Event][]HandlerChannel
 	}
@@ -72,6 +74,7 @@ const (
 
 func New() EventCoordinator {
 	return &eventHandler{
+		Mutex:        sync.Mutex{},
 		fnHandlers:   make(map[Event][]handlerMethod),
 		chanHandlers: make(map[Event][]HandlerChannel),
 	}
@@ -85,6 +88,9 @@ func New() EventCoordinator {
 // then the thread dispatching the event will also be BLOCKED. It is recomended to buffer the handler channels
 // appropiately to avoid dispatcher-side blocking.
 func (handler *eventHandler) RegisterHandlerChannel(handle HandlerChannel, events ...Event) {
+	handler.Lock()
+	defer handler.Unlock()
+
 	for _, event := range events {
 		handler.chanHandlers[event] = append(handler.chanHandlers[event], handle)
 	}
@@ -108,6 +114,9 @@ func (handler *eventHandler) RegisterAsyncHandlerFunction(event Event, handle Ha
 // registerHandlerMethod is the internal implementation for both RegisterHandlerFunction and
 // RegisterAsyncHandlerFunction.
 func (handler *eventHandler) registerHandlerMethod(event Event, handle handlerMethod) {
+	handler.Lock()
+	defer handler.Unlock()
+
 	handler.fnHandlers[event] = append(handler.fnHandlers[event], handle)
 }
 

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/pkg/sync"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 )
@@ -25,35 +25,6 @@ const (
 	authTokenLifespan    = time.Minute * 30
 	refreshTokenLifespan = time.Hour * 24
 )
-
-type TypedSyncMap[K comparable, V any] struct {
-	m sync.Map
-}
-
-func (m *TypedSyncMap[K, V]) Delete(key K) { m.m.Delete(key) }
-
-func (m *TypedSyncMap[K, V]) Load(key K) (value V, ok bool) {
-	v, ok := m.m.Load(key)
-	if !ok {
-		return value, ok
-	}
-	return v.(V), ok
-}
-
-func (m *TypedSyncMap[K, V]) LoadAndDelete(key K) (value V, loaded bool) {
-	v, loaded := m.m.LoadAndDelete(key)
-	if !loaded {
-		return value, loaded
-	}
-	return v.(V), loaded
-}
-
-func (m *TypedSyncMap[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
-	a, loaded := m.m.LoadOrStore(key, value)
-	return a.(V), loaded
-}
-
-func (m *TypedSyncMap[K, V]) Store(key K, value V) { m.m.Store(key, value) }
 
 type (
 	authTokenClaims struct {
@@ -76,14 +47,14 @@ type (
 		// This map (acting as a set) is used to keep track of
 		// any token which we have explicitly revoked (for example,
 		// when a user logs out, the auth and refresh token are revoked).
-		blacklistedTokens *TypedSyncMap[string, struct{}]
+		blacklistedTokens *sync.TypedSyncMap[string, struct{}]
 
 		// This map is used to keep track of which tokens are currently
 		// 'active' for each user. This map is automatically monitored
 		// by the auth provider to clear out tokens shortly after they expire.
 		// When we wish to revoke all tokens associated with a specific user, we
 		// can use this map to fetch the tokens.
-		userTokens *TypedSyncMap[uuid.UUID, []string]
+		userTokens *sync.TypedSyncMap[uuid.UUID, []string]
 	}
 )
 
@@ -102,8 +73,8 @@ func NewJwtAuth(store Store, refreshRoutePath string, authTokenSecret []byte, re
 		authTokenSecret,
 		refreshTokenSecret,
 		refreshRoutePath,
-		new(TypedSyncMap[string, struct{}]),
-		new(TypedSyncMap[uuid.UUID, []string])}
+		new(sync.TypedSyncMap[string, struct{}]),
+		new(sync.TypedSyncMap[uuid.UUID, []string])}
 }
 
 // scheduleUserTokenCleanup will remove the specified token from the users token map

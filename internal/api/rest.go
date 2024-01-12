@@ -3,13 +3,17 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/hbomb79/Thea/internal/api/auth"
+	"github.com/hbomb79/Thea/internal/api/gen"
 	"github.com/hbomb79/Thea/internal/api/ingests"
+	"github.com/hbomb79/Thea/internal/api/jwt"
 	"github.com/hbomb79/Thea/internal/api/medias"
 	"github.com/hbomb79/Thea/internal/api/targets"
 	"github.com/hbomb79/Thea/internal/api/transcodes"
@@ -48,6 +52,7 @@ type (
 		medias.Store
 		auth.Store
 		users.Store
+		jwt.Store
 	}
 
 	TranscodeService interface {
@@ -60,16 +65,10 @@ type (
 	// and to enforce authc + authz middleware where applicable.
 	RestGateway struct {
 		*broadcaster
-		config              *RestConfig
-		ec                  *echo.Echo
-		socket              *websocket.SocketHub
-		ingestController    Controller
-		transcodeController Controller
-		targetsController   Controller
-		workflowController  Controller
-		mediaController     Controller
-		userController      Controller
-		authController      Controller
+		config    *RestConfig
+		ec        *echo.Echo
+		socket    *websocket.SocketHub
+		validator *validator.Validate
 	}
 )
 
@@ -82,74 +81,54 @@ func NewRestGateway(
 	transcodeService TranscodeService,
 	store Store,
 ) *RestGateway {
+	// -- Setup JWT auth provider --
+	authKey, refreshKey, err := newJwtSigningKeys()
+	if err != nil {
+		panic(err)
+	}
+	authProvider := jwt.NewJwtAuth(store, "/api/thea/v1/auth/", authKey, refreshKey)
+
+	// -- Setup Middleware --
 	ec := echo.New()
 	ec.OnAddRouteHandler = func(_ string, route echo.Route, _ echo.HandlerFunc, _ []echo.MiddlewareFunc) {
 		log.Emit(logger.DEBUG, "Registered new route %s %s\n", route.Method, route.Path)
 	}
 	ec.HidePort = true
 	ec.HideBanner = true
+	ec.Pre(middleware.RemoveTrailingSlash())
+	ec.Use(
+		authProvider.GetSecurityValidatorMiddleware(),
+		middleware.CORSWithConfig(middleware.CORSConfig{
+			AllowOrigins: []string{"*"},
+			// AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAccessControlAllowOrigin},
+			// AllowMethods: []string{echo.OPTIONS, echo.GET, echo.HEAD, echo.PUT, echo.PATCH, echo.POST, echo.DELETE},
+		}),
+		middleware.Recover(),
+		middleware.LoggerWithConfig(middleware.LoggerConfig{
+			Format: "[Request] ${time_rfc3339} :: ${method} ${uri} -> ${status} ${error} {ip=${remote_ip}, user_agent=${user_agent}}\n",
+		}),
+	)
 
-	validate := newValidator()
+	// -- Setup gateway --
 	socket := websocket.New()
-
-	authKey, refreshKey, err := newJwtSigningKeys()
-	if err != nil {
-		panic(err)
-	}
-
-	authProvider := NewJwtAuth(store, "/api/thea/v1/auth/", authKey, refreshKey)
-
 	gateway := &RestGateway{
-		broadcaster:         newBroadcaster(socket, ingestService, transcodeService, store),
-		config:              config,
-		ec:                  ec,
-		socket:              socket,
-		ingestController:    ingests.New(authProvider, validate, ingestService),
-		transcodeController: transcodes.New(authProvider, validate, transcodeService, store),
-		targetsController:   targets.New(authProvider, validate, store),
-		workflowController:  workflows.New(authProvider, validate, store),
-		mediaController:     medias.New(authProvider, validate, transcodeService, store),
-		userController:      users.NewController(authProvider, store),
-		authController:      auth.New(authProvider, store),
+		broadcaster: newBroadcaster(socket, ingestService, transcodeService, store),
+		config:      config,
+		ec:          ec,
+		socket:      socket,
 	}
 
-	ec.Pre(middleware.AddTrailingSlash())
-	ec.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-		Format: "[Request] ${time_rfc3339} :: ${method} ${uri} -> ${status} ${error} {ip=${remote_ip}, user_agent=${user_agent}}\n",
-	}))
-	ec.Use(middleware.Recover())
+	var serverImpl = gen.NewStrictHandler(newServerImpl(
+		ingests.New(ingestService),
+		transcodes.New(transcodeService, store),
+		targets.New(store),
+		workflows.New(store),
+		medias.New(transcodeService, store),
+		users.NewController(store),
+		auth.New(authProvider, store),
+	), []gen.StrictMiddlewareFunc{requestBodyValidatorMiddleware})
 
-	auth := ec.Group("/api/thea/v1/auth")
-	gateway.authController.SetRoutes(auth)
-
-	// NB: this middleware must come before any other attempt
-	// to access the user token (including other middleware)
-	// as it populates the token in the request context!
-	authenticated := authProvider.GetAuthenticatedMiddleware()
-
-	ec.GET("/api/thea/v1/activity/ws/", func(ec echo.Context) error {
-		gateway.socket.UpgradeToSocket(ec.Response(), ec.Request())
-		return nil
-	}, authenticated)
-
-	ingests := ec.Group("/api/thea/v1/ingests", authenticated)
-	gateway.ingestController.SetRoutes(ingests)
-
-	transcodes := ec.Group("/api/thea/v1/transcodes", authenticated)
-	gateway.transcodeController.SetRoutes(transcodes)
-
-	transcodeTargets := ec.Group("/api/thea/v1/transcode-targets", authenticated)
-	gateway.targetsController.SetRoutes(transcodeTargets)
-
-	transcodeWorkflows := ec.Group("/api/thea/v1/transcode-workflows", authenticated)
-	gateway.workflowController.SetRoutes(transcodeWorkflows)
-
-	media := ec.Group("/api/thea/v1/media", authenticated)
-	gateway.mediaController.SetRoutes(media)
-
-	users := ec.Group("/api/thea/v1/users", authenticated)
-	gateway.userController.SetRoutes(users)
-
+	gen.RegisterHandlersWithBaseURL(ec, serverImpl, "/api/thea/v1")
 	return gateway
 }
 
@@ -196,7 +175,7 @@ func newJwtSigningKeys() ([]byte, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	refreshSecret, err := randomSecret(64) //512 bbits
+	refreshSecret, err := randomSecret(64) //512 bits
 	if err != nil {
 		return nil, nil, err
 	}
@@ -204,6 +183,21 @@ func newJwtSigningKeys() ([]byte, []byte, error) {
 	return authSecret, refreshSecret, nil
 }
 
+// Middleware to run Echo validator (see newValidator) against all incoming requests
+func requestBodyValidatorMiddleware(f gen.StrictHandlerFunc, _ string) gen.StrictHandlerFunc {
+	validator := newValidator()
+	return func(ctx echo.Context, i interface{}) (interface{}, error) {
+		if err := validator.Struct(i); err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("request body malformed: %s", err))
+		}
+		return f(ctx, i)
+	}
+}
+
+// newValidator returns a validator which is used to validate the request
+// body structs of all incoming requests. Any 'validate' tags on request
+// structs (in the OpenAPI spec) must have their implementation here (excluding
+// built-ins such as 'required').
 func newValidator() *validator.Validate {
 	validate := validator.New()
 	validate.RegisterValidation("alphaNumericWhitespaceTrimmed", func(fl validator.FieldLevel) bool {

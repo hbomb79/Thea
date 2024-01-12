@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/api/gen"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/transcode"
@@ -35,12 +35,10 @@ type (
 	TranscodeService interface {
 		ActiveTasksForMedia(mediaID uuid.UUID) []*transcode.TranscodeTask
 	}
-	AuthProvider interface{}
 
-	Controller struct {
+	MediaController struct {
 		store            Store
 		transcodeService TranscodeService
-		authProvider     AuthProvider
 	}
 )
 
@@ -58,37 +56,18 @@ var (
 	}
 )
 
-func New(authProvider AuthProvider, validate *validator.Validate, transcodeService TranscodeService, store Store) *Controller {
-	return &Controller{authProvider: authProvider, store: store, transcodeService: transcodeService}
-}
-
-func (controller *Controller) SetRoutes(eg *echo.Group) {
-	eg.GET("/", controller.list)
-	eg.GET("/genres/", controller.listGenres)
-
-	eg.GET("/movie/:id/", controller.getMovie)
-	eg.DELETE("/movie/:id/", controller.deleteMovie)
-
-	eg.GET("/series/:id/", controller.getSeries)
-
-	eg.GET("/episode/:id/", controller.getEpisode)
-
-	eg.DELETE("/series/:id/", controller.deleteSeries)
-	eg.DELETE("/season/:id/", controller.deleteSeason)
-	eg.DELETE("/episode/:id/", controller.deleteEpisode)
+func New(transcodeService TranscodeService, store Store) *MediaController {
+	return &MediaController{store: store, transcodeService: transcodeService}
 }
 
 // list is an endpoint used to retrieve a list of movies and series which have been
 // updated recently (this includes episodes being added to a series). The caller of this endpoint
 // can specify filtering options such as the type (movie|series), a limit to the number
 // of results, or the genres which apply to the content
-//
-// TODO: the genre stuff!
-func (controller *Controller) list(ec echo.Context) error {
-	params := ec.QueryParams()
-	allowedTypesRaw, ok := params["allowedType"]
-	if !ok {
-		allowedTypesRaw = []string{}
+func (controller *MediaController) ListMedia(ec echo.Context, request gen.ListMediaRequestObject) (gen.ListMediaResponseObject, error) {
+	allowedTypesRaw := []string{}
+	if request.Params.AllowedType != nil {
+		allowedTypesRaw = *request.Params.AllowedType
 	}
 
 	allowedTypes := make([]media.MediaListType, len(allowedTypesRaw))
@@ -98,26 +77,26 @@ func (controller *Controller) list(ec echo.Context) error {
 			continue
 		}
 
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("allowedType '%v' is not recognized", v))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("allowedType '%v' is not recognized", v))
 	}
 
-	allowedGenresRaw, ok := params["genre"]
-	if !ok {
-		allowedGenresRaw = []string{}
+	allowedGenresRaw := []string{}
+	if request.Params.Genre != nil {
+		allowedGenresRaw = *request.Params.Genre
 	}
 
 	allowedGenres := make([]int, len(allowedGenresRaw))
 	for k, v := range allowedGenresRaw {
 		vv, err := strconv.Atoi(v)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("genre '%v' is not recognized", v))
+			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("genre '%v' is not recognized", v))
 		}
 		allowedGenres[k] = vv
 	}
 
-	orderByRaw, ok := params["orderBy"]
-	if !ok {
-		orderByRaw = []string{}
+	orderByRaw := []string{}
+	if request.Params.OrderBy != nil {
+		orderByRaw = *request.Params.OrderBy
 	}
 
 	orderBy := make([]media.MediaListOrderBy, len(orderByRaw))
@@ -139,169 +118,135 @@ func (controller *Controller) list(ec echo.Context) error {
 			continue
 		}
 
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("orderBy column '%v' is not recognized", v))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("orderBy column '%v' is not recognized", v))
 	}
 
-	limit, err := strconv.Atoi(params.Get("limit"))
-	if err != nil || limit < 0 {
-		limit = 0
+	limit := 0
+	offset := 0
+	if request.Params.Limit != nil && *request.Params.Limit > 0 {
+		limit = *request.Params.Limit
 	}
-	offset, err := strconv.Atoi(params.Get("offset"))
-	if err != nil || offset < 0 {
-		offset = 0
+	if request.Params.Offset != nil && *request.Params.Offset > 0 {
+		limit = *request.Params.Offset
 	}
 
-	titleFilter := params.Get("titleFilter")
+	titleFilter := ""
+	if request.Params.TitleFilter != nil {
+		titleFilter = *request.Params.TitleFilter
+	}
 
 	results, err := controller.store.ListMedia(allowedTypes, titleFilter, allowedGenres, orderBy, offset, limit)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	dtos, err := newListDtos(results)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	return ec.JSON(http.StatusOK, dtos)
+	return gen.ListMedia200JSONResponse(dtos), nil
 }
 
-func (controller *Controller) listGenres(ec echo.Context) error {
+func (controller *MediaController) ListGenres(ec echo.Context, _ gen.ListGenresRequestObject) (gen.ListGenresResponseObject, error) {
 	genres, err := controller.store.ListGenres()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	return ec.JSON(http.StatusOK, genreModelsToDtos(genres))
+	return gen.ListGenres200JSONResponse(genreModelsToDtos(genres)), nil
 }
 
-func (controller *Controller) getMovie(ec echo.Context) error {
-	// TODO: consider pushing all of this down in to a DB transaction
+func (controller *MediaController) GetMovie(ec echo.Context, request gen.GetMovieRequestObject) (gen.GetMovieResponseObject, error) {
 	wrap := wrapErrorGenerator("failed to fetch movie")
-	movieId, err := uuid.Parse(ec.Param("id"))
+	movie, err := controller.store.GetMovie(request.Id)
 	if err != nil {
-		return wrap(err)
+		return nil, wrap(err)
 	}
 
-	movie, err := controller.store.GetMovie(movieId)
+	watchTargets, err := controller.getMediaWatchTargets(request.Id)
 	if err != nil {
-		return wrap(err)
+		return nil, wrap(err)
 	}
 
-	watchTargets, err := controller.getMediaWatchTargets(movieId)
-	if err != nil {
-		return wrap(err)
-	}
-
-	dto := movieDto{
-		ID:           movie.ID,
-		TmdbID:       movie.TmdbID,
+	dto := gen.Movie{
+		Id:           movie.ID,
+		TmdbId:       movie.TmdbID,
 		Title:        movie.Title,
 		CreatedAt:    movie.CreatedAt,
 		UpdatedAt:    movie.UpdatedAt,
 		WatchTargets: watchTargets,
 	}
 
-	return ec.JSON(http.StatusOK, dto)
+	return gen.GetMovie200JSONResponse(dto), nil
 }
 
-func (controller *Controller) getEpisode(ec echo.Context) error {
-	// TODO: consider pushing all of this down in to a DB transaction
+func (controller *MediaController) GetEpisode(ec echo.Context, request gen.GetEpisodeRequestObject) (gen.GetEpisodeResponseObject, error) {
 	wrap := wrapErrorGenerator("failed to fetch episode")
-	episodeID, err := uuid.Parse(ec.Param("id"))
+	episode, err := controller.store.GetEpisode(request.Id)
 	if err != nil {
-		return wrap(err)
+		return nil, wrap(err)
 	}
 
-	episode, err := controller.store.GetEpisode(episodeID)
+	watchTargets, err := controller.getMediaWatchTargets(request.Id)
 	if err != nil {
-		return wrap(err)
+		return nil, wrap(err)
 	}
 
-	watchTargets, err := controller.getMediaWatchTargets(episodeID)
-	if err != nil {
-		return wrap(err)
-	}
-
-	dto := episodeDto{
-		ID:           episode.ID,
-		TmdbID:       episode.TmdbID,
+	dto := gen.Episode{
+		Id:           episode.ID,
+		TmdbId:       episode.TmdbID,
 		Title:        episode.Title,
 		CreatedAt:    episode.CreatedAt,
 		UpdatedAt:    episode.UpdatedAt,
 		WatchTargets: watchTargets,
 	}
 
-	return ec.JSON(http.StatusOK, dto)
+	return gen.GetEpisode200JSONResponse(dto), nil
 }
 
-func (controller *Controller) getSeries(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
+func (controller *MediaController) GetSeries(ec echo.Context, request gen.GetSeriesRequestObject) (gen.GetSeriesResponseObject, error) {
+	series, err := controller.store.GetInflatedSeries(request.Id)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
+		return nil, wrapErrorGenerator("Failed to get series")(err)
 	}
 
-	series, err := controller.store.GetInflatedSeries(id)
-	if err != nil {
-		return wrapErrorGenerator("Failed to get series")(err)
-	}
-
-	return ec.JSON(http.StatusOK, series)
+	return gen.GetSeries200JSONResponse(inflatedSeriesToDto(series)), nil
 }
 
-func (controller *Controller) deleteEpisode(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Episode ID is not a valid UUID")
+func (controller *MediaController) DeleteMovie(ec echo.Context, request gen.DeleteMovieRequestObject) (gen.DeleteMovieResponseObject, error) {
+	if err := controller.store.DeleteMovie(request.Id); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if err := controller.store.DeleteEpisode(id); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err)
-	}
-
-	return ec.NoContent(http.StatusOK)
+	return gen.DeleteMovie201Response{}, nil
 }
 
-func (controller *Controller) deleteMovie(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Movie ID is not a valid UUID")
+func (controller *MediaController) DeleteSeries(ec echo.Context, request gen.DeleteSeriesRequestObject) (gen.DeleteSeriesResponseObject, error) {
+	if err := controller.store.DeleteSeries(request.Id); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if err := controller.store.DeleteMovie(id); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err)
-	}
-
-	return ec.NoContent(http.StatusOK)
+	return gen.DeleteSeries201Response{}, nil
 }
 
-func (controller *Controller) deleteSeries(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Movie ID is not a valid UUID")
+func (controller *MediaController) DeleteSeason(ec echo.Context, request gen.DeleteSeasonRequestObject) (gen.DeleteSeasonResponseObject, error) {
+	if err := controller.store.DeleteSeason(request.Id); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if err := controller.store.DeleteSeries(id); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err)
-	}
-
-	return ec.NoContent(http.StatusOK)
+	return gen.DeleteSeason201Response{}, nil
 }
 
-func (controller *Controller) deleteSeason(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Season ID is not a valid UUID")
+func (controller *MediaController) DeleteEpisode(ec echo.Context, request gen.DeleteEpisodeRequestObject) (gen.DeleteEpisodeResponseObject, error) {
+	if err := controller.store.DeleteEpisode(request.Id); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if err := controller.store.DeleteSeason(id); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err)
-	}
-
-	return ec.NoContent(http.StatusOK)
+	return gen.DeleteEpisode201Response{}, nil
 }
 
-func (controller *Controller) getMediaWatchTargets(mediaID uuid.UUID) ([]*watchTargetDto, error) {
+func (controller *MediaController) getMediaWatchTargets(mediaID uuid.UUID) ([]gen.MediaWatchTarget, error) {
 	targets := controller.store.GetAllTargets()
 	findTarget := func(tid uuid.UUID) *ffmpeg.Target {
 		for _, v := range targets {
@@ -321,16 +266,16 @@ func (controller *Controller) getMediaWatchTargets(mediaID uuid.UUID) ([]*watchT
 
 	// 1. Add completed transcodes as valid pre-transcoded targets
 	targetsNotEligibleForLiveTranscode := make(map[uuid.UUID]struct{}, len(activeTranscodes))
-	watchTargets := make([]*watchTargetDto, len(completedTranscodes))
+	watchTargets := make([]gen.MediaWatchTarget, len(completedTranscodes))
 	for k, v := range completedTranscodes {
 		targetsNotEligibleForLiveTranscode[v.TargetID] = struct{}{}
-		watchTargets[k] = newWatchTarget(findTarget(v.TargetID), PreTranscoded, true)
+		watchTargets[k] = newWatchTarget(findTarget(v.TargetID), gen.PRETRANSCODE, true)
 	}
 
 	// 2. Add in-progress transcodes (as not ready to watch)
 	for _, v := range activeTranscodes {
 		targetsNotEligibleForLiveTranscode[v.Target().ID] = struct{}{}
-		watchTargets = append(watchTargets, newWatchTarget(v.Target(), PreTranscoded, false))
+		watchTargets = append(watchTargets, newWatchTarget(v.Target(), gen.PRETRANSCODE, false))
 	}
 
 	// 3. Any targets which do NOT have a complete or in-progress pre-transcode are eligible for live transcoding/streaming
@@ -340,12 +285,12 @@ func (controller *Controller) getMediaWatchTargets(mediaID uuid.UUID) ([]*watchT
 			continue
 		}
 
-		watchTargets = append(watchTargets, newWatchTarget(v, LiveTranscode, true))
+		watchTargets = append(watchTargets, newWatchTarget(v, gen.LIVETRANSCODE, true))
 	}
 
 	// 4. We can directly stream the source media itself, so add that too
 	// TODO: at some point we may want this to be configurable
-	watchTargets = append(watchTargets, &watchTargetDto{Name: "Source", Ready: true, Type: LiveTranscode, TargetID: nil, Enabled: true})
+	watchTargets = append(watchTargets, gen.MediaWatchTarget{DisplayName: "Direct", Ready: true, Type: gen.LIVETRANSCODE, TargetId: nil, Enabled: true})
 
 	return watchTargets, nil
 }

@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/api/gen"
+	"github.com/hbomb79/Thea/internal/api/util"
 	"github.com/hbomb79/Thea/internal/user"
 	"github.com/labstack/echo/v4"
 )
@@ -16,68 +18,35 @@ type (
 		UpdateUserPermissions(userID uuid.UUID, newPermissions []string) error
 	}
 
-	UpdatePermissionsRequest struct {
-		Permissions []string `json:"permissions"`
-	}
-	AuthProvider interface{}
-
-	controller struct {
-		authProvider AuthProvider
-
-		store Store
-	}
+	UserController struct{ store Store }
 )
 
-func NewController(authProvider AuthProvider, store Store) *controller {
-	return &controller{
-		authProvider: authProvider,
-		store:        store,
-	}
+func NewController(store Store) *UserController {
+	return &UserController{store: store}
 }
 
-func (controller *controller) SetRoutes(eg *echo.Group) {
-	eg.GET("/", controller.list)
-	eg.GET("/:id/", controller.get)
-	eg.POST("/:id/permissions/", controller.updatePermissions)
-}
-
-func (controller *controller) list(ec echo.Context) error {
+func (controller *UserController) ListUsers(ec echo.Context, _ gen.ListUsersRequestObject) (gen.ListUsersResponseObject, error) {
 	users, err := controller.store.ListUsers()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err)
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	return ec.JSON(http.StatusOK, users)
+	return gen.ListUsers200JSONResponse(util.ApplyConversion(users, userToDto)), nil
 }
 
-func (controller *controller) get(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
+func (controller *UserController) GetUser(ec echo.Context, request gen.GetUserRequestObject) (gen.GetUserResponseObject, error) {
+	user, err := controller.store.GetUserWithID(request.Id)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "User ID is not a valid UUID")
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	user, err := controller.store.GetUserWithID(id)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err)
-	}
-
-	return ec.JSON(http.StatusOK, user)
+	return gen.GetUser200JSONResponse(userToDto(user)), nil
 }
 
-func (controller *controller) updatePermissions(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "User ID is not a valid UUID")
+func (controller *UserController) UpdateUserPermissions(ec echo.Context, request gen.UpdateUserPermissionsRequestObject) (gen.UpdateUserPermissionsResponseObject, error) {
+	if err := controller.store.UpdateUserPermissions(request.Id, request.Body.Permissions); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to apply new permissions for user: %s", err))
 	}
 
-	var request UpdatePermissionsRequest
-	if err := ec.Bind(&request); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("JSON body invalid: %s", err))
-	}
-
-	if err := controller.store.UpdateUserPermissions(id, request.Permissions); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to apply new permissions for user: %s", err))
-	}
-
-	return ec.NoContent(http.StatusOK)
+	return gen.UpdateUserPermissions200Response{}, nil
 }

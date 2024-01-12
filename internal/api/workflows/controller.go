@@ -4,192 +4,70 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
-	"github.com/hbomb79/Thea/internal/ffmpeg"
+	"github.com/hbomb79/Thea/internal/api/gen"
+	"github.com/hbomb79/Thea/internal/api/util"
 	"github.com/hbomb79/Thea/internal/workflow"
 	"github.com/hbomb79/Thea/internal/workflow/match"
 	"github.com/labstack/echo/v4"
 )
 
 type (
-	CreateRequest struct {
-		Label     string        `json:"label" validate:"required,alphaNumericWhitespaceTrimmed"`
-		Enabled   bool          `json:"enabled"`
-		TargetIDs []uuid.UUID   `json:"target_ids" validate:"required,min=1"`
-		Criteria  []CriteriaDto `json:"criteria" validate:"required"`
-	}
-
-	UpdateRequest struct {
-		Label     *string       `json:"label" validate:"omitempty,alphaNumericWhitespaceTrimmed"`
-		Enabled   *bool         `json:"enabled"`
-		TargetIDs *[]uuid.UUID  `json:"target_ids"`
-		Criteria  []CriteriaDto `json:"criteria"`
-	}
-
-	WorkflowDto struct {
-		ID        uuid.UUID     `json:"id"`
-		Label     string        `json:"label"`
-		Enabled   bool          `json:"enabled"`
-		Criteria  []CriteriaDto `json:"criteria"`
-		TargetIDs []uuid.UUID   `json:"target_ids"`
-	}
-
-	CriteriaDto struct {
-		Key         match.Key         `json:"key"`
-		Type        match.Type        `json:"type"`
-		Value       string            `json:"value"`
-		CombineType match.CombineType `json:"combine_type"`
-	}
-
 	Store interface {
 		DeleteWorkflow(uuid.UUID)
 		GetWorkflow(uuid.UUID) *workflow.Workflow
 		GetAllWorkflows() []*workflow.Workflow
 		CreateWorkflow(uuid.UUID, string, []match.Criteria, []uuid.UUID, bool) (*workflow.Workflow, error)
 		UpdateWorkflow(uuid.UUID, *string, *[]match.Criteria, *[]uuid.UUID, *bool) (*workflow.Workflow, error)
-		GetManyTargets(...uuid.UUID) []*ffmpeg.Target
 	}
-	AuthProvider interface{}
 
-	Controller struct {
-		store        Store
-		validate     *validator.Validate
-		authProvider AuthProvider
-	}
+	WorkflowController struct{ store Store }
 )
 
-func New(authProvider AuthProvider, validate *validator.Validate, store Store) *Controller {
-	return &Controller{authProvider: authProvider, store: store, validate: validate}
+func New(store Store) *WorkflowController {
+	return &WorkflowController{store: store}
 }
 
-func (controller *Controller) SetRoutes(eg *echo.Group) {
-	eg.POST("/", controller.create)
-	eg.GET("/", controller.list)
-	eg.GET("/:id/", controller.get)
-	eg.PATCH("/:id/", controller.update)
-	eg.DELETE("/:id/", controller.delete)
+func (controller *WorkflowController) CreateWorkflow(ec echo.Context, request gen.CreateWorkflowRequestObject) (gen.CreateWorkflowResponseObject, error) {
+	criteria := util.ApplyConversion(request.Body.Criteria, criteriaToModel)
+	if _, err := controller.store.CreateWorkflow(uuid.New(), request.Body.Label, criteria, request.Body.TargetIds, request.Body.Enabled); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create new workflow: %v", err))
+	}
+
+	return gen.CreateWorkflow201Response{}, nil
 }
 
-func (controller *Controller) create(ec echo.Context) error {
-	var createRequest CreateRequest
-	if err := ec.Bind(&createRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
-	}
-
-	if err := controller.validate.Struct(createRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
-	}
-
-	workflowID := uuid.New()
-	criteria := make([]match.Criteria, len(createRequest.Criteria))
-	for i, v := range createRequest.Criteria {
-		criteria[i] = NewCriteriaModel(workflowID, &v)
-	}
-
-	if model, err := controller.store.CreateWorkflow(workflowID, createRequest.Label, criteria, createRequest.TargetIDs, createRequest.Enabled); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create new workflow: %v", err))
-	} else {
-		return ec.JSON(http.StatusCreated, NewWorkflowDto(model))
-	}
-}
-
-func (controller *Controller) list(ec echo.Context) error {
+func (controller *WorkflowController) ListWorkflows(ec echo.Context, request gen.ListWorkflowsRequestObject) (gen.ListWorkflowsResponseObject, error) {
 	workflowModels := controller.store.GetAllWorkflows()
-	workflowDtos := make([]WorkflowDto, len(workflowModels))
-	for i, v := range workflowModels {
-		workflowDtos[i] = *NewWorkflowDto(v)
-	}
 
-	return ec.JSON(http.StatusOK, workflowDtos)
+	return gen.ListWorkflows200JSONResponse(util.ApplyConversion(workflowModels, workflowToDto)), nil
 }
 
-func (controller *Controller) get(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Workflow ID is not a valid UUID")
-	}
-
-	workflow := controller.store.GetWorkflow(id)
+func (controller *WorkflowController) GetWorkflow(ec echo.Context, request gen.GetWorkflowRequestObject) (gen.GetWorkflowResponseObject, error) {
+	workflow := controller.store.GetWorkflow(request.Id)
 	if workflow == nil {
-		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("Workflow with ID %s does not exist", id))
+		return nil, echo.ErrNotFound
 	}
 
-	return ec.JSON(http.StatusOK, NewWorkflowDto(workflow))
+	return gen.GetWorkflow200JSONResponse(workflowToDto(workflow)), nil
 }
 
-func (controller *Controller) update(ec echo.Context) error {
-	workflowID, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Workflow ID is not a valid UUID")
-	}
-
-	var updateRequest UpdateRequest
-	if err := ec.Bind(&updateRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
-	}
-
-	if err := controller.validate.Struct(updateRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
-	}
-
+func (controller *WorkflowController) UpdateWorkflow(ec echo.Context, request gen.UpdateWorkflowRequestObject) (gen.UpdateWorkflowResponseObject, error) {
 	var criteriaToUpdate *[]match.Criteria = nil
-	if updateRequest.Criteria != nil {
-		criteria := make([]match.Criteria, len(updateRequest.Criteria))
-		for i, v := range updateRequest.Criteria {
-			criteria[i] = NewCriteriaModel(workflowID, &v)
-		}
-
-		criteriaToUpdate = &criteria
+	if request.Body.Criteria != nil {
+		criterias := util.ApplyConversion(*request.Body.Criteria, criteriaToModel)
+		criteriaToUpdate = &criterias
 	}
 
-	if model, err := controller.store.UpdateWorkflow(workflowID, updateRequest.Label, criteriaToUpdate, updateRequest.TargetIDs, updateRequest.Enabled); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to update workflow: %v", err))
+	if model, err := controller.store.UpdateWorkflow(request.Id, request.Body.Label, criteriaToUpdate, request.Body.TargetIds, request.Body.Enabled); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to update workflow: %v", err))
 	} else {
-		return ec.JSON(http.StatusOK, NewWorkflowDto(model))
+		return gen.UpdateWorkflow200JSONResponse(workflowToDto(model)), nil
 	}
 }
 
-func (controller *Controller) delete(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Workflow ID is not a valid UUID")
-	}
+func (controller *WorkflowController) DeleteWorkflow(ec echo.Context, request gen.DeleteWorkflowRequestObject) (gen.DeleteWorkflowResponseObject, error) {
+	controller.store.DeleteWorkflow(request.Id)
 
-	controller.store.DeleteWorkflow(id)
-	return ec.NoContent(http.StatusNoContent)
-}
-
-func NewCriteriaModel(workflowID uuid.UUID, dto *CriteriaDto) match.Criteria {
-	return match.Criteria{
-		ID:          uuid.New(),
-		Key:         dto.Key,
-		Type:        dto.Type,
-		Value:       dto.Value,
-		CombineType: dto.CombineType,
-	}
-}
-
-func NewCriteriaDto(model match.Criteria) CriteriaDto {
-	return CriteriaDto{Key: model.Key, Type: model.Type, Value: model.Value, CombineType: model.CombineType}
-}
-
-func NewWorkflowDto(model *workflow.Workflow) *WorkflowDto {
-	targetIDs := make([]uuid.UUID, len(model.Targets))
-	for i, v := range model.Targets {
-		targetIDs[i] = v.ID
-	}
-
-	criteriaDtos := make([]CriteriaDto, len(model.Criteria))
-	for i, v := range model.Criteria {
-		criteriaDtos[i] = NewCriteriaDto(v)
-	}
-
-	return &WorkflowDto{
-		ID:        model.ID,
-		Label:     model.Label,
-		Enabled:   true,
-		Criteria:  criteriaDtos,
-		TargetIDs: targetIDs,
-	}
+	return gen.DeleteWorkflow204Response{}, nil
 }

@@ -22,7 +22,12 @@ When the project is completed, Thea aims to
 
 
 # Installation, Configuration, Building, Running and More...
-All has been covered in the [Wiki](https://github.com/hbomb79/Thea/wiki)!
+Thea uses OpenAPI to specify it's routes, and we use code generation for the request/response models. As such, you'll need to call
+`go generate` before building the project. For example:
+
+`go generate && go install && Thea`
+
+For more information, see the [Wiki](https://github.com/hbomb79/Thea/wiki)!
 
 # Feel like contributing?
 There's lots to do, and you'll find an organized view of what we're working on in the [Project Board](https://github.com/users/hbomb79/projects/2) :) 

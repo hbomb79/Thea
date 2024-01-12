@@ -1,21 +1,30 @@
-package api
+package jwt
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"slices"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/api/gen"
+	"github.com/hbomb79/Thea/internal/user"
+	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/hbomb79/Thea/pkg/sync"
-	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
+	middleware "github.com/oapi-codegen/echo-middleware"
 )
 
 var (
-	errUnauthorized = echo.NewHTTPError(http.StatusUnauthorized)
+	errUnauthorized          = echo.NewHTTPError(http.StatusUnauthorized)
+	ErrUnknownSecurityScheme = errors.New("request specifies an unknown security scheme and so cannot be validated")
+	ErrAuthTokenMissing      = errors.New("request does not contain required auth token in cookies")
+
+	log = logger.Get("JWT-Auth")
 )
 
 const (
@@ -27,6 +36,11 @@ const (
 )
 
 type (
+	AuthenticatedUser struct {
+		UserID      uuid.UUID
+		Permissions []string
+	}
+
 	authTokenClaims struct {
 		jwt.RegisteredClaims
 		Permissions []string  `json:"permissions"`
@@ -36,6 +50,13 @@ type (
 	refreshTokenClaims struct {
 		jwt.RegisteredClaims
 		UserID uuid.UUID `json:"user_id"`
+	}
+
+	Store interface {
+		RecordUserLogin(userID uuid.UUID) error
+		RecordUserRefresh(userID uuid.UUID) error
+		GetUserWithUsernameAndPassword(username []byte, rawPassword []byte) (*user.User, error)
+		GetUserWithID(ID uuid.UUID) (*user.User, error)
 	}
 
 	jwtAuthProvider struct {
@@ -128,6 +149,19 @@ func (auth *jwtAuthProvider) GenerateTokensAndSetCookies(ec echo.Context, userID
 	return nil
 }
 
+// GetAuthenticatedUserFromContext provides a way for endpoints
+// to extract the users ID and permissions from the context
+// of their request. An error will be returned if no valid
+// user can be found.
+func (auth *jwtAuthProvider) GetAuthenticatedUserFromContext(ec echo.Context) (*AuthenticatedUser, error) {
+	u, ok := ec.Get("user").(*AuthenticatedUser)
+	if !ok {
+		return nil, errors.New("no user found in request context")
+	}
+
+	return u, nil
+}
+
 // RevokeTokensInContext revokes the auth and refresh token in this
 // request context, assuming they are provided. A missing token/cookie
 // is ignored.
@@ -138,11 +172,6 @@ func (auth *jwtAuthProvider) RevokeTokensInContext(ec echo.Context) {
 	if cookie, err := ec.Cookie(refreshTokenCookieName); err == nil && cookie != nil {
 		auth.revokeToken(cookie.Value)
 	}
-}
-
-func (auth *jwtAuthProvider) revokeToken(token string) {
-	log.Debugf("Revoking token %s\n", token)
-	auth.blacklistedTokens.Store(token, struct{}{})
 }
 
 // RevokeAllForUser finds all the tokens we've granted to a specified
@@ -164,13 +193,18 @@ func (auth *jwtAuthProvider) RevokeAllForUser(userID uuid.UUID) error {
 // RefreshTokens generates new auth and refresh tokens and stores them in
 // the request cookies IF the request contains a valid refresh token
 func (auth *jwtAuthProvider) RefreshTokens(ec echo.Context) error {
-	token, err := auth.validateTokenFromCookies(ec, refreshTokenCookieName, auth.refreshTokenSecret)
+	cookieToken, err := ec.Cookie(refreshTokenCookieName)
+	if err != nil {
+		return fmt.Errorf("failed to extract cookie %s: %w", refreshTokenCookieName, err)
+	}
+
+	token, err := auth.validateJWT(cookieToken.Value, auth.refreshTokenSecret)
 	if err != nil {
 		return fmt.Errorf("failed to refresh: %w", err)
 	}
 
 	claims := token.Claims.(*jwt.MapClaims)
-	userID, err := auth.GetUserIdFromClaims(*claims)
+	userID, err := auth.getUserIdFromClaims(*claims)
 	if err != nil {
 		return fmt.Errorf("failed to refresh: %w", err)
 	}
@@ -178,83 +212,84 @@ func (auth *jwtAuthProvider) RefreshTokens(ec echo.Context) error {
 	return auth.GenerateTokensAndSetCookies(ec, *userID)
 }
 
-func (auth *jwtAuthProvider) GetUserIdFromClaims(claims jwt.MapClaims) (*uuid.UUID, error) {
-	if userID, ok := claims["user_id"]; ok {
-		if id, err := uuid.Parse(userID.(string)); err != nil {
-			return nil, fmt.Errorf("failed to extract user ID from JWT claims: %w", err)
-		} else {
-			return &id, nil
-		}
-	} else {
-		return nil, errors.New("failed to extract user ID from JWT claims: missing")
-	}
-}
-
-func (auth *jwtAuthProvider) GetJwtClaimsFromContext(ec echo.Context) (*jwt.MapClaims, error) {
-	if ec.Get("user") == nil {
-		return nil, errors.New("no user found in request context")
-	}
-
-	u := ec.Get("user").(*jwt.Token)
-	claims := u.Claims.(*jwt.MapClaims)
-	return claims, nil
-}
-
-func (auth *jwtAuthProvider) GetUserIDFromContext(ec echo.Context) (*uuid.UUID, error) {
-	claims, err := auth.GetJwtClaimsFromContext(ec)
+// getSecurityValidator returns a middleware which uses the generated OpenAPI swagger spec to
+// inspect incoming requests and determine whether or not they're
+// valid. This includes ensuring the request meets the spec, and that
+// the security scheme specified for that request is satisfied (authentication
+// by way of JWT token, and authorization by way of permissions)
+func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware() echo.MiddlewareFunc {
+	spec, err := gen.GetSwagger()
 	if err != nil {
-		return nil, err
+		panic(fmt.Sprintf("failed to extract swagger spec from generated spec: %s", err))
 	}
 
-	userID, err := auth.GetUserIdFromClaims(*claims)
-	if err != nil {
-		return nil, err
-	}
-
-	return userID, nil
-}
-
-func (auth *jwtAuthProvider) GetAuthenticatedMiddleware() echo.MiddlewareFunc {
-	return echojwt.WithConfig(echojwt.Config{
-		TokenLookup:  fmt.Sprintf("cookie:%s", authTokenCookieName),
-		ErrorHandler: func(ec echo.Context, err error) error { return echo.NewHTTPError(http.StatusUnauthorized) },
-		ParseTokenFunc: func(ec echo.Context, token string) (any, error) {
-			return auth.validateToken(token, auth.authTokenSecret)
+	return middleware.OapiRequestValidatorWithOptions(spec, &middleware.Options{
+		Skipper: func(ec echo.Context) bool {
+			// We specifically allow OPTION requests to pass through un-encumbered
+			// as they are not documented in our OpenAPI spec, and so they will
+			// be rejected as 'method not allowed' if we don't skip them.
+			//TODO: there is surely a better way to handle this?
+			return ec.Request().Method == http.MethodOptions
 		},
+		ErrorHandler: func(_ echo.Context, err *echo.HTTPError) error {
+			log.Errorf("Request security validation failed: %s\n", err)
+			return errUnauthorized
+		},
+		Options: openapi3filter.Options{AuthenticationFunc: auth.validateTokenFromAuthInput},
 	})
 }
 
-func (auth *jwtAuthProvider) GetPermissionAuthorizerMiddleware(requiredPermissions ...string) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(ec echo.Context) error {
-			claims, err := auth.GetJwtClaimsFromContext(ec)
-			if err != nil {
-				log.Errorf("Failed to extract claims from user JWT: %s\n", err)
-				return errUnauthorized
-			}
+// validateTokenFromAuthInput accepts an OpenAPI authentication input
+// and returns an error if we're unable to extract a valid JWT
+// from the requests cookies.
+// If we CAN extract a valid token, then said token is also
+// checked to ensure it contains the correct permissions.
+func (auth *jwtAuthProvider) validateTokenFromAuthInput(ctx context.Context, authInput *openapi3filter.AuthenticationInput) error {
+	log.Infof("Running security validation...\n")
+	if authInput.SecuritySchemeName != "permissionAuth" {
+		return ErrUnknownSecurityScheme
+	}
 
-			userID, err := auth.GetUserIdFromClaims(*claims)
-			if err != nil {
-				log.Errorf("Failed to extract user ID from user JWT claims: %s\n", err)
-				return errUnauthorized
-			}
+	tokenCookie, err := authInput.RequestValidationInput.Request.Cookie(authTokenCookieName)
+	if err != nil {
+		return ErrAuthTokenMissing
+	}
 
-			permissions, err := auth.getPermissionsFromClaims(*claims)
-			if err != nil {
-				log.Errorf("Failed to extract user permissions from user JWT claims: %s\n", err)
-				return errUnauthorized
-			}
+	token, err := auth.validateJWT(tokenCookie.Value, auth.authTokenSecret)
+	if err != nil {
+		return fmt.Errorf("validation of auth token failed: %w", err)
+	}
 
-			for _, perm := range requiredPermissions {
-				if !slices.Contains(permissions, perm) {
-					log.Warnf("User %s failed permissions check while accessing %s: missing permission '%s'\n", userID, ec.Path(), perm)
-					return echo.NewHTTPError(http.StatusForbidden)
-				}
-			}
+	claims, ok := token.Claims.(*jwt.MapClaims)
+	if !ok {
+		return errors.New("failed to cast JWT claims to MapClaims")
+	}
 
-			return next(ec)
+	// Extract user information (ID and permissions) from JWT
+	userID, err := auth.getUserIdFromClaims(*claims)
+	if err != nil {
+		return err
+	}
+
+	// Check that the permissiosn specified by the request scopes
+	// are all present inside of the users permissions
+	userPermissions, err := auth.getPermissionsFromClaims(*claims)
+	if err != nil {
+		return err
+	}
+	for _, perm := range authInput.Scopes {
+		if !slices.Contains(userPermissions, perm) {
+			log.Warnf("User %s failed permissions check while accessing %s: missing permission '%s'\n", userID, authInput.RequestValidationInput.Request.RequestURI, perm)
+			return echo.NewHTTPError(http.StatusForbidden)
 		}
 	}
+
+	// Insert user info inside of request context to allow for
+	// endpoint handlers to extract user information
+	eCtx := middleware.GetEchoContext(ctx)
+	eCtx.Set("user", &AuthenticatedUser{UserID: *userID, Permissions: userPermissions})
+
+	return nil
 }
 
 func (auth *jwtAuthProvider) getPermissionsFromClaims(claims jwt.MapClaims) ([]string, error) {
@@ -285,7 +320,7 @@ func (auth *jwtAuthProvider) getPermissionsFromClaims(claims jwt.MapClaims) ([]s
 //   - contains a valid userID
 //   - not expired
 //   - not blacklisted
-func (auth *jwtAuthProvider) validateToken(token string, secret []byte) (*jwt.Token, error) {
+func (auth *jwtAuthProvider) validateJWT(token string, secret []byte) (*jwt.Token, error) {
 	// Parse token using secret
 	tokenClaims := &jwt.MapClaims{}
 	tkn, err := jwt.ParseWithClaims(
@@ -303,7 +338,7 @@ func (auth *jwtAuthProvider) validateToken(token string, secret []byte) (*jwt.To
 	}
 
 	// Ensure the user ID is present
-	if _, err := auth.GetUserIdFromClaims(*tokenClaims); err != nil {
+	if _, err := auth.getUserIdFromClaims(*tokenClaims); err != nil {
 		return nil, fmt.Errorf("failed to extract userID from JWT: %w", err)
 	}
 
@@ -313,18 +348,6 @@ func (auth *jwtAuthProvider) validateToken(token string, secret []byte) (*jwt.To
 	}
 
 	return tkn, nil
-}
-
-// validateTokenFromCookies is a convinience method to lookup
-// the given token in the request's cookies before proceeding
-// to validate the token providing it was found.
-func (auth *jwtAuthProvider) validateTokenFromCookies(ec echo.Context, tokenName string, secret []byte) (*jwt.Token, error) {
-	cookieToken, err := ec.Cookie(tokenName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract cookie %s: %w", tokenName, err)
-	}
-
-	return auth.validateToken(cookieToken.Value, secret)
 }
 
 // generateAccessToken accepts a userID and generates a short-term token
@@ -401,6 +424,26 @@ func (auth *jwtAuthProvider) scheduleUserTokenCleanup(userID uuid.UUID, token st
 	})
 }
 
+func (auth *jwtAuthProvider) getUserIdFromClaims(claims jwt.MapClaims) (*uuid.UUID, error) {
+	if userID, ok := claims["user_id"]; ok {
+		if id, err := uuid.Parse(userID.(string)); err != nil {
+			return nil, fmt.Errorf("failed to extract user ID from JWT claims: %w", err)
+		} else {
+			return &id, nil
+		}
+	} else {
+		return nil, errors.New("failed to extract user ID from JWT claims: missing")
+	}
+}
+
+func (auth *jwtAuthProvider) revokeToken(token string) {
+	log.Debugf("Revoking token %s\n", token)
+	auth.blacklistedTokens.Store(token, struct{}{})
+}
+
+func setTokenCookieCtx(ctx context.Context, name string, path string, token string, expiration time.Time) {
+
+}
 func setTokenCookie(ec echo.Context, name string, path string, token string, expiration time.Time) {
 	cookie := new(http.Cookie)
 	cookie.Name = name

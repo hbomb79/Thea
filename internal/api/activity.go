@@ -81,10 +81,11 @@ func (hub *broadcaster) BroadcastMediaUpdate(id uuid.UUID) error {
 // nullsafeNewDto returns nil if the given model is nil, else it will call the
 // provided generator with the model as it's only parameter. This is basically
 // shorthand for "only try and create a DTO if the 'model' isn't nil".
-func nullsafeNewDto[M any, D any](model *M, generator func(*M) *D) *D {
+func nullsafeNewDto[M any, D any](model *M, generator func(*M) D) *D {
 	if model == nil {
 		return nil
 	}
 
-	return generator(model)
+	out := generator(model)
+	return &out
 }

@@ -630,18 +630,23 @@ func (orchestrator *storeOrchestrator) updateUserPermissionsQuery(tx *sqlx.Tx, u
 	return nil
 }
 func (orchestrator *storeOrchestrator) anyOutstandingPermissions(permissions ...string) (bool, error) {
-	query, args, err := sqlx.In(`SELECT COUNT(*) FROM permissions WHERE label NOT IN(?)`, permissions)
+	query, args, err := sqlx.In(`SELECT label FROM permissions WHERE label NOT IN(?)`, permissions)
 	if err != nil {
 		return false, err
 	}
 
-	var count int
+	var labels []string
 	db := orchestrator.db.GetSqlxDb()
-	if err := db.Get(&count, db.Rebind(query), args...); err != nil {
+	if err := db.Select(&labels, db.Rebind(query), args...); err != nil {
 		return false, err
 	}
 
-	return count > 0, nil
+	if len(labels) > 0 {
+		log.Warnf("Found outstanding permissions: %v\n", labels)
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (orchestrator *storeOrchestrator) createPermissions(permissions ...string) error {

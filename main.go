@@ -16,6 +16,9 @@ import (
 
 const VERSION = 1.0
 
+//go:generate go run github.com/deepmap/oapi-codegen/v2/cmd/oapi-codegen --config=types.cfg.yaml ./thea.openapi.yaml
+//go:generate go run github.com/deepmap/oapi-codegen/v2/cmd/oapi-codegen --config=server.cfg.yaml -templates=./internal/api/gen/templates ./thea.openapi.yaml
+
 var (
 	log = logger.Get("Bootstrap")
 

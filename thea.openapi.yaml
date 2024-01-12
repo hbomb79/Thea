@@ -1,0 +1,1176 @@
+openapi: 3.0.0
+info:
+  title: Thea Spec
+  description: "Thea REST API spec. See http://github.com/hbomb79/Thea for more information"
+  version: 1.0.0
+  contact:
+    name: Thea Support
+    url: https://github.com/hbomb79/Thea
+tags:
+  - name: Auth
+    description: Auth related endpoints which are used to manage logins
+  - name: Targets
+    description: A transcode target, typically associatted with transcode tasks and workflows
+  - name: Workflows
+    description: A Thea workflow is a collection of targets and conditions which are used to automatically perform transcodes
+  - name: Transcode Tasks
+    description: Ongoing or completed tasks which transcoded media
+  - name: Ingests
+    description: Ongoing tasks which represent the ingestion of media in to Thea
+  - name: Media
+    description: Media (movies/series/seasons/episodes) that Thea is tracking
+  - name: Users
+    description: Endpoints which can be used to perform user management tasks
+security:
+  - permissionAuth: [] # Default security - requires authentication but no specific permissions
+paths:
+  /auth/login:
+    post:
+      summary: Login
+      description: Attempts to login using the credentials providing, setting auth/refresh tokens in the cookies on success
+      operationId: login
+      tags:
+        - Auth
+      security: [] # clear security as this route should be accessible to unauthenticated users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /auth/current-user:
+    get:
+      summary: Current User
+      description: Returns the currently authenticated user
+      operationId: getCurrentUser
+      tags:
+        - Auth
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /auth/refresh:
+    post:
+      summary: Refresh Tokens
+      description: Uses the refresh token stored in the request cookies to regenerate authentication tokens
+      operationId: refresh
+      tags:
+        - Auth
+      responses:
+        "200":
+          description: Success
+  /auth/logout:
+    get:
+      summary: Logout Session
+      description: Logout the currently authenticated user by revoking the tokens stored in their cookies. This does NOT invalidate sessions in other browsers.
+      operationId: logoutSession
+      tags:
+        - Auth
+      responses:
+        "200":
+          description: Success
+  /auth/logout-all:
+    get:
+      summary: Logout All
+      description: Logout the currently authenticated user by revoking all their tokens, invalidating all active sessions for the user
+      operationId: logoutAll
+      tags:
+        - Auth
+      responses:
+        "200":
+          description: Success
+
+  /users:
+    get:
+      summary: List Users
+      description: Lists all users
+      operationId: listUsers
+      tags:
+        - Users
+      responses:
+        "200":
+          description: List of User DTOs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+  /users/{id}:
+    get:
+      summary: Get Users
+      description: Get a specific users
+      operationId: getUser
+      tags:
+        - Users
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: User DTO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /users/{id}/permissions:
+    post:
+      summary: Update User Permissions
+      description: Updates the user permissions to those provided. If any are invalid the request fails.
+      operationId: updateUserPermissions
+      tags:
+        - Users
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserPermissionsRequest"
+      responses:
+        "200":
+          description: Success
+
+  /media:
+    get:
+      summary: List Media
+      description: Allows a client to fetch a list of movies/series using various filtering, ordering and paging paramaters
+      operationId: listMedia
+      tags:
+        - Media
+      parameters:
+        - in: query
+          name: genre
+          description: Optional set of genres which all returned media will be associated with
+          schema:
+            type: array
+            items:
+              type: string
+        - in: query
+          name: allowedType
+          description: Optional set of media types which can be returned by this endpoint
+          schema:
+            type: array
+            items:
+              type: string
+        - in: query
+          name: orderBy
+          description: Optional ordering for the results, defaults to updated_at in ascending order
+          schema:
+            type: array
+            items:
+              type: string
+        - in: query
+          name: titleFilter
+          description: Optional fuzzy title filter which all returned results must match against
+          schema:
+            type: string
+        - in: query
+          name: offset
+          description: The number of items to skip before starting to collect the result set
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          description: The numbers of items to return
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Curated list of movies/series
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MediaListItem"
+  /media/genres:
+    get:
+      summary: List Genres
+      description: Returns all known genres
+      operationId: listGenres
+      tags:
+        - Media
+      responses:
+        "200":
+          description: List of genres, with their label (human readable) and ID (used for the input to any endpoint which allows filtering on genres)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MediaGenre"
+
+  /media/movie/{id}:
+    get:
+      summary: Get Movie
+      description: Returns the fully inflated DTO for this movie
+      operationId: getMovie
+      tags:
+        - Media
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: Movie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Movie"
+    delete:
+      summary: Deletes Movie
+      description: Deletes the movie and all it's related transcodes. Any on-going transcodes will be cancelled first.
+      operationId: deleteMovie
+      tags:
+        - Media
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "201":
+          description: Succesfully queued deletion of movie and related transcodes
+
+  /media/series/{id}:
+    get:
+      summary: Get Series
+      description: Returns the fully inflated DTO for this series (which contains the seasons, which further contain their episode stubs)
+      operationId: getSeries
+      tags:
+        - Media
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: Series containing all seasons (and their episode stubs)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Series"
+    delete:
+      summary: Deletes Series
+      description: Deletes the series and ALL it's seasons and episodes, including any related transcodes. Any on-going transcodes for the episodes contianed within will be cancelled first.
+      operationId: deleteSeries
+      tags:
+        - Media
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "201":
+          description: Succesfully queued deletion of series/seasons/episodes and related transcodes
+
+  /media/season/{id}:
+    delete:
+      summary: Deletes Season
+      description: Deletes the season and ALL it's episodes, including any related transcodes. Any on-going transcodes for the episodes contianed within will be cancelled first.
+      operationId: deleteSeason
+      tags:
+        - Media
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "201":
+          description: Succesfully queued deletion of season, episodes, and related transcodes
+
+  /media/episode/{id}:
+    get:
+      summary: Get Episode
+      description: Returns the fully inflated DTO for this episode
+      operationId: getEpisode
+      tags:
+        - Media
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: Episode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Episode"
+    delete:
+      summary: Deletes Episode
+      description: Deletes the episode specified, any related transcodes, and cancels any ongoing transcodes for this episode
+      operationId: deleteEpisode
+      tags:
+        - Media
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "201":
+          description: Successfully queued deletion of episode and related transcodes
+
+  /ingests:
+    get:
+      summary: List Ingests
+      description: Returns all active/troubled ingests
+      operationId: listIngests
+      tags:
+        - Ingests
+      responses:
+        "200":
+          description: List of ingests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ingest"
+  /ingests/{id}:
+    get:
+      summary: Get
+      description: Returns the ingest with the ID provided
+      operationId: getIngest
+      tags:
+        - Ingests
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: The ingest, if found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ingest"
+    delete:
+      summary: Delete
+      description: Deletes the ingest task with the ID provided
+      operationId: deleteIngest
+      tags:
+        - Ingests
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: Delete successful
+  /ingests/{id}/trouble-resolution:
+    post:
+      summary: Resolve Trouble
+      description: Resolves the trouble with the ID provided
+      operationId: resolveIngest
+      tags:
+        - Ingests
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveIngestTroubleRequest"
+      responses:
+        "200":
+          description: Resolution successful
+  /ingests/poll:
+    post:
+      summary: Poll
+      description: Requests Ingest Service to re-poll the file system for new files which need to be ingested
+      operationId: pollIngests
+      tags:
+        - Ingests
+      responses:
+        "200":
+          description: Acknowledged
+
+  /transcodes:
+    post:
+      summary: Create a new transcode task
+      description: Creates a new task
+      operationId: createTranscodeTask
+      tags:
+        - Transcode Tasks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTranscodeTaskRequest"
+      responses:
+        "201":
+          description: Creation successful
+  /transcodes/active:
+    get:
+      summary: List Active Tasks
+      description: Returns all active tasks
+      operationId: listActiveTranscodeTasks
+      tags:
+        - Transcode Tasks
+      responses:
+        "200":
+          description: List of active tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranscodeTask"
+  /transcodes/complete:
+    get:
+      summary: List Completed Tasks
+      description: Returns all completed tasks
+      operationId: listCompletedTranscodeTasks
+      tags:
+        - Transcode Tasks
+      responses:
+        "200":
+          description: List of complete tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranscodeTask"
+  /transcodes/{id}:
+    get:
+      summary: Get Transcode Task
+      description: Return matching task, whether active or completed
+      operationId: getTranscodeTask
+      tags:
+        - Transcode Tasks
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: Complete or active transcode task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscodeTask"
+    delete:
+      summary: Delete Task
+      description: Deletes matching task. Cancells it if active, and cleans up transcoded media if completed.
+      operationId: deleteTranscodeTask
+      tags:
+        - Transcode Tasks
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "204":
+          description: Delete successful
+  /transcodes/{id}/pause:
+    post:
+      summary: Pause Task
+      description: Pauses an ffmpeg task, halting it's progress
+      operationId: pauseTranscodeTask
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      tags:
+        - Transcode Tasks
+      responses:
+        "200":
+          description: Transcode paused
+  /transcodes/{id}/resume:
+    post:
+      summary: Resume Task
+      description: Resumes an already paused ffmpeg task
+      operationId: resumeTranscodeTask
+      tags:
+        - Transcode Tasks
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: Transcode resumed
+
+  /transcode-workflows:
+    get:
+      summary: List Workflows
+      description: Returns all workflows
+      operationId: listWorkflows
+      tags:
+        - Workflows
+      responses:
+        "200":
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workflow"
+    post:
+      summary: Create Workflow
+      description: Creates a new workflow
+      operationId: createWorkflow
+      tags:
+        - Workflows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkflowRequest"
+      responses:
+        "201":
+          description: Creation successful
+  /transcode-workflows/{id}:
+    get:
+      summary: Get Workflow
+      description: Return matching workflow
+      operationId: getWorkflow
+      tags:
+        - Workflows
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: Workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
+    patch:
+      summary: Update Workflow
+      description: Updates the matching workflow
+      operationId: updateWorkflow
+      tags:
+        - Workflows
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkflowRequest"
+      responses:
+        "200":
+          description: The updated workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
+    delete:
+      summary: Delete Workflow
+      description: Deletes matching workflow
+      operationId: deleteWorkflow
+      tags:
+        - Workflows
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "204":
+          description: Delete successful
+
+  /transcode-targets:
+    get:
+      tags:
+        - Targets
+      summary: List Targets
+      description: Returns all known targets
+      operationId: listTargets
+      responses:
+        "200":
+          description: A list of the targets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Target"
+    post:
+      tags:
+        - Targets
+      summary: Create Target
+      description: Creates a new target
+      operationId: createTarget
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTargetRequest"
+      responses:
+        "201":
+          description: The created target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Target"
+        "400":
+          description: Invalid request
+  /transcode-targets/{id}:
+    get:
+      tags:
+        - Targets
+      summary: Get Target
+      description: Fetches the target with the ID specified
+      operationId: getTarget
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "200":
+          description: The target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Target"
+        "400":
+          description: Invalid request
+    patch:
+      tags:
+        - Targets
+      summary: Update Target
+      description: Updates the target specified using the ID
+      operationId: updateTarget
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTargetRequest"
+      responses:
+        "200":
+          description: The updated target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Target"
+        "400":
+          description: Invalid request
+    delete:
+      tags:
+        - Targets
+      summary: Delete Target
+      description: Delete the target specified using the ID
+      operationId: deleteTarget
+      parameters:
+        - $ref: "#/components/parameters/ID"
+      responses:
+        "204":
+          description: Delete success
+externalDocs:
+  description: Find out more about Swagger
+  url: http://swagger.io
+servers:
+  - url: http://localhost:8080/api/thea/v1
+components:
+
+  securitySchemes:
+    permissionAuth:
+      type: apiKey
+      in: cookie
+      name: auth-token
+
+  parameters:
+    ID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    # Auth Controller DTOs
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          x-oapi-codegen-extra-tags:
+            validate: alphaNumericWhitespaceTrimmed
+        password:
+          type: string
+
+    # User Controller DTOs
+    UpdateUserPermissionsRequest:
+      type: object
+      required:
+        - permissions
+      properties:
+        permissions:
+          type: array
+          items:
+            type: string
+
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - password
+        - created_at
+        - updated_at
+        - permissions
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        password:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+        last_refresh:
+          type: string
+          format: date-time
+        permissions:
+          type: array
+          items:
+            type: string
+
+    IngestTroubleType:
+      type: string
+      enum: [METADATA_FAILURE, TMDB_FAILURE_UNKNOWN, TMDB_FAILURE_MULTI_RESULT, TMDB_FAILURE_NO_RESULT, UNKNOWN_FAILURE]
+    IngestTroubleResolutionType:
+      type: string
+      enum: [ABORT, RETRY, SPECIFY_TMDB_ID]
+
+    # Ingest Controller DTOs
+    IngestTrouble:
+      type: object
+      required:
+        - type
+        - message
+        - context
+        - allowed_resolution_types
+      properties:
+        type:
+          $ref: "#/components/schemas/IngestTroubleType"
+        message:
+          type: string
+        context:
+          type: object
+        allowed_resolution_types:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngestTroubleResolutionType"
+    ResolveIngestTroubleRequest:
+      type: object
+      required:
+        - method
+        - context
+      properties:
+        method:
+          $ref: "#/components/schemas/IngestTroubleResolutionType"
+        context:
+          type: object
+          additionalProperties:
+            type: string
+    Ingest:
+      type: object
+      required:
+        - id
+        - path
+        - state
+      properties:
+        id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        state:
+          type: string
+          enum: [IDLE, IMPORT_HOLD, INGESTING, TROUBLED]
+        trouble:
+            $ref: '#/components/schemas/IngestTrouble'
+        metadata:
+          $ref: '#/components/schemas/FileMetadata'
+
+    FileMetadata:
+      type: object
+      required:
+        - title
+        - episodic
+        - season_number
+        - episode_number
+        - runtime
+        - path
+      properties:
+        title:
+          type: string
+        episodic:
+          type: boolean
+        season_number:
+          type: integer
+        episode_number:
+          type: integer
+        runtime:
+          type: string
+        year:
+          type: integer
+        frame_width:
+          type: integer
+        frame_height:
+          type: integer
+        path:
+          type: string
+
+    MediaWatchTargetType:
+      type: string
+      enum: ['PRE_TRANSCODE', 'LIVE_TRANSCODE']
+
+    MediaWatchTarget:
+      type: object
+      required:
+        - display_name
+        - enabled
+        - type
+        - ready
+      properties:
+        display_name:
+          type: string
+        target_id:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+        type:
+          $ref: "#/components/schemas/MediaWatchTargetType"
+        ready:
+          type: boolean
+
+    Series:
+      type: object
+      required:
+        - id
+        - tmdb_id
+        - title
+        - seasons
+      properties:
+        id:
+          type: string
+          format: uuid
+        tmdb_id:
+          type: string
+        title:
+          type: string
+        seasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/Season"
+
+    Season:
+      type: object
+      required:
+        - episodes
+      properties:
+        episodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/EpisodeStub"
+
+    Movie:
+      type:
+        object
+      required:
+        - id
+        - tmdb_id
+        - title
+        - created_at
+        - updated_at
+        - watch_targets
+      properties:
+        id:
+          type: string
+          format: uuid
+        tmdb_id:
+          type: string
+        title:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        watch_targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaWatchTarget"
+
+    Episode:
+      type:
+        object
+      required:
+        - id
+        - tmdb_id
+        - title
+        - created_at
+        - updated_at
+        - watch_targets
+      properties:
+        id:
+          type: string
+          format: uuid
+        tmdb_id:
+          type: string
+        title:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        watch_targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaWatchTarget"
+
+    EpisodeStub:
+      type: object
+      required:
+        - id
+        - title
+        - adult
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        adult:
+          type: boolean
+
+    MediaGenre:
+      type: object
+      required:
+        - id
+        - label
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+
+    MediaListItem:
+      type: object
+      required:
+        - type
+        - id
+        - title
+        - tmdb_id
+        - updated_at
+        - genres
+      properties:
+        type:
+          type: string
+          enum: ['MOVIE', 'SERIES']
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        tmdb_id:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        season_count:
+          type: integer
+        genres:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaGenre"
+
+    CreateTranscodeTaskRequest:
+      type: object
+      required:
+        - media_id
+        - target_id
+      properties:
+        media_id:
+          type: string
+          format: uuid
+        target_id:
+          type: string
+          format: uuid
+
+    TranscodeTaskStatus:
+      type: string
+      enum: ['WAITING', 'WORKING', 'SUSPENDED', 'TROUBLED', 'CANCELLED', 'COMPLETE']
+
+    TranscodeTaskProgress:
+      type: object
+      required:
+        - frames_processed
+        - current_time
+        - current_bitrate
+        - progress
+        - speed
+      properties:
+        frames_processed:
+          type: string
+        current_time:
+          type: string
+        current_bitrate:
+          type: string
+        progress:
+          type: number
+        speed:
+          type: string
+
+    TranscodeTask:
+      type: object
+      required:
+        - id
+        - media_id
+        - target_id
+        - output_path
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        media_id:
+          type: string
+          format: uuid
+        target_id:
+          type: string
+          format: uuid
+        output_path:
+          type: string
+        status:
+          $ref: "#/components/schemas/TranscodeTaskStatus"
+        progress:
+          $ref: "#/components/schemas/TranscodeTaskProgress"
+
+    WorkflowCriteria:
+      type: object
+      required:
+        - key
+        - type
+        - value
+        - combine_type
+      properties:
+        key:
+          type: string
+          enum: ['TITLE', 'RESOLUTION', 'SEASON_NUMBER', 'EPISODE_NUMBER', 'SOURCE_PATH', 'SOURCE_NAME', 'SOURCE_EXTENSION']
+        type:
+          type: string
+          enum: ['EQUALS', 'NOT_EQUALS', 'MATCHES', 'DOES_NOT_MATCH', 'LESS_THAN', 'GREATER_THAN', 'IS_PRESENT', 'IS_NOT_PRESENT']
+        value:
+          type: string
+        combine_type:
+          type: string
+          enum: ['AND', 'OR']
+
+    CreateWorkflowRequest:
+      type: object
+      required:
+        - label
+        - enabled
+        - target_ids
+        - criteria
+      properties:
+        label:
+          type: string
+          x-oapi-codegen-extra-tags:
+            validate: required,alphaNumericWhitespaceTrimmed
+        enabled:
+          type: boolean
+        target_ids:
+          type: array
+          x-oapi-codegen-extra-tags:
+            validate: required,min=1
+          items:
+            type: string
+            format: uuid
+        criteria:
+          type: array
+          x-oapi-codegen-extra-tags:
+            validate: required
+          items:
+            $ref: "#/components/schemas/WorkflowCriteria"
+
+    UpdateWorkflowRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          x-oapi-codegen-extra-tags:
+            validate: required,alphaNumericWhitespaceTrimmed
+        enabled:
+          type: boolean
+        target_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowCriteria"
+
+    Workflow:
+      type: object
+      required:
+        - id
+        - label
+        - enabled
+        - target_ids
+        - criteria
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        enabled:
+          type: boolean
+        target_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowCriteria"
+
+    Target:
+      type: object
+      required:
+        - id
+        - label
+        - extension
+        - ffmpeg_options
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        extension:
+          type: string
+        ffmpeg_options:
+          type: object
+
+    CreateTargetRequest:
+      type: object
+      required:
+        - label
+        - extension
+        - ffmpeg_options
+      properties:
+        label:
+          type: string
+        extension:
+          type: string
+        ffmpeg_options:
+          type: object
+
+    UpdateTargetRequest:
+      type: object
+      properties:
+        label:
+          type: string
+        extension:
+          type: string
+        ffmpeg_options:
+          type: object

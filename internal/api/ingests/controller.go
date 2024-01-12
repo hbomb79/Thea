@@ -5,42 +5,15 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/api/gen"
 	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/media"
-	"github.com/hbomb79/Thea/internal/user/permissions"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/labstack/echo/v4"
 )
 
 type (
-	ResolutionTypeWrapper struct{ Value ingest.ResolutionType }
-	ResolveTroubleRequest struct {
-		Method  *ResolutionTypeWrapper `json:"method"`
-		Context map[string]string      `json:"context"`
-	}
-
-	// IngestDto is the response used by endpoints that return
-	// the items being ingested (e.g., list, get)
-	IngestDto struct {
-		Id       uuid.UUID                `json:"id"`
-		Path     string                   `json:"source_path"`
-		State    IngestStateDto           `json:"state"`
-		Trouble  *TroubleDto              `json:"trouble"`
-		Metadata *media.FileMediaMetadata `json:"file_metadata"`
-	}
-
-	IngestStateDto string
-	TroubleTypeDto string
-
-	TroubleDto struct {
-		Type                   TroubleTypeDto          `json:"type"`
-		Message                string                  `json:"message"`
-		Context                map[string]any          `json:"context"`
-		AllowedResolutionTypes []ResolutionTypeWrapper `json:"allowed_resolution_types"`
-	}
-
 	IngestService interface {
 		GetAllIngests() []*ingest.IngestItem
 		GetIngest(uuid.UUID) *ingest.IngestItem
@@ -49,155 +22,106 @@ type (
 		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
 	}
 
-	AuthProvider interface {
-		GetPermissionAuthorizerMiddleware(requiredPermissions ...string) echo.MiddlewareFunc
-	}
-
-	// Controller is the struct which is responsible for defining the
+	// IngestsController is the struct which is responsible for defining the
 	// routes for this controller. Additionally, it holds the reference to
 	// the store used to retrieve information about ingests from Thea
-	Controller struct {
-		service      IngestService
-		authProvider AuthProvider
+	IngestsController struct {
+		service IngestService
 	}
 )
 
 var controllerLogger = logger.Get("IngestsController")
 
-const (
-	IDLE        IngestStateDto = "IDLE"
-	IMPORT_HOLD IngestStateDto = "IMPORT_HOLD"
-	INGESTING   IngestStateDto = "INGESTING"
-	TROUBLED    IngestStateDto = "TROUBLED"
-
-	METADATA_FAILURE     TroubleTypeDto = "METADATA_FAILURE"
-	TMDB_FAILURE_UNKNOWN TroubleTypeDto = "TMDB_FAILURE_UNKNOWN"
-	TMDB_FAILURE_MULTI   TroubleTypeDto = "TMDB_FAILURE_MULTI_RESULT"
-	TMDB_FAILURE_NONE    TroubleTypeDto = "TMDB_FAILURE_NO_RESULT"
-	UNKNOWN_FAILURE      TroubleTypeDto = "UNKNOWN_FAILURE"
-)
-
-func New(authProvider AuthProvider, validate *validator.Validate, serv IngestService) *Controller {
-	return &Controller{authProvider: authProvider, service: serv}
+func New(serv IngestService) *IngestsController {
+	return &IngestsController{service: serv}
 }
 
-// Init accepts the Echo group for the ingest endpoints
-// and sets the routes on them.
-func (controller *Controller) SetRoutes(eg *echo.Group) {
-	hasPerms := controller.authProvider.GetPermissionAuthorizerMiddleware
-	eg.GET("/", controller.list, hasPerms(permissions.ViewIngestsPermission))
-	eg.POST("/poll/", controller.performPoll, hasPerms(permissions.PollNewIngestsPermission))
-	eg.GET("/:id/", controller.get, hasPerms(permissions.ViewIngestsPermission))
-	eg.DELETE("/:id/", controller.delete, hasPerms(permissions.DeleteIngestsPermission))
-	eg.POST("/:id/trouble-resolution/", controller.postTroubleResolution, hasPerms(permissions.ResolveTroubledIngestsPermission))
-}
-
-// list returns all the ingests - represented as DTOs - from the underlying store.
-func (controller *Controller) list(ec echo.Context) error {
+// ListIngests returns all the ingests - represented as DTOs - from the underlying store.
+func (controller *IngestsController) ListIngests(ec echo.Context, _ gen.ListIngestsRequestObject) (gen.ListIngestsResponseObject, error) {
 	items := controller.service.GetAllIngests()
-	dtos := make([]*IngestDto, len(items))
+	dtos := make([]gen.Ingest, len(items))
 	for k, v := range items {
 		dtos[k] = NewDto(v)
 	}
 
-	return ec.JSON(http.StatusOK, dtos)
+	return gen.ListIngests200JSONResponse(dtos), nil
 }
 
-// get uses the 'id' path param from the context and retrieves the ingest from the
+// GetIngest uses the 'id' path param from the context and retrieves the ingest from the
 // underlying store. If found, a DTO representing the ingest is returned
-func (controller *Controller) get(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
-	}
-
-	item := controller.service.GetIngest(id)
+func (controller *IngestsController) GetIngest(ec echo.Context, request gen.GetIngestRequestObject) (gen.GetIngestResponseObject, error) {
+	item := controller.service.GetIngest(request.Id)
 	if item == nil {
-		return echo.NewHTTPError(http.StatusNotFound)
+		return nil, echo.ErrNotFound
 	}
 
-	return ec.JSON(http.StatusOK, NewDto(item))
+	return gen.GetIngest200JSONResponse(NewDto(item)), nil
 }
 
-// delete uses the 'id' path param from the context and retrieves the ingest from the
+// DeleteIngest uses the 'id' path param from the context and retrieves the ingest from the
 // underlying store. If found, the Ingest is cancelled.
-func (controller *Controller) delete(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
+func (controller *IngestsController) DeleteIngest(ec echo.Context, request gen.DeleteIngestRequestObject) (gen.DeleteIngestResponseObject, error) {
+	if err := controller.service.RemoveIngest(request.Id); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if err := controller.service.RemoveIngest(id); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-
-	return ec.NoContent(http.StatusOK)
+	return gen.DeleteIngest200Response{}, nil
 }
 
-// postTroubleResolution uses the 'id' path param from the context and retrieves the ingest
+// ResolveIngest uses the 'id' path param from the context and retrieves the ingest
 // from the underlying store. If found, then an attempt to resolve the trouble will be made.
-func (controller *Controller) postTroubleResolution(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Ingest ID is not a valid UUID")
+func (controller *IngestsController) ResolveIngest(ec echo.Context, request gen.ResolveIngestRequestObject) (gen.ResolveIngestResponseObject, error) {
+	// TODO use validator for this
+	if request.Body.Method == "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "JSON body missing mandatory 'method' field")
 	}
 
-	var request ResolveTroubleRequest
-	if err := ec.Bind(&request); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("JSON body illegal: %v", err))
-	} else if request.Method == nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "JSON body missing mandatory 'method' field")
+	if err := controller.service.ResolveTroubledIngest(
+		request.Id,
+		troubleResolutionDtoMethodToModel(request.Body.Method),
+		request.Body.Context,
+	); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	if err := controller.service.ResolveTroubledIngest(id, request.Method.Value, request.Context); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-
-	return ec.NoContent(http.StatusOK)
+	return gen.ResolveIngest200Response{}, nil
 }
 
-func (controller *Controller) performPoll(ec echo.Context) error {
+func (controller *IngestsController) PollIngests(ec echo.Context, _ gen.PollIngestsRequestObject) (gen.PollIngestsResponseObject, error) {
 	controller.service.DiscoverNewFiles()
 
-	return ec.NoContent(http.StatusOK)
+	return gen.PollIngests200Response{}, nil
 }
 
-func (wrapper *ResolutionTypeWrapper) UnmarshalJSON(data []byte) error {
-	var strValue string
-	if err := json.Unmarshal(data, &strValue); err != nil {
-		return err
-	}
-
-	switch strValue {
-	case "abort":
-		wrapper.Value = ingest.ABORT
-	case "specify_tmdb_id":
-		wrapper.Value = ingest.SPECIFY_TMDB_ID
-	case "retry":
-		wrapper.Value = ingest.RETRY
+func troubleResolutionDtoMethodToModel(method gen.IngestTroubleResolutionType) ingest.ResolutionType {
+	switch method {
+	case "ABORT":
+		return ingest.ABORT
+	case "SPECIFY_TMDB_ID":
+		return ingest.SPECIFY_TMDB_ID
+	case "RETRY":
+		return ingest.RETRY
 	default:
-		return fmt.Errorf("invalid enum value: %s for resolution method", strValue)
+		panic("invalid enum value for resolution method")
 	}
-
-	return nil
 }
 
-func (wrapper *ResolutionTypeWrapper) MarshalJSON() ([]byte, error) {
-	switch wrapper.Value {
+func troubleResolutionModelMethodToDto(model ingest.ResolutionType) gen.IngestTroubleResolutionType {
+	switch model {
 	case ingest.ABORT:
-		return json.Marshal("abort")
+		return "ABORT"
 	case ingest.SPECIFY_TMDB_ID:
-		return json.Marshal("specify_tmdb_id")
+		return "SPECIFY_TMDB_ID"
 	case ingest.RETRY:
-		return json.Marshal("retry")
+		return "RETRY"
 	}
 
-	return nil, fmt.Errorf("invalid enum value: %v for resolution method has no known marshalling", wrapper.Value)
+	panic("invalid resolution type")
 }
 
 // NewDto creates a IngestDto using the IngestItem model.
-func NewDto(item *ingest.IngestItem) *IngestDto {
-	var trbl *TroubleDto = nil
+func NewDto(item *ingest.IngestItem) gen.Ingest {
+	var trbl *gen.IngestTrouble = nil
 	if item.Trouble != nil {
 		context, err := ExtractTroubleContext(item.Trouble)
 		if err != nil {
@@ -207,7 +131,7 @@ func NewDto(item *ingest.IngestItem) *IngestDto {
 			controllerLogger.Emit(logger.ERROR, "Error whilst creating DTO of ingestion trouble: %v\n", err)
 		}
 
-		trbl = &TroubleDto{
+		trbl = &gen.IngestTrouble{
 			Type:                   TroubleTypeModelToDto(item.Trouble.Type()),
 			Message:                item.Trouble.Error(),
 			Context:                context,
@@ -215,12 +139,30 @@ func NewDto(item *ingest.IngestItem) *IngestDto {
 		}
 	}
 
-	return &IngestDto{
+	return gen.Ingest{
 		Id:       item.ID,
 		Path:     item.Path,
 		State:    IngestStateModelToDto(item.State),
 		Trouble:  trbl,
-		Metadata: item.ScrapedMetadata,
+		Metadata: scrapedMetadataToDto(item.ScrapedMetadata),
+	}
+}
+
+func scrapedMetadataToDto(metadata *media.FileMediaMetadata) *gen.FileMetadata {
+	if metadata == nil {
+		return nil
+	}
+
+	return &gen.FileMetadata{
+		EpisodeNumber: metadata.EpisodeNumber,
+		Episodic:      metadata.Episodic,
+		FrameHeight:   metadata.FrameH,
+		FrameWidth:    metadata.FrameW,
+		Path:          metadata.Path,
+		Runtime:       metadata.Runtime,
+		SeasonNumber:  metadata.SeasonNumber,
+		Title:         metadata.Title,
+		Year:          metadata.Year,
 	}
 }
 
@@ -257,43 +199,43 @@ func ExtractTroubleContext(trouble *ingest.Trouble) (map[string]any, error) {
 	}
 }
 
-func ExtractTroubleResolutionTypes(trouble *ingest.Trouble) []ResolutionTypeWrapper {
+func ExtractTroubleResolutionTypes(trouble *ingest.Trouble) []gen.IngestTroubleResolutionType {
 	modelResTypes := trouble.AllowedResolutionTypes()
-	dtoResTypes := make([]ResolutionTypeWrapper, len(modelResTypes))
+	dtoResTypes := make([]gen.IngestTroubleResolutionType, len(modelResTypes))
 	for k, v := range modelResTypes {
-		dtoResTypes[k] = ResolutionTypeWrapper{Value: v}
+		dtoResTypes[k] = troubleResolutionModelMethodToDto(v)
 	}
 
 	return dtoResTypes
 }
 
-func TroubleTypeModelToDto(troubleType ingest.TroubleType) TroubleTypeDto {
+func TroubleTypeModelToDto(troubleType ingest.TroubleType) gen.IngestTroubleType {
 	switch troubleType {
 	case ingest.METADATA_FAILURE:
-		return METADATA_FAILURE
+		return gen.METADATAFAILURE
 	case ingest.TMDB_FAILURE_UNKNOWN:
-		return TMDB_FAILURE_UNKNOWN
+		return gen.TMDBFAILUREUNKNOWN
 	case ingest.TMDB_FAILURE_NONE:
-		return TMDB_FAILURE_NONE
+		return gen.TMDBFAILURENORESULT
 	case ingest.TMDB_FAILURE_MULTI:
-		return TMDB_FAILURE_MULTI
+		return gen.TMDBFAILUREMULTIRESULT
 	case ingest.UNKNOWN_FAILURE:
-		return UNKNOWN_FAILURE
+		return gen.UNKNOWNFAILURE
 	}
 
 	panic(fmt.Sprintf("ingest trouble type %s is not recognized by API layer, DTO cannot be created. Please report this error.", troubleType))
 }
 
-func IngestStateModelToDto(modelType ingest.IngestItemState) IngestStateDto {
+func IngestStateModelToDto(modelType ingest.IngestItemState) gen.IngestState {
 	switch modelType {
 	case ingest.IDLE:
-		return IDLE
+		return gen.IngestStateIDLE
 	case ingest.IMPORT_HOLD:
-		return IMPORT_HOLD
+		return gen.IngestStateIMPORTHOLD
 	case ingest.INGESTING:
-		return INGESTING
+		return gen.IngestStateINGESTING
 	case ingest.TROUBLED:
-		return TROUBLED
+		return gen.IngestStateTROUBLED
 	}
 
 	panic(fmt.Sprintf("ingest type %s is not recognized by API layer, DTO cannot be created. Please report this error.", modelType))

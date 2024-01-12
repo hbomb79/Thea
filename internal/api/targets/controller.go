@@ -4,149 +4,115 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/api/gen"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/labstack/echo/v4"
+	"github.com/mitchellh/mapstructure"
 )
 
 type (
-	Dto struct {
-		Id    uuid.UUID    `json:"id"`
-		Label string       `json:"label"`
-		Ext   string       `json:"extension"`
-		Opts  *ffmpeg.Opts `json:"ffmpeg_options"`
-	}
-
-	CreateRequest struct {
-		Label string      `json:"label" validate:"required,alphaNumericWhitespaceTrimmed"`
-		Ext   string      `json:"extension" validate:"required,alphanum"`
-		Opts  ffmpeg.Opts `json:"ffmpeg_options" validate:"required"`
-	}
-
-	UpdateRequest struct {
-		Label *string      `json:"label" validate:"omitempty,alphaNumericWhitespaceTrimmed"`
-		Ext   *string      `json:"extension" validate:"omitempty,alphanum"`
-		Opts  *ffmpeg.Opts `json:"ffmpeg_options"`
-	}
-
 	Store interface {
 		SaveTarget(*ffmpeg.Target) error
 		GetTarget(uuid.UUID) *ffmpeg.Target
 		GetAllTargets() []*ffmpeg.Target
 		DeleteTarget(uuid.UUID)
 	}
-	AuthProvider interface{}
 
-	Controller struct {
-		store        Store
-		validator    *validator.Validate
-		authProvider AuthProvider
+	TargetController struct {
+		store Store
 	}
 )
 
-func New(authProvider AuthProvider, validate *validator.Validate, store Store) *Controller {
-	return &Controller{authProvider: authProvider, store: store, validator: validate}
+func New(store Store) *TargetController {
+	return &TargetController{store: store}
 }
 
-func (controller *Controller) SetRoutes(eg *echo.Group) {
-	eg.POST("/", controller.create)
-	eg.GET("/", controller.list)
-	eg.GET("/:id/", controller.get)
-	eg.PATCH("/:id/", controller.update)
-	eg.DELETE("/:id/", controller.delete)
-}
-
-func (controller *Controller) create(ec echo.Context) error {
-	var createRequest CreateRequest
-	if err := ec.Bind(&createRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
+func (controller *TargetController) CreateTarget(ec echo.Context, request gen.CreateTargetRequestObject) (gen.CreateTargetResponseObject, error) {
+	var decoded ffmpeg.Opts
+	if err := mapstructure.Decode(request.Body.FfmpegOptions, &decoded); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("provided ffmpeg_options malformed: %s", err))
 	}
 
-	if err := controller.validator.Struct(createRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
-	}
-
-	newTarget := ffmpeg.Target{
-		ID:            uuid.New(),
-		Label:         createRequest.Label,
-		FfmpegOptions: &createRequest.Opts,
-		Ext:           createRequest.Ext,
-	}
-
+	newTarget := ffmpeg.Target{ID: uuid.New(), Label: request.Body.Label, FfmpegOptions: &decoded, Ext: request.Body.Extension}
 	if err := controller.store.SaveTarget(&newTarget); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
 	}
 
-	return ec.NoContent(http.StatusCreated)
+	return gen.CreateTarget201JSONResponse{}, nil
 }
 
-func (controller *Controller) list(ec echo.Context) error {
+func (controller *TargetController) ListTargets(ec echo.Context, request gen.ListTargetsRequestObject) (gen.ListTargetsResponseObject, error) {
 	targets := controller.store.GetAllTargets()
-	dtos := make([]*Dto, len(targets))
-	for i, t := range targets {
-		dtos[i] = NewDto(t)
-	}
 
-	return ec.JSON(http.StatusOK, dtos)
+	return gen.ListTargets200JSONResponse(NewDtos(targets)), nil
 }
 
-func (controller *Controller) get(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
+func (controller *TargetController) GetTarget(ec echo.Context, request gen.GetTargetRequestObject) (gen.GetTargetResponseObject, error) {
+	target := controller.store.GetTarget(request.Id)
+	if target == nil {
+		return nil, echo.ErrNotFound
 	}
 
-	item := controller.store.GetTarget(id)
-	if item == nil {
-		return echo.NewHTTPError(http.StatusNotFound)
-	}
-
-	return ec.JSON(http.StatusOK, NewDto(item))
+	return gen.GetTarget200JSONResponse(NewDto(target)), nil
 }
 
-func (controller *Controller) update(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
+func (controller *TargetController) UpdateTarget(ec echo.Context, request gen.UpdateTargetRequestObject) (gen.UpdateTargetResponseObject, error) {
+	model := *controller.store.GetTarget(request.Id)
+	if request.Body.Extension != nil {
+		model.Ext = *request.Body.Extension
 	}
-
-	var patchRequest UpdateRequest
-	if err := ec.Bind(&patchRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
+	if request.Body.Label != nil {
+		model.Label = *request.Body.Label
 	}
-	if err := controller.validator.Struct(patchRequest); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid body: %v", err))
-	}
-
-	model := *controller.store.GetTarget(id)
-	if patchRequest.Ext != nil {
-		model.Ext = *patchRequest.Ext
-	}
-	if patchRequest.Label != nil {
-		model.Label = *patchRequest.Label
-	}
-	if patchRequest.Opts != nil {
-		model.FfmpegOptions = patchRequest.Opts
+	if request.Body.FfmpegOptions != nil {
+		if opts, err := ffmpegOptsToModel(*request.Body.FfmpegOptions); err != nil {
+			model.FfmpegOptions = opts
+		} else {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err)
+		}
 	}
 
 	if err := controller.store.SaveTarget(&model); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
 	}
 
-	return ec.NoContent(http.StatusOK)
+	return gen.UpdateTarget200JSONResponse(NewDto(&model)), nil
 }
 
-func (controller *Controller) delete(ec echo.Context) error {
-	id, err := uuid.Parse(ec.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Target ID is not a valid UUID")
+func (controller *TargetController) DeleteTarget(ec echo.Context, request gen.DeleteTargetRequestObject) (gen.DeleteTargetResponseObject, error) {
+	controller.store.DeleteTarget(request.Id)
+
+	return gen.DeleteTarget204Response{}, nil
+}
+
+func ffmpegOptsToModel(opts map[string]interface{}) (*ffmpeg.Opts, error) {
+	var model ffmpeg.Opts
+	if err := mapstructure.Decode(opts, &model); err != nil {
+		return nil, fmt.Errorf("failed to decode provided ffmpeg options: %s", err)
 	}
 
-	controller.store.DeleteTarget(id)
-	return ec.NoContent(http.StatusNoContent)
+	return &model, nil
 }
 
-func NewDto(model *ffmpeg.Target) *Dto {
-	return &Dto{Id: model.ID, Label: model.Label, Ext: model.Ext, Opts: model.FfmpegOptions}
+func ffmpegOptsToDto(opts *ffmpeg.Opts) map[string]interface{} {
+	var dto map[string]interface{}
+	if err := mapstructure.Decode(opts, &dto); err != nil {
+		panic("ffmpeg options cannot be decoded to map[string]interface{}")
+	}
+
+	return dto
+}
+
+func NewDto(model *ffmpeg.Target) gen.Target {
+	return gen.Target{Id: model.ID, Label: model.Label, Extension: model.Ext, FfmpegOptions: ffmpegOptsToDto(model.FfmpegOptions)}
+}
+
+func NewDtos(models []*ffmpeg.Target) []gen.Target {
+	dtos := make([]gen.Target, len(models))
+	for k, v := range models {
+		dtos[k] = gen.Target{Id: v.ID, Label: v.Label, Extension: v.Ext, FfmpegOptions: ffmpegOptsToDto(v.FfmpegOptions)}
+	}
+
+	return dtos
 }

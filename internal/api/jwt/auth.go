@@ -8,11 +8,13 @@ import (
 	"slices"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/api/gen"
 	"github.com/hbomb79/Thea/internal/user"
+	"github.com/hbomb79/Thea/internal/user/permissions"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/hbomb79/Thea/pkg/sync"
 	"github.com/labstack/echo/v4"
@@ -20,7 +22,6 @@ import (
 )
 
 var (
-	errUnauthorized            = echo.NewHTTPError(http.StatusUnauthorized)
 	ErrUnknownSecurityScheme   = errors.New("request specifies an unknown security scheme and so cannot be validated")
 	ErrAuthTokenMissing        = errors.New("request does not contain required auth token in cookies")
 	ErrInsufficientPermissions = errors.New("authenticated user is missing required permissions")
@@ -29,11 +30,13 @@ var (
 )
 
 const (
-	authTokenCookieName    = "auth-token"
-	refreshTokenCookieName = "refresh-token"
+	PermissionAuthSecuritySchemeName = "permissionAuth"
 
-	authTokenLifespan    = time.Minute * 30
-	refreshTokenLifespan = time.Hour * 24 * 30 // 30 days
+	authTokenCookieName = "auth-token"
+	authTokenLifespan   = time.Minute * 30
+
+	refreshTokenCookieName = "refresh-token"
+	refreshTokenLifespan   = time.Hour * 24 * 30 // 30 days
 )
 
 type (
@@ -224,6 +227,8 @@ func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware() echo.MiddlewareFun
 		panic(fmt.Sprintf("failed to extract swagger spec from generated spec: %s", err))
 	}
 
+	auth.validateSpecSecurity(spec)
+
 	return middleware.OapiRequestValidatorWithOptions(spec, &middleware.Options{
 		Skipper: func(ec echo.Context) bool {
 			// We specifically allow OPTION requests to pass through un-encumbered
@@ -233,18 +238,62 @@ func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware() echo.MiddlewareFun
 			return ec.Request().Method == http.MethodOptions
 		},
 		ErrorHandler: func(_ echo.Context, err *echo.HTTPError) error {
-			log.Errorf("Request validation failed: %#v\n", err)
-			switch err.Code {
-			case http.StatusForbidden:
-				err.Message = http.StatusText(err.Code)
-			case http.StatusUnauthorized:
-				err.Message = http.StatusText(err.Code)
-			}
-
+			// The request validator constructs an Echo HTTPError using
+			// the error our AuthenticationFunc returns. This is
+			// unacceptable as it reveals far too much information about
+			// why the validation failed.
+			// Simple fix is to rewrite the error to the HTTP status text for
+			// the code - the full error will still be logged as it's stored
+			// inside the 'internal' field of the HTTPError.
+			err.Message = http.StatusText(err.Code)
 			return err
 		},
 		Options: openapi3filter.Options{AuthenticationFunc: auth.validateTokenFromAuthInput},
 	})
+}
+
+// validateSpecSecurity ensures that the security requirements of the
+// provided OpenAPI spec do not reference any permissions or security schems
+// which we don't know about. This would make those endpoints unreachable
+// and so is likely a mistake.
+func (auth *jwtAuthProvider) validateSpecSecurity(spec *openapi3.T) {
+	referencedPermissions := make(map[string]struct{})
+	for _, security := range spec.Security {
+		if perms, ok := security[PermissionAuthSecuritySchemeName]; ok {
+			for _, perm := range perms {
+				referencedPermissions[perm] = struct{}{}
+			}
+		} else {
+			panic("validation of OpenAPI spec failed: top-level security types specify one or more disallowed types")
+		}
+	}
+	for _, path := range spec.Paths {
+		for _, operation := range path.Operations() {
+			if operation.Security != nil {
+				for _, security := range *operation.Security {
+					if perms, ok := security[PermissionAuthSecuritySchemeName]; ok {
+						for _, perm := range perms {
+							referencedPermissions[perm] = struct{}{}
+						}
+					} else {
+						panic(fmt.Sprintf("validation of OpenAPI spec failed: security for operation %s specifies one or more disallowed types", operation.OperationID))
+					}
+				}
+			}
+		}
+	}
+
+	knownPermissions := permissions.All()
+	knownPermissionsMap := make(map[string]struct{})
+	for _, p := range knownPermissions {
+		knownPermissionsMap[p] = struct{}{}
+	}
+	for referenced := range referencedPermissions {
+		if _, ok := knownPermissionsMap[referenced]; !ok {
+			panic(fmt.Sprintf("validation of OpenAPI spec failed: permission '%s' is referenced by one or more security requirements, however this permission is not recognized by Thea", referenced))
+		}
+	}
+
 }
 
 // validateTokenFromAuthInput accepts an OpenAPI authentication input
@@ -253,7 +302,7 @@ func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware() echo.MiddlewareFun
 // If we CAN extract a valid token, then said token is also
 // checked to ensure it contains the correct permissions.
 func (auth *jwtAuthProvider) validateTokenFromAuthInput(ctx context.Context, authInput *openapi3filter.AuthenticationInput) error {
-	if authInput.SecuritySchemeName != "permissionAuth" {
+	if authInput.SecuritySchemeName != PermissionAuthSecuritySchemeName {
 		return ErrUnknownSecurityScheme
 	}
 
@@ -448,9 +497,6 @@ func (auth *jwtAuthProvider) revokeToken(token string) {
 	auth.blacklistedTokens.Store(token, struct{}{})
 }
 
-func setTokenCookieCtx(ctx context.Context, name string, path string, token string, expiration time.Time) {
-
-}
 func setTokenCookie(ec echo.Context, name string, path string, token string, expiration time.Time) {
 	cookie := new(http.Cookie)
 	cookie.Name = name

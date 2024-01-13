@@ -35,7 +35,7 @@ type (
 		id uuid.UUID
 	}
 
-	activityManager struct {
+	activityService struct {
 		*sync.Mutex
 		broadcaster
 		eventBus       event.EventHandler
@@ -44,8 +44,8 @@ type (
 	}
 )
 
-func newActivityManager(broadcaster broadcaster, event event.EventHandler) *activityManager {
-	return &activityManager{
+func newActivityService(broadcaster broadcaster, event event.EventHandler) *activityService {
+	return &activityService{
 		Mutex:          &sync.Mutex{},
 		broadcaster:    broadcaster,
 		eventBus:       event,
@@ -54,14 +54,14 @@ func newActivityManager(broadcaster broadcaster, event event.EventHandler) *acti
 	}
 }
 
-func (service *activityManager) Run(ctx context.Context) error {
+func (service *activityService) Run(ctx context.Context) error {
 	messageChan := make(chan event.HandlerEvent, 100)
 	service.eventBus.RegisterHandlerChannel(messageChan,
 		event.INGEST_UPDATE, event.INGEST_COMPLETE, event.TRANSCODE_UPDATE,
 		event.TRANSCODE_TASK_PROGRESS, event.TRANSCODE_COMPLETE, event.WORKFLOW_UPDATE,
 		event.DOWNLOAD_UPDATE, event.DOWNLOAD_COMPLETE, event.DOWNLOAD_PROGRESS)
 
-	log.Emit(logger.NEW, "Activity manager started\n")
+	log.Emit(logger.NEW, "Activity service started\n")
 	for {
 		select {
 		case ev := <-messageChan:
@@ -69,13 +69,13 @@ func (service *activityManager) Run(ctx context.Context) error {
 				log.Emit(logger.ERROR, "Handling of event %v failed: %v\n", ev, err)
 			}
 		case <-ctx.Done():
-			log.Emit(logger.STOP, "Activity manager closed\n")
+			log.Emit(logger.STOP, "Activity service closed\n")
 			return nil
 		}
 	}
 }
 
-func (service *activityManager) handleEvent(ev event.HandlerEvent) error {
+func (service *activityService) handleEvent(ev event.HandlerEvent) error {
 	resourceID, ok := ev.Payload.(uuid.UUID)
 	if !ok {
 		return errors.New("illegal payload (expected UUID)")
@@ -109,15 +109,15 @@ func (service *activityManager) handleEvent(ev event.HandlerEvent) error {
 	return nil
 }
 
-func (service *activityManager) scheduleEventBroadcast(resourceKey eventKey, handler broadcastHandler) {
+func (service *activityService) scheduleEventBroadcast(resourceKey eventKey, handler broadcastHandler) {
 	service._scheduleEventBroadcast(resourceKey, handler, DEBOUNCE_DURATION, MAX_TIMER_DURATION)
 }
 
-func (service *activityManager) scheduleRapidEventBroadcast(resourceKey eventKey, handler broadcastHandler) {
+func (service *activityService) scheduleRapidEventBroadcast(resourceKey eventKey, handler broadcastHandler) {
 	service._scheduleEventBroadcast(resourceKey, handler, RAPID_EVENT_DEBOUNCE_DURATION, RAPID_EVENT_MAX_TIMER_DURATION)
 }
 
-func (service *activityManager) _scheduleEventBroadcast(resourceKey eventKey, handler broadcastHandler, debounceTime time.Duration, maxTime time.Duration) {
+func (service *activityService) _scheduleEventBroadcast(resourceKey eventKey, handler broadcastHandler, debounceTime time.Duration, maxTime time.Duration) {
 	service.Lock()
 	defer service.Unlock()
 
@@ -135,7 +135,7 @@ func (service *activityManager) _scheduleEventBroadcast(resourceKey eventKey, ha
 	}
 }
 
-func (service *activityManager) broadcast(resourceKey eventKey, handler broadcastHandler) {
+func (service *activityService) broadcast(resourceKey eventKey, handler broadcastHandler) {
 	service.Lock()
 	defer service.Unlock()
 

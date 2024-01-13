@@ -4,8 +4,8 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/hbomb79/Thea/internal/api/ingests"
-	"github.com/hbomb79/Thea/internal/api/transcodes"
+	"github.com/hbomb79/Thea/internal/api/controllers/ingests"
+	"github.com/hbomb79/Thea/internal/api/controllers/transcodes"
 	"github.com/hbomb79/Thea/internal/http/websocket"
 )
 

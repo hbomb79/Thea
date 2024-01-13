@@ -39,7 +39,7 @@ paths:
               $ref: "#/components/schemas/LoginRequest"
       responses:
         "200":
-          description: Success
+          description: Successful login. The User DTO is returned, and the auth and refresh tokens are included in the responses cookies.
           content:
             application/json:
               schema:

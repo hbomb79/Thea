@@ -25,8 +25,8 @@ type (
 	}
 
 	AuthProvider interface {
-		RefreshTokens(echo.Context) error
-		GenerateTokensAndSetCookies(ec echo.Context, userID uuid.UUID) error
+		RefreshTokens(allegedRefreshToken string) (*http.Cookie, *http.Cookie, error)
+		GenerateTokenCookies(userID uuid.UUID) (*http.Cookie, *http.Cookie, error)
 		GetAuthenticatedUserFromContext(ec echo.Context) (*jwt.AuthenticatedUser, error)
 		RevokeTokensInContext(ec echo.Context)
 		RevokeAllForUser(userID uuid.UUID) error
@@ -55,12 +55,12 @@ func (controller *AuthController) Login(ec echo.Context, request gen.LoginReques
 		return nil, errUnauthorized
 	}
 
-	if err := controller.authProvider.GenerateTokensAndSetCookies(ec, user.ID); err != nil {
+	authTokenCookie, refreshTokenCookie, err := controller.authProvider.GenerateTokenCookies(user.ID)
+	if err != nil {
 		log.Warnf("Failed to authenticate due to error: %v\n", err)
 		return nil, errUnauthorized
 	}
-
-	return gen.Login200JSONResponse(userToDto(user)), nil
+	return Login200JSONResponse{User: userToDto(user), AuthToken: *authTokenCookie, RefreshToken: *refreshTokenCookie}, nil
 }
 
 func (controller *AuthController) LogoutSession(ec echo.Context, request gen.LogoutSessionRequestObject) (gen.LogoutSessionResponseObject, error) {
@@ -79,15 +79,21 @@ func (controller *AuthController) LogoutAll(ec echo.Context, request gen.LogoutA
 }
 
 // Refresh allows a client to obtain a new auth and Refresh token by
-// providing a valid Refresh token. The new tokens are stored
-// in the requests cookies, same as login.
+// providing a valid Refresh token. The new tokens are added
+// to the responses cookies, same as login.
 func (controller *AuthController) Refresh(ec echo.Context, request gen.RefreshRequestObject) (gen.RefreshResponseObject, error) {
-	if err := controller.authProvider.RefreshTokens(ec); err != nil {
-		log.Errorf("Failed to refresh: %s\n", err)
-		return nil, errUnauthorized
+	cookieToken, err := ec.Cookie(jwt.RefreshTokenCookieName)
+	if err != nil {
+		return nil, echo.ErrUnauthorized
 	}
 
-	return gen.Refresh200Response{}, nil
+	authTokenCookie, refreshTokenCookie, err := controller.authProvider.RefreshTokens(cookieToken.Value)
+	if err != nil {
+		log.Errorf("Failed to refresh: %s\n", err)
+		return nil, echo.ErrForbidden
+	}
+
+	return Refresh200JSONResponse{AuthToken: *authTokenCookie, RefreshToken: *refreshTokenCookie}, nil
 }
 
 func (controller *AuthController) GetCurrentUser(ec echo.Context, request gen.GetCurrentUserRequestObject) (gen.GetCurrentUserResponseObject, error) {

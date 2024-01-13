@@ -44,6 +44,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
   /auth/current-user:
     get:
       summary: Current User
@@ -61,13 +65,17 @@ paths:
   /auth/refresh:
     post:
       summary: Refresh Tokens
-      description: Uses the refresh token stored in the request cookies to regenerate authentication tokens
+      description: Uses the refresh token stored in the request cookies to regenerate authentication tokens, returning two new tokens in the response cookies on success
       operationId: refresh
       tags:
         - Auth
       responses:
         "200":
           description: Success
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
   /auth/logout:
     get:
       summary: Logout Session

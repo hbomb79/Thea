@@ -32,11 +32,11 @@ var (
 const (
 	PermissionAuthSecuritySchemeName = "permissionAuth"
 
-	authTokenCookieName = "auth-token"
-	authTokenLifespan   = time.Minute * 30
+	AuthTokenCookieName = "auth-token"
+	AuthTokenLifespan   = time.Minute * 30
 
-	refreshTokenCookieName = "refresh-token"
-	refreshTokenLifespan   = time.Hour * 24 * 30 // 30 days
+	RefreshTokenCookieName = "refresh-token"
+	RefreshTokenLifespan   = time.Hour * 24 * 30 // 30 days
 )
 
 type (
@@ -115,15 +115,15 @@ func NewJwtAuth(store Store, refreshRoutePath string, authTokenSecret []byte, re
 // generateTokensAndSetCookies generates an auth token and a refresh token
 // using the appropriate secrets and expiries, before storing both of the tokens
 // in the requests cookies.
-func (auth *jwtAuthProvider) GenerateTokensAndSetCookies(ec echo.Context, userID uuid.UUID) error {
+func (auth *jwtAuthProvider) GenerateTokenCookies(userID uuid.UUID) (*http.Cookie, *http.Cookie, error) {
 	authToken, authTokenExp, err := auth.generateAccessToken(userID)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	refreshToken, refreshTokenExp, err := auth.generateRefreshToken(userID)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// Don't block the request waiting for these
@@ -136,10 +136,6 @@ func (auth *jwtAuthProvider) GenerateTokensAndSetCookies(ec echo.Context, userID
 		}
 	}()
 
-	// Update client cookies
-	setTokenCookie(ec, authTokenCookieName, "/", authToken, authTokenExp)
-	setTokenCookie(ec, refreshTokenCookieName, auth.refreshTokenCookiePath, refreshToken, refreshTokenExp)
-
 	// Update our tracked list of tokens for this user, and schedule cleanup
 	// of this token
 	actual, loaded := auth.userTokens.LoadOrStore(userID, []string{authToken, refreshToken})
@@ -150,7 +146,10 @@ func (auth *jwtAuthProvider) GenerateTokensAndSetCookies(ec echo.Context, userID
 	auth.scheduleUserTokenCleanup(userID, authToken, authTokenExp)
 	auth.scheduleUserTokenCleanup(userID, refreshToken, refreshTokenExp)
 
-	return nil
+	// Create and return the token cookies to be set in the response
+	authTokenCookie := createTokenCookie(AuthTokenCookieName, "/", authToken, authTokenExp)
+	refreshTokenCookie := createTokenCookie(RefreshTokenCookieName, auth.refreshTokenCookiePath, refreshToken, refreshTokenExp)
+	return authTokenCookie, refreshTokenCookie, nil
 }
 
 // GetAuthenticatedUserFromContext provides a way for endpoints
@@ -170,10 +169,10 @@ func (auth *jwtAuthProvider) GetAuthenticatedUserFromContext(ec echo.Context) (*
 // request context, assuming they are provided. A missing token/cookie
 // is ignored.
 func (auth *jwtAuthProvider) RevokeTokensInContext(ec echo.Context) {
-	if cookie, err := ec.Cookie(authTokenCookieName); err == nil && cookie != nil {
+	if cookie, err := ec.Cookie(AuthTokenCookieName); err == nil && cookie != nil {
 		auth.revokeToken(cookie.Value)
 	}
-	if cookie, err := ec.Cookie(refreshTokenCookieName); err == nil && cookie != nil {
+	if cookie, err := ec.Cookie(RefreshTokenCookieName); err == nil && cookie != nil {
 		auth.revokeToken(cookie.Value)
 	}
 }
@@ -195,25 +194,21 @@ func (auth *jwtAuthProvider) RevokeAllForUser(userID uuid.UUID) error {
 }
 
 // RefreshTokens generates new auth and refresh tokens and stores them in
-// the request cookies IF the request contains a valid refresh token
-func (auth *jwtAuthProvider) RefreshTokens(ec echo.Context) error {
-	cookieToken, err := ec.Cookie(refreshTokenCookieName)
+// the request cookies IF the request contains a valid refresh token. The
+// new cookies are returned to the caller on success
+func (auth *jwtAuthProvider) RefreshTokens(allegedRefreshToken string) (*http.Cookie, *http.Cookie, error) {
+	token, err := auth.validateJWT(allegedRefreshToken, auth.refreshTokenSecret)
 	if err != nil {
-		return fmt.Errorf("failed to extract cookie %s: %w", refreshTokenCookieName, err)
-	}
-
-	token, err := auth.validateJWT(cookieToken.Value, auth.refreshTokenSecret)
-	if err != nil {
-		return fmt.Errorf("failed to refresh: %w", err)
+		return nil, nil, fmt.Errorf("failed to refresh: %w", err)
 	}
 
 	claims := token.Claims.(*jwt.MapClaims)
 	userID, err := auth.getUserIdFromClaims(*claims)
 	if err != nil {
-		return fmt.Errorf("failed to refresh: %w", err)
+		return nil, nil, fmt.Errorf("failed to refresh: %w", err)
 	}
 
-	return auth.GenerateTokensAndSetCookies(ec, *userID)
+	return auth.GenerateTokenCookies(*userID)
 }
 
 // getSecurityValidator returns a middleware which uses the generated OpenAPI swagger spec to
@@ -306,7 +301,7 @@ func (auth *jwtAuthProvider) validateTokenFromAuthInput(ctx context.Context, aut
 		return ErrUnknownSecurityScheme
 	}
 
-	tokenCookie, err := authInput.RequestValidationInput.Request.Cookie(authTokenCookieName)
+	tokenCookie, err := authInput.RequestValidationInput.Request.Cookie(AuthTokenCookieName)
 	if err != nil {
 		return ErrAuthTokenMissing
 	}
@@ -420,7 +415,7 @@ func (auth *jwtAuthProvider) generateAccessToken(userID uuid.UUID) (string, time
 		return "", time.Now(), fmt.Errorf("failed to fetch user %s during auth token generation: %w", userID, err)
 	}
 
-	exp := time.Now().Add(authTokenLifespan)
+	exp := time.Now().Add(AuthTokenLifespan)
 	claims := &authTokenClaims{
 		UserID:           userID,
 		Permissions:      user.Permissions,
@@ -443,7 +438,7 @@ func (auth *jwtAuthProvider) generateRefreshToken(userID uuid.UUID) (string, tim
 		return "", time.Now(), fmt.Errorf("failed to fetch user %s during refresh token generation: %w", userID, err)
 	}
 
-	exp := time.Now().Add(refreshTokenLifespan)
+	exp := time.Now().Add(RefreshTokenLifespan)
 	claims := &refreshTokenClaims{
 		UserID:           userID,
 		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)},
@@ -497,7 +492,7 @@ func (auth *jwtAuthProvider) revokeToken(token string) {
 	auth.blacklistedTokens.Store(token, struct{}{})
 }
 
-func setTokenCookie(ec echo.Context, name string, path string, token string, expiration time.Time) {
+func createTokenCookie(name string, path string, token string, expiration time.Time) *http.Cookie {
 	cookie := new(http.Cookie)
 	cookie.Name = name
 	cookie.Value = token
@@ -505,7 +500,7 @@ func setTokenCookie(ec echo.Context, name string, path string, token string, exp
 	cookie.Path = path
 	cookie.HttpOnly = true
 
-	ec.SetCookie(cookie)
+	return cookie
 }
 
 func generateToken(claims jwt.Claims, secret []byte) (string, error) {

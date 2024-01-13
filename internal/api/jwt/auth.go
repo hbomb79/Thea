@@ -222,6 +222,11 @@ func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware() echo.MiddlewareFun
 		panic(fmt.Sprintf("failed to extract swagger spec from generated spec: %s", err))
 	}
 
+	// Clear out the servers array in the spec, this skips validating
+	// that server names match. We don't know how this thing will be run.
+	// See https://github.com/deepmap/oapi-codegen/issues/882
+	spec.Servers = nil
+
 	auth.validateSpecSecurity(spec)
 
 	return middleware.OapiRequestValidatorWithOptions(spec, &middleware.Options{

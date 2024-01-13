@@ -20,9 +20,10 @@ import (
 )
 
 var (
-	errUnauthorized          = echo.NewHTTPError(http.StatusUnauthorized)
-	ErrUnknownSecurityScheme = errors.New("request specifies an unknown security scheme and so cannot be validated")
-	ErrAuthTokenMissing      = errors.New("request does not contain required auth token in cookies")
+	errUnauthorized            = echo.NewHTTPError(http.StatusUnauthorized)
+	ErrUnknownSecurityScheme   = errors.New("request specifies an unknown security scheme and so cannot be validated")
+	ErrAuthTokenMissing        = errors.New("request does not contain required auth token in cookies")
+	ErrInsufficientPermissions = errors.New("authenticated user is missing required permissions")
 
 	log = logger.Get("JWT-Auth")
 )
@@ -232,8 +233,15 @@ func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware() echo.MiddlewareFun
 			return ec.Request().Method == http.MethodOptions
 		},
 		ErrorHandler: func(_ echo.Context, err *echo.HTTPError) error {
-			log.Errorf("Request security validation failed: %s\n", err)
-			return errUnauthorized
+			log.Errorf("Request validation failed: %#v\n", err)
+			switch err.Code {
+			case http.StatusForbidden:
+				err.Message = http.StatusText(err.Code)
+			case http.StatusUnauthorized:
+				err.Message = http.StatusText(err.Code)
+			}
+
+			return err
 		},
 		Options: openapi3filter.Options{AuthenticationFunc: auth.validateTokenFromAuthInput},
 	})
@@ -245,7 +253,6 @@ func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware() echo.MiddlewareFun
 // If we CAN extract a valid token, then said token is also
 // checked to ensure it contains the correct permissions.
 func (auth *jwtAuthProvider) validateTokenFromAuthInput(ctx context.Context, authInput *openapi3filter.AuthenticationInput) error {
-	log.Infof("Running security validation...\n")
 	if authInput.SecuritySchemeName != "permissionAuth" {
 		return ErrUnknownSecurityScheme
 	}
@@ -280,7 +287,7 @@ func (auth *jwtAuthProvider) validateTokenFromAuthInput(ctx context.Context, aut
 	for _, perm := range authInput.Scopes {
 		if !slices.Contains(userPermissions, perm) {
 			log.Warnf("User %s failed permissions check while accessing %s: missing permission '%s'\n", userID, authInput.RequestValidationInput.Request.RequestURI, perm)
-			return echo.NewHTTPError(http.StatusForbidden)
+			return ErrInsufficientPermissions
 		}
 	}
 

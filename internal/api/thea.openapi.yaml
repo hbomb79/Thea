@@ -104,6 +104,9 @@ paths:
       operationId: listUsers
       tags:
         - Users
+      security:
+        - permissionAuth:
+          - user:access
       responses:
         "200":
           description: List of User DTOs
@@ -120,6 +123,9 @@ paths:
       operationId: getUser
       tags:
         - Users
+      security:
+        - permissionAuth:
+          - user:access
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -136,6 +142,10 @@ paths:
       operationId: updateUserPermissions
       tags:
         - Users
+      security:
+        - permissionAuth:
+          - user:access
+          - user:modify
       parameters:
         - $ref: "#/components/parameters/ID"
       requestBody:
@@ -154,6 +164,9 @@ paths:
       operationId: listMedia
       tags:
         - Media
+      security:
+        - permissionAuth:
+          - media:access
       parameters:
         - in: query
           name: genre
@@ -207,6 +220,9 @@ paths:
       operationId: listGenres
       tags:
         - Media
+      security:
+        - permissionAuth:
+          - media:access
       responses:
         "200":
           description: List of genres, with their label (human readable) and ID (used for the input to any endpoint which allows filtering on genres)
@@ -224,6 +240,9 @@ paths:
       operationId: getMovie
       tags:
         - Media
+      security:
+        - permissionAuth:
+          - media:access
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -239,6 +258,10 @@ paths:
       operationId: deleteMovie
       tags:
         - Media
+      security:
+        - permissionAuth:
+          - media:access
+          - media:delete
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -252,6 +275,9 @@ paths:
       operationId: getSeries
       tags:
         - Media
+      security:
+        - permissionAuth:
+          - media:access
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -267,6 +293,10 @@ paths:
       operationId: deleteSeries
       tags:
         - Media
+      security:
+        - permissionAuth:
+          - media:access
+          - media:delete
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -280,6 +310,10 @@ paths:
       operationId: deleteSeason
       tags:
         - Media
+      security:
+        - permissionAuth:
+          - media:access
+          - media:delete
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -293,6 +327,9 @@ paths:
       operationId: getEpisode
       tags:
         - Media
+      security:
+        - permissionAuth:
+          - media:access
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -308,6 +345,10 @@ paths:
       operationId: deleteEpisode
       tags:
         - Media
+      security:
+        - permissionAuth:
+          - media:access
+          - media:delete
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -321,6 +362,9 @@ paths:
       operationId: listIngests
       tags:
         - Ingests
+      security:
+        - permissionAuth:
+          - ingest:access
       responses:
         "200":
           description: List of ingests
@@ -337,6 +381,9 @@ paths:
       operationId: getIngest
       tags:
         - Ingests
+      security:
+        - permissionAuth:
+          - ingest:access
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -352,6 +399,10 @@ paths:
       operationId: deleteIngest
       tags:
         - Ingests
+      security:
+        - permissionAuth:
+          - ingest:access
+          - ingest:delete
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -364,6 +415,10 @@ paths:
       operationId: resolveIngest
       tags:
         - Ingests
+      security:
+        - permissionAuth:
+          - ingest:access
+          - ingest:modify
       parameters:
         - $ref: "#/components/parameters/ID"
       requestBody:
@@ -381,6 +436,10 @@ paths:
       operationId: pollIngests
       tags:
         - Ingests
+      security:
+        - permissionAuth:
+          - ingest:access
+          - ingest:poll
       responses:
         "200":
           description: Acknowledged
@@ -392,6 +451,9 @@ paths:
       operationId: createTranscodeTask
       tags:
         - Transcode Tasks
+      security:
+        - permissionAuth:
+          - transcode:create
       requestBody:
         content:
           application/json:
@@ -407,6 +469,9 @@ paths:
       operationId: listActiveTranscodeTasks
       tags:
         - Transcode Tasks
+      security:
+        - permissionAuth:
+          - transcode:access
       responses:
         "200":
           description: List of active tasks
@@ -423,6 +488,9 @@ paths:
       operationId: listCompletedTranscodeTasks
       tags:
         - Transcode Tasks
+      security:
+        - permissionAuth:
+          - transcode:access
       responses:
         "200":
           description: List of complete tasks
@@ -439,6 +507,9 @@ paths:
       operationId: getTranscodeTask
       tags:
         - Transcode Tasks
+      security:
+        - permissionAuth:
+          - transcode:access
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -454,6 +525,10 @@ paths:
       operationId: deleteTranscodeTask
       tags:
         - Transcode Tasks
+      security:
+        - permissionAuth:
+          - transcode:access
+          - transcode:delete
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -468,6 +543,10 @@ paths:
         - $ref: "#/components/parameters/ID"
       tags:
         - Transcode Tasks
+      security:
+        - permissionAuth:
+          - transcode:access
+          - transcode:modify
       responses:
         "200":
           description: Transcode paused
@@ -478,6 +557,10 @@ paths:
       operationId: resumeTranscodeTask
       tags:
         - Transcode Tasks
+      security:
+        - permissionAuth:
+          - transcode:access
+          - transcode:modify
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -491,6 +574,9 @@ paths:
       operationId: listWorkflows
       tags:
         - Workflows
+      security:
+        - permissionAuth:
+          - workflow:access
       responses:
         "200":
           description: List of workflows
@@ -506,6 +592,9 @@ paths:
       operationId: createWorkflow
       tags:
         - Workflows
+      security:
+        - permissionAuth:
+          - workflow:create
       requestBody:
         content:
           application/json:
@@ -521,6 +610,9 @@ paths:
       operationId: getWorkflow
       tags:
         - Workflows
+      security:
+        - permissionAuth:
+          - workflow:access
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -536,6 +628,10 @@ paths:
       operationId: updateWorkflow
       tags:
         - Workflows
+      security:
+        - permissionAuth:
+          - workflow:access
+          - workflow:modify
       parameters:
         - $ref: "#/components/parameters/ID"
       requestBody:
@@ -556,6 +652,10 @@ paths:
       operationId: deleteWorkflow
       tags:
         - Workflows
+      security:
+        - permissionAuth:
+          - workflow:access
+          - workflow:delete
       parameters:
         - $ref: "#/components/parameters/ID"
       responses:
@@ -566,6 +666,9 @@ paths:
     get:
       tags:
         - Targets
+      security:
+        - permissionAuth:
+          - target:access
       summary: List Targets
       description: Returns all known targets
       operationId: listTargets
@@ -581,6 +684,9 @@ paths:
     post:
       tags:
         - Targets
+      security:
+        - permissionAuth:
+          - target:create
       summary: Create Target
       description: Creates a new target
       operationId: createTarget
@@ -602,6 +708,9 @@ paths:
     get:
       tags:
         - Targets
+      security:
+        - permissionAuth:
+          - target:access
       summary: Get Target
       description: Fetches the target with the ID specified
       operationId: getTarget
@@ -619,6 +728,10 @@ paths:
     patch:
       tags:
         - Targets
+      security:
+        - permissionAuth:
+          - target:access
+          - target:modify
       summary: Update Target
       description: Updates the target specified using the ID
       operationId: updateTarget
@@ -641,6 +754,10 @@ paths:
     delete:
       tags:
         - Targets
+      security:
+        - permissionAuth:
+          - target:access
+          - target:delete
       summary: Delete Target
       description: Delete the target specified using the ID
       operationId: deleteTarget

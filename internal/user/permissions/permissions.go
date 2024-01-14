@@ -1,63 +1,63 @@
 package permissions
 
 const (
-	ViewIngestsPermission            string = "ingest:view"
+	AccessIngestsPermission          string = "ingest:access"
 	ResolveTroubledIngestsPermission string = "ingest:modify"
 	DeleteIngestsPermission          string = "ingest:delete"
 	PollNewIngestsPermission         string = "ingest:poll"
 
-	ViewMediaPermission             string = "media:view"
+	AccessMediaPermission           string = "media:access"
 	DeleteMediaPermission           string = "media:delete"
 	StreamTranscodedMediaPermission string = "media:stream.pre"
 	StreamSourceMediaPermission     string = "media:stream.source"
 	StreamOnTheFlyMediaPermission   string = "media:stream.otf"
 
-	CreateTranscodePermission string = "transcode:new"
-	ViewTranscodePermission   string = "transcode:view"
+	CreateTranscodePermission string = "transcode:create"
+	AccessTranscodePermission string = "transcode:access"
 	ModifyTranscodePermission string = "transcode:modify"
 	DeleteTranscodePermission string = "transcode:delete"
 
-	CreateTargetPermission string = "target:new"
-	ViewTargetPermission   string = "target:view"
+	CreateTargetPermission string = "target:create"
+	AccessTargetPermission string = "target:access"
 	EditTargetPermission   string = "target:modify"
 	DeleteTargetPermission string = "target:delete"
 
-	CreateWorkflowPermission string = "workflow:new"
-	ViewWorkflowPermission   string = "workflow:view"
+	CreateWorkflowPermission string = "workflow:create"
+	AccessWorkflowPermission string = "workflow:access"
 	EditWorkflowPermission   string = "workflow:modify"
 	DeleteWorkflowPermission string = "workflow:delete"
 
-	CreateUserPermission          string = "user:new"
-	ViewUserPermission            string = "user:view"
+	CreateUserPermission          string = "user:create"
+	AccessUserPermission          string = "user:access"
 	EditUserPermissionsPermission string = "user:modify"
 	DeleteUserPermission          string = "user:delete"
 )
 
 func All() []string {
 	return []string{
-		ViewIngestsPermission,
+		AccessIngestsPermission,
 		ResolveTroubledIngestsPermission,
 		DeleteIngestsPermission,
 		PollNewIngestsPermission,
-		ViewMediaPermission,
+		AccessMediaPermission,
 		DeleteMediaPermission,
 		StreamTranscodedMediaPermission,
 		StreamSourceMediaPermission,
 		StreamOnTheFlyMediaPermission,
 		CreateTranscodePermission,
-		ViewTranscodePermission,
+		AccessTranscodePermission,
 		ModifyTranscodePermission,
 		DeleteTranscodePermission,
 		CreateTargetPermission,
-		ViewTargetPermission,
+		AccessTargetPermission,
 		EditTargetPermission,
 		DeleteTargetPermission,
 		CreateWorkflowPermission,
-		ViewWorkflowPermission,
+		AccessWorkflowPermission,
 		EditWorkflowPermission,
 		DeleteWorkflowPermission,
 		CreateUserPermission,
-		ViewUserPermission,
+		AccessUserPermission,
 		EditUserPermissionsPermission,
 		DeleteUserPermission,
 	}

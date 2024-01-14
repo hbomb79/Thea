@@ -86,6 +86,10 @@ paths:
       responses:
         "200":
           description: Success
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
   /auth/logout-all:
     get:
       summary: Logout All
@@ -96,6 +100,10 @@ paths:
       responses:
         "200":
           description: Success
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
 
   /users:
     get:
@@ -769,10 +777,7 @@ paths:
 externalDocs:
   description: Find out more about Swagger
   url: http://swagger.io
-servers:
-  - url: http://localhost:8080/api/thea/v1
 components:
-
   securitySchemes:
     permissionAuth:
       type: apiKey

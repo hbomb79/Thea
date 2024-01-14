@@ -167,30 +167,37 @@ func (auth *jwtAuthProvider) GetAuthenticatedUserFromContext(ec echo.Context) (*
 
 // RevokeTokensInContext revokes the auth and refresh token in this
 // request context, assuming they are provided. A missing token/cookie
-// is ignored.
-func (auth *jwtAuthProvider) RevokeTokensInContext(ec echo.Context) {
+// is ignored. An expired auth and refresh token is returned, with the intention
+// that they are sent back to the client in the response
+func (auth *jwtAuthProvider) RevokeTokensInContext(ec echo.Context) (*http.Cookie, *http.Cookie) {
 	if cookie, err := ec.Cookie(AuthTokenCookieName); err == nil && cookie != nil {
 		auth.revokeToken(cookie.Value)
 	}
 	if cookie, err := ec.Cookie(RefreshTokenCookieName); err == nil && cookie != nil {
 		auth.revokeToken(cookie.Value)
 	}
+
+	expiredAuthToken := createTokenCookie(AuthTokenCookieName, "/", "", time.Now().Add(time.Hour*-24))
+	expiredRefreshToken := createTokenCookie(AuthTokenCookieName, "/", "", time.Now().Add(time.Hour*-24))
+	return expiredAuthToken, expiredRefreshToken
 }
 
 // RevokeAllForUser finds all the tokens we've granted to a specified
 // user ID and revokes all of them (if any). This will require that the
-// specified user logs in again on all of their devices.
-func (auth *jwtAuthProvider) RevokeAllForUser(userID uuid.UUID) error {
-	grantedTokens, ok := auth.userTokens.Load(userID)
-	if !ok || len(grantedTokens) == 0 {
-		return nil
+// specified user logs in again on all of their devices. Returns back
+// expired auth and refresh cookies with the intention that they are
+// returned to the client in the response.
+func (auth *jwtAuthProvider) RevokeAllForUser(userID uuid.UUID) (*http.Cookie, *http.Cookie) {
+	if grantedTokens, ok := auth.userTokens.Load(userID); ok {
+		for _, granted := range grantedTokens {
+			auth.revokeToken(granted)
+		}
 	}
 
-	for _, granted := range grantedTokens {
-		auth.revokeToken(granted)
-	}
-
-	return nil
+	expired := time.Now().Add(time.Hour * -24)
+	expiredAuthToken := createTokenCookie(AuthTokenCookieName, "/", "", expired)
+	expiredRefreshToken := createTokenCookie(RefreshTokenCookieName, auth.refreshTokenCookiePath, "", expired)
+	return expiredAuthToken, expiredRefreshToken
 }
 
 // RefreshTokens generates new auth and refresh tokens and stores them in
@@ -216,17 +223,18 @@ func (auth *jwtAuthProvider) RefreshTokens(allegedRefreshToken string) (*http.Co
 // valid. This includes ensuring the request meets the spec, and that
 // the security scheme specified for that request is satisfied (authentication
 // by way of JWT token, and authorization by way of permissions)
-func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware() echo.MiddlewareFunc {
+func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware(basePath string) echo.MiddlewareFunc {
 	spec, err := gen.GetSwagger()
 	if err != nil {
 		panic(fmt.Sprintf("failed to extract swagger spec from generated spec: %s", err))
 	}
 
+	// Set the servers of this spec to match the base path of
+	// the server. See https://github.com/deepmap/oapi-codegen/issues/882
+	spec.Servers = openapi3.Servers{&openapi3.Server{URL: basePath}}
+
 	auth.validateSpecSecurity(spec)
 	return middleware.OapiRequestValidatorWithOptions(spec, &middleware.Options{
-		// See https://github.com/deepmap/oapi-codegen/issues/882
-		// TODO we may encounter issues with the servers being in the OpenAPI spec, but for now it's fine
-		SilenceServersWarning: true,
 		Skipper: func(ec echo.Context) bool {
 			// We specifically allow OPTION requests to pass through un-encumbered
 			// as they are not documented in our OpenAPI spec, and so they will

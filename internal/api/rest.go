@@ -95,11 +95,12 @@ func NewRestGateway(
 	store Store,
 ) *RestGateway {
 	// -- Setup JWT auth provider --
+	apiBasePath := "/api/thea/v1"
 	authKey, refreshKey, err := newJwtSigningKeys()
 	if err != nil {
 		panic(err)
 	}
-	authProvider := jwt.NewJwtAuth(store, "/api/thea/v1/auth/", authKey, refreshKey)
+	authProvider := jwt.NewJwtAuth(store, fmt.Sprintf("%s/auth/", apiBasePath), authKey, refreshKey)
 
 	// -- Setup Middleware --
 	ec := echo.New()
@@ -119,7 +120,7 @@ func NewRestGateway(
 			// AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAccessControlAllowOrigin},
 			// AllowMethods: []string{echo.OPTIONS, echo.GET, echo.HEAD, echo.PUT, echo.PATCH, echo.POST, echo.DELETE},
 		}),
-		authProvider.GetSecurityValidatorMiddleware(),
+		authProvider.GetSecurityValidatorMiddleware(apiBasePath),
 	)
 
 	// -- Setup gateway --
@@ -141,7 +142,7 @@ func NewRestGateway(
 		workflows.New(store),
 	}, []gen.StrictMiddlewareFunc{requestBodyValidatorMiddleware})
 
-	gen.RegisterHandlersWithBaseURL(ec, serverImpl, "/api/thea/v1")
+	gen.RegisterHandlersWithBaseURL(ec, serverImpl, apiBasePath)
 	return gateway
 }
 

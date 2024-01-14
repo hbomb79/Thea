@@ -12,17 +12,17 @@ import (
 // which we need for our auth/refresh cookies. It's simple
 // enough to just implement our own response which
 // correctly adds multiple of the headers
-type Login200JSONResponse struct {
+type LoginResponse struct {
 	User         gen.User
 	AuthToken    http.Cookie `json:"auth-token"`
 	RefreshToken http.Cookie `json:"refresh-token"`
 }
-type Refresh200JSONResponse struct {
+type SetTokenCookiesResponse struct {
 	AuthToken    http.Cookie `json:"auth-token"`
 	RefreshToken http.Cookie `json:"refresh-token"`
 }
 
-func (response Login200JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+func (response LoginResponse) VisitLoginResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	http.SetCookie(w, &response.AuthToken)
 	http.SetCookie(w, &response.RefreshToken)
@@ -31,10 +31,20 @@ func (response Login200JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return json.NewEncoder(w).Encode(response.User)
 }
 
-func (response Refresh200JSONResponse) VisitRefreshResponse(w http.ResponseWriter) error {
+func (response SetTokenCookiesResponse) setTokensInResponse(w http.ResponseWriter) error {
 	http.SetCookie(w, &response.AuthToken)
 	http.SetCookie(w, &response.RefreshToken)
 	w.WriteHeader(200)
 
 	return nil
+}
+
+func (response SetTokenCookiesResponse) VisitRefreshResponse(w http.ResponseWriter) error {
+	return response.setTokensInResponse(w)
+}
+func (response SetTokenCookiesResponse) VisitLogoutSessionResponse(w http.ResponseWriter) error {
+	return response.setTokensInResponse(w)
+}
+func (response SetTokenCookiesResponse) VisitLogoutAllResponse(w http.ResponseWriter) error {
+	return response.setTokensInResponse(w)
 }

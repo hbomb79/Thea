@@ -235,6 +235,7 @@ func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware(basePath string) ech
 
 	auth.validateSpecSecurity(spec)
 	return middleware.OapiRequestValidatorWithOptions(spec, &middleware.Options{
+		SilenceServersWarning: true, // we're artificially replacing the servers in the spec to avoid host matching issues
 		Skipper: func(ec echo.Context) bool {
 			// We specifically allow OPTION requests to pass through un-encumbered
 			// as they are not documented in our OpenAPI spec, and so they will

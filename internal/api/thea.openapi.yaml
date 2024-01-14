@@ -777,6 +777,8 @@ paths:
 externalDocs:
   description: Find out more about Swagger
   url: http://swagger.io
+servers:
+  - url: http://localhost:8080/api/thea/v1
 components:
   securitySchemes:
     permissionAuth:

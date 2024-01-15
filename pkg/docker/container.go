@@ -113,14 +113,14 @@ func NewDockerContainer(label string, image string, conf *dCont.Config, hostConf
 	}
 }
 
-func (c *dockerContainer) Start(ctx context.Context, cli client.APIClient) error {
-	if c.status != INIT {
-		return fmt.Errorf("cannot start container %s based on image %v as status is invalid", c, c.imageID)
+func (container *dockerContainer) Start(ctx context.Context, cli client.APIClient) error {
+	if container.status != INIT {
+		return fmt.Errorf("cannot start container %s based on image %v as status is invalid", container, container.imageID)
 	}
 
-	out, err := cli.ImagePull(ctx, c.imageID, types.ImagePullOptions{})
+	out, err := cli.ImagePull(ctx, container.imageID, types.ImagePullOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to pull image %v for container %s: %v", c.imageID, c, err)
+		return fmt.Errorf("failed to pull image %v for container %s: %v", container.imageID, container, err)
 	}
 	defer out.Close()
 
@@ -135,51 +135,51 @@ func (c *dockerContainer) Start(ctx context.Context, cli client.APIClient) error
 			panic(err)
 		}
 
-		c.parseContainerEvent(event)
+		container.parseContainerEvent(event)
 	}
 
-	c.setStatus(PULLED)
+	container.setStatus(PULLED)
 
-	resp, err := cli.ContainerCreate(ctx, c.containerConf, c.containerHostConf, nil, nil, c.label)
+	resp, err := cli.ContainerCreate(ctx, container.containerConf, container.containerHostConf, nil, nil, container.label)
 	if err != nil {
-		return fmt.Errorf("failed to create container for %s: %v", c, err)
+		return fmt.Errorf("failed to create container for %s: %v", container, err)
 	}
-	c.containerID = resp.ID
-	c.setStatus(CREATED)
+	container.containerID = resp.ID
+	container.setStatus(CREATED)
 
 	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		return fmt.Errorf("failed to start container for %s: %v", c, err)
+		return fmt.Errorf("failed to start container for %s: %v", container, err)
 	}
-	c.setStatus(UP)
+	container.setStatus(UP)
 
-	go c.monitorContainer(ctx, cli)
+	go container.monitorContainer(ctx, cli)
 	return nil
 }
 
-func (c *dockerContainer) Close(ctx context.Context, cli client.APIClient, timeout time.Duration) error {
-	if c.status == DEAD {
+func (container *dockerContainer) Close(ctx context.Context, cli client.APIClient, timeout time.Duration) error {
+	if container.status == DEAD {
 		return nil
 	}
 
-	if c.canStop() {
-		c.setStatus(CLOSING)
+	if container.canStop() {
+		container.setStatus(CLOSING)
 		timeoutSeconds := int(timeout.Seconds())
-		if err := cli.ContainerStop(ctx, c.containerID, dCont.StopOptions{Timeout: &timeoutSeconds}); err != nil {
-			return fmt.Errorf("failed to stop container %s: %v", c, err)
+		if err := cli.ContainerStop(ctx, container.containerID, dCont.StopOptions{Timeout: &timeoutSeconds}); err != nil {
+			return fmt.Errorf("failed to stop container %s: %v", container, err)
 		}
 
-		c.setStatus(DOWN)
+		container.setStatus(DOWN)
 	}
 
-	if c.canRemove() {
-		if err := cli.ContainerRemove(ctx, c.containerID, types.ContainerRemoveOptions{}); err != nil {
-			return fmt.Errorf("failed to remove container %s: %v", c, err)
+	if container.canRemove() {
+		if err := cli.ContainerRemove(ctx, container.containerID, types.ContainerRemoveOptions{}); err != nil {
+			return fmt.Errorf("failed to remove container %s: %v", container, err)
 		}
 	}
-	c.setStatus(DEAD)
+	container.setStatus(DEAD)
 
-	close(c.statusChannel)
-	close(c.messageChannel)
+	close(container.statusChannel)
+	close(container.messageChannel)
 
 	return nil
 }

@@ -35,7 +35,7 @@ type (
 	// to prevent against breakages if we change this in the future
 	userModel struct {
 		userBase
-		Permissions database.JsonColumn[[]string] `db:"permissions"`
+		Permissions database.JSONColumn[[]string] `db:"permissions"`
 	}
 
 	// User is the external/public API for the user model. It uses a special
@@ -117,7 +117,7 @@ func (store *Store) GetWithUsernameAndPassword(db database.Queryable, username [
 	return userModelToUser(&user), nil
 }
 
-func (store *Store) GetWithId(db database.Queryable, id uuid.UUID) (*User, error) {
+func (store *Store) GetWithID(db database.Queryable, id uuid.UUID) (*User, error) {
 	query, args, err := selectUserBuilder().Where("users.id=?", id).ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct select user query: %w", err)

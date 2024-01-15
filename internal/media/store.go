@@ -58,7 +58,7 @@ type (
 	}
 
 	Genre struct {
-		Id    int    `db:"id" json:"id"`
+		ID    int    `db:"id" json:"id"`
 		Label string `db:"label" json:"label"`
 	}
 
@@ -238,7 +238,7 @@ func (store *Store) SaveSeason(db database.Queryable, season *Season) error {
 	return nil
 }
 
-// saveEpisode transactionally upserts the episode and it's season
+// SaveEpisode transactionally upserts the episode and it's season
 // and series. Existing models are found using the models 'TmdbID'
 // as this is expected to be a stable identifier.
 //
@@ -284,10 +284,10 @@ func (store *Store) GetMedia(db database.Queryable, mediaID uuid.UUID) *Containe
 				storeLogger.Emit(logger.FATAL, "Episode %s and season %s found, but error (%v) occurred when fetching referenced series. This may indicate a serious problem with the referential integrity of the DB\n", mediaID, season.ID, err)
 				return nil
 			}
-			return &Container{Type: EPISODE, Episode: episode, Series: series, Season: season}
+			return &Container{Type: EpisodeContainerType, Episode: episode, Series: series, Season: season}
 		}
 	} else {
-		return &Container{Type: MOVIE, Movie: movie}
+		return &Container{Type: MovieContainerType, Movie: movie}
 	}
 }
 
@@ -333,7 +333,7 @@ func getMediaListCte(includeTypes []MediaListType) string {
 		}
 	}
 
-	getCoalescedGenresSql := func(assocTableName string, tableName string, tableColumn string) string {
+	getCoalescedGenresSQL := func(assocTableName string, tableName string, tableColumn string) string {
 		template := `
 			SELECT COALESCE(JSONB_AGG(DISTINCT genre.*) FILTER (WHERE genre.id IS NOT NULL), '[]')
 			FROM ASSOCTABLENAME mg
@@ -364,9 +364,9 @@ func getMediaListCte(includeTypes []MediaListType) string {
 			%s -- seriesAllowedClause
 		)
 		`,
-		getCoalescedGenresSql("movie_genres", "media", "movie_id"),
+		getCoalescedGenresSQL("movie_genres", "media", "movie_id"),
 		movieEnabledClause,
-		getCoalescedGenresSql("series_genres", "series", "series_id"),
+		getCoalescedGenresSQL("series_genres", "series", "series_id"),
 		seriesAllowedClause)
 
 }
@@ -434,7 +434,7 @@ func (store *Store) ListMedia(db database.Queryable, titleFilter string, allowed
 		UpdatedAt   time.Time                     `db:"updated_at"`
 		SeasonCount int                           `db:"series_season_count"`
 		MediaType   string                        `db:"type"`
-		Genres      database.JsonColumn[[]*Genre] `db:"genres"`
+		Genres      database.JSONColumn[[]*Genre] `db:"genres"`
 	}
 
 	if err := db.Select(&results, db.Rebind(query), args...); err != nil {
@@ -596,8 +596,8 @@ func (store *Store) GetMovie(db database.Queryable, movieID uuid.UUID) (*Movie, 
 	return queryRowMovie(db, MediaTable, IDCol, movieID)
 }
 
-// GetMovieWithTmdbId searches for an existing movie with the TMDB unique ID provided.
-func (store *Store) GetMovieWithTmdbId(db database.Queryable, tmdbID string) (*Movie, error) {
+// GetMovieWithTmdbID searches for an existing movie with the TMDB unique ID provided.
+func (store *Store) GetMovieWithTmdbID(db database.Queryable, tmdbID string) (*Movie, error) {
 	return queryRowMovie(db, MediaTable, TmdbIDCol, tmdbID)
 }
 
@@ -606,8 +606,8 @@ func (store *Store) GetSeries(db database.Queryable, seriesID uuid.UUID) (*Serie
 	return queryRow[Series](db, SeriesTable, IDCol, seriesID, "")
 }
 
-// GetSeriesWithTmdbId searches for an existing series with the TMDB unique ID provided.
-func (store *Store) GetSeriesWithTmdbId(db database.Queryable, tmdbID string) (*Series, error) {
+// GetSeriesWithTmdbID searches for an existing series with the TMDB unique ID provided.
+func (store *Store) GetSeriesWithTmdbID(db database.Queryable, tmdbID string) (*Series, error) {
 	return queryRow[Series](db, SeriesTable, TmdbIDCol, tmdbID, "")
 }
 
@@ -616,8 +616,8 @@ func (store *Store) GetSeason(db database.Queryable, seasonID uuid.UUID) (*Seaso
 	return queryRow[Season](db, SeasonTable, IDCol, seasonID, "")
 }
 
-// GetSeasonWithTmdbId searches for an existing season with the TMDB unique ID provided.
-func (store *Store) GetSeasonWithTmdbId(db database.Queryable, tmdbID string) (*Season, error) {
+// GetSeasonWithTmdbID searches for an existing season with the TMDB unique ID provided.
+func (store *Store) GetSeasonWithTmdbID(db database.Queryable, tmdbID string) (*Season, error) {
 	return queryRow[Season](db, SeasonTable, TmdbIDCol, tmdbID, "")
 }
 
@@ -626,8 +626,8 @@ func (store *Store) GetEpisode(db database.Queryable, episodeID uuid.UUID) (*Epi
 	return queryRowEpisode(db, MediaTable, IDCol, episodeID)
 }
 
-// GetEpisodeWithTmdbId searches for an existing episode with the TMDB unique ID provided.
-func (store *Store) GetEpisodeWithTmdbId(db database.Queryable, tmdbID string) (*Episode, error) {
+// GetEpisodeWithTmdbID searches for an existing episode with the TMDB unique ID provided.
+func (store *Store) GetEpisodeWithTmdbID(db database.Queryable, tmdbID string) (*Episode, error) {
 	return queryRowEpisode(db, MediaTable, TmdbIDCol, tmdbID)
 }
 

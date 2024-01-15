@@ -66,7 +66,7 @@ func newListDto(result *media.MediaListResult) (*gen.MediaListItem, error) {
 func genreModelsToDtos(genres []*media.Genre) []gen.MediaGenre {
 	dtos := make([]gen.MediaGenre, len(genres))
 	for k, v := range genres {
-		dtos[k] = gen.MediaGenre{Id: fmt.Sprint(v.Id), Label: v.Label}
+		dtos[k] = gen.MediaGenre{Id: fmt.Sprint(v.ID), Label: v.Label}
 	}
 
 	return dtos

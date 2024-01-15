@@ -12,7 +12,7 @@ import (
 )
 
 type TmdbChoiceDTO struct {
-	TmdbId     json.Number `json:"tmdb_id"`
+	TmdbID     json.Number `json:"tmdb_id"`
 	Adult      bool        `json:"is_adult"`
 	Title      string      `json:"name"`
 	Plot       string      `json:"overview"`
@@ -22,11 +22,11 @@ type TmdbChoiceDTO struct {
 func troubleResolutionDtoMethodToModel(method gen.IngestTroubleResolutionType) ingest.ResolutionType {
 	switch method {
 	case gen.ABORT:
-		return ingest.ABORT
+		return ingest.Abort
 	case gen.SPECIFYTMDBID:
-		return ingest.SPECIFY_TMDB_ID
+		return ingest.SpecifyTmdbID
 	case gen.RETRY:
-		return ingest.RETRY
+		return ingest.Retry
 	default:
 		panic("invalid enum value for resolution method")
 	}
@@ -34,11 +34,11 @@ func troubleResolutionDtoMethodToModel(method gen.IngestTroubleResolutionType) i
 
 func troubleResolutionModelMethodToDto(model ingest.ResolutionType) gen.IngestTroubleResolutionType {
 	switch model {
-	case ingest.ABORT:
+	case ingest.Abort:
 		return gen.ABORT
-	case ingest.SPECIFY_TMDB_ID:
+	case ingest.SpecifyTmdbID:
 		return gen.SPECIFYTMDBID
-	case ingest.RETRY:
+	case ingest.Retry:
 		return gen.RETRY
 	}
 
@@ -76,7 +76,7 @@ func NewDto(item *ingest.IngestItem) gen.Ingest {
 
 func ExtractTroubleContext(trouble *ingest.Trouble) (map[string]any, error) {
 	switch trouble.Type() {
-	case ingest.TMDB_FAILURE_MULTI:
+	case ingest.TmdbFailureMultipleResults:
 		// Return a context which contains the choices we could make. The client will be expected
 		// to use the unique TMDB ID of the choice when resolving this trouble.
 		modelChoices := trouble.GetTmdbChoices()
@@ -85,7 +85,7 @@ func ExtractTroubleContext(trouble *ingest.Trouble) (map[string]any, error) {
 		}
 		dtoChoices := make([]TmdbChoiceDTO, 0)
 		for _, v := range trouble.GetTmdbChoices() {
-			dtoChoices = append(dtoChoices, TmdbChoiceDTO{TmdbId: v.Id, Adult: v.Adult, Title: v.Title, Plot: v.Plot, PosterPath: v.PosterPath})
+			dtoChoices = append(dtoChoices, TmdbChoiceDTO{TmdbID: v.ID, Adult: v.Adult, Title: v.Title, Plot: v.Plot, PosterPath: v.PosterPath})
 		}
 
 		context := map[string]any{"choices": dtoChoices}
@@ -121,15 +121,15 @@ func scrapedMetadataToDto(metadata *media.FileMediaMetadata) *gen.FileMetadata {
 
 func TroubleTypeModelToDto(troubleType ingest.TroubleType) gen.IngestTroubleType {
 	switch troubleType {
-	case ingest.METADATA_FAILURE:
+	case ingest.MetadataFailure:
 		return gen.METADATAFAILURE
-	case ingest.TMDB_FAILURE_UNKNOWN:
+	case ingest.TmdbFailureUnknown:
 		return gen.TMDBFAILUREUNKNOWN
-	case ingest.TMDB_FAILURE_NONE:
+	case ingest.TmdbFailureNoResults:
 		return gen.TMDBFAILURENORESULT
-	case ingest.TMDB_FAILURE_MULTI:
+	case ingest.TmdbFailureMultipleResults:
 		return gen.TMDBFAILUREMULTIRESULT
-	case ingest.UNKNOWN_FAILURE:
+	case ingest.UnknownFailure:
 		return gen.UNKNOWNFAILURE
 	}
 
@@ -138,13 +138,13 @@ func TroubleTypeModelToDto(troubleType ingest.TroubleType) gen.IngestTroubleType
 
 func IngestStateModelToDto(modelType ingest.IngestItemState) gen.IngestState {
 	switch modelType {
-	case ingest.IDLE:
+	case ingest.Idle:
 		return gen.IngestStateIDLE
-	case ingest.IMPORT_HOLD:
+	case ingest.ImportHold:
 		return gen.IngestStateIMPORTHOLD
-	case ingest.INGESTING:
+	case ingest.Ingesting:
 		return gen.IngestStateINGESTING
-	case ingest.TROUBLED:
+	case ingest.Troubled:
 		return gen.IngestStateTROUBLED
 	}
 

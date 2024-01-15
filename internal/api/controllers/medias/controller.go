@@ -60,7 +60,7 @@ func New(transcodeService TranscodeService, store Store) *MediaController {
 	return &MediaController{store: store, transcodeService: transcodeService}
 }
 
-// list is an endpoint used to retrieve a list of movies and series which have been
+// ListMedia is an endpoint used to retrieve a list of movies and series which have been
 // updated recently (this includes episodes being added to a series). The caller of this endpoint
 // can specify filtering options such as the type (movie|series), a limit to the number
 // of results, or the genres which apply to the content

@@ -18,8 +18,8 @@ type (
 		CreatedAt time.Time                             `db:"created_at"`
 		Enabled   bool                                  `db:"enabled"`
 		Label     string                                `db:"label"`
-		Criteria  database.JsonColumn[[]match.Criteria] `db:"criteria"`
-		Targets   database.JsonColumn[[]*ffmpeg.Target] `db:"targets"`
+		Criteria  database.JSONColumn[[]match.Criteria] `db:"criteria"`
+		Targets   database.JSONColumn[[]*ffmpeg.Target] `db:"targets"`
 	}
 
 	workflowTargetAssoc struct {
@@ -163,7 +163,7 @@ func (store *Store) UpdateWorkflowTargetsTx(tx *sqlx.Tx, workflowID uuid.UUID, t
 // construct a 'Workflow'
 func (store *Store) Get(db database.Queryable, id uuid.UUID) *Workflow {
 	dest := &workflowModel{}
-	if err := db.Get(dest, getWorkflowSql(`WHERE w.id=$1`), id); err != nil {
+	if err := db.Get(dest, getWorkflowSQL(`WHERE w.id=$1`), id); err != nil {
 		log.Warnf("Failed to find workflow (id=%s): %v\n", id, err)
 		return nil
 	}
@@ -177,7 +177,7 @@ func (store *Store) Get(db database.Queryable, id uuid.UUID) *Workflow {
 // construct a 'Workflow'
 func (store *Store) GetAll(db database.Queryable) []*Workflow {
 	var dest []*workflowModel
-	if err := db.Select(&dest, getWorkflowSql("")); err != nil {
+	if err := db.Select(&dest, getWorkflowSQL("")); err != nil {
 		log.Warnf("Failed to get all workflows: %v\n", err)
 		return nil
 	}
@@ -200,7 +200,7 @@ func (store *Store) Delete(db database.Queryable, id uuid.UUID) {
 	}
 }
 
-func getWorkflowSql(whereClause string) string {
+func getWorkflowSQL(whereClause string) string {
 	return fmt.Sprintf(`
 		SELECT
 			w.*,

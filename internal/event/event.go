@@ -55,21 +55,21 @@ type (
 )
 
 const (
-	INGEST_UPDATE   Event = "ingest:update"
-	INGEST_COMPLETE Event = "ingest:complete"
+	IngestUpdateEvent   Event = "ingest:update"
+	IngestCompleteEvent Event = "ingest:complete"
 
-	NEW_MEDIA    Event = "media:new"
-	DELETE_MEDIA Event = "media:delete"
+	NewMediaEvent    Event = "media:new"
+	DeleteMediaEvent Event = "media:delete"
 
-	TRANSCODE_UPDATE        Event = "transcode:task:update"
-	TRANSCODE_COMPLETE      Event = "transcode:task:complete"
-	TRANSCODE_TASK_PROGRESS Event = "transcode:task:update:progress"
+	TranscodeUpdateEvent       Event = "transcode:task:update"
+	TranscodeCompleteEvent     Event = "transcode:task:complete"
+	TranscodeTaskProgressEvent Event = "transcode:task:update:progress"
 
-	WORKFLOW_UPDATE Event = "workflow:update"
+	WorkflowUpdateEvent Event = "workflow:update"
 
-	DOWNLOAD_UPDATE   Event = "download:update"
-	DOWNLOAD_COMPLETE Event = "download:complete"
-	DOWNLOAD_PROGRESS Event = "download:update:progress"
+	DownloadUpdateEvent   Event = "download:update"
+	DownloadCompleteEvent Event = "download:complete"
+	DownloadProgressEvent Event = "download:update:progress"
 )
 
 func New() EventCoordinator {

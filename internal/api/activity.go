@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	TITLE_INGEST_UPDATE             = "INGEST_UPDATE"
-	TITLE_TRANSCODE_UPDATE          = "TRANSCODE_TASK_UPDATE"
-	TITLE_TRANSCODE_PROGRESS_UPDATE = "TRANSCODE_TASK_PROGRESS_UPDATE"
+	TitleIngestUpdate            = "INGEST_UPDATE"
+	TitleTranscodeUpdate         = "TRANSCODE_TASK_UPDATE"
+	TitleTranscodeProgressUpdate = "TRANSCODE_TASK_PROGRESS_UPDATE"
 )
 
 type broadcaster struct {
@@ -33,7 +33,7 @@ func newBroadcaster(
 
 func (hub *broadcaster) BroadcastTranscodeUpdate(id uuid.UUID) error {
 	item := hub.transcodeService.Task(id)
-	hub.broadcast(TITLE_TRANSCODE_UPDATE, map[string]interface{}{
+	hub.broadcast(TitleTranscodeUpdate, map[string]interface{}{
 		"id":        id,
 		"transcode": nullsafeNewDto(item, transcodes.NewDtoFromTask),
 	})
@@ -46,7 +46,7 @@ func (hub *broadcaster) BroadcastTaskProgressUpdate(id uuid.UUID) error {
 		return nil
 	}
 
-	hub.broadcast(TITLE_TRANSCODE_PROGRESS_UPDATE, map[string]interface{}{
+	hub.broadcast(TitleTranscodeProgressUpdate, map[string]interface{}{
 		"transcode_id": id,
 		"progress":     item.LastProgress(),
 	})
@@ -55,7 +55,7 @@ func (hub *broadcaster) BroadcastTaskProgressUpdate(id uuid.UUID) error {
 
 func (hub *broadcaster) BroadcastIngestUpdate(id uuid.UUID) error {
 	item := hub.ingestService.GetIngest(id)
-	hub.broadcast(TITLE_INGEST_UPDATE, map[string]interface{}{
+	hub.broadcast(TitleIngestUpdate, map[string]interface{}{
 		"ingest_id": id,
 		"ingest":    nullsafeNewDto(item, ingests.NewDto),
 	})

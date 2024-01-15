@@ -35,7 +35,7 @@ type DockerConfig struct {
 	EnableFrontend bool `toml:"enable_frontend" env:"SERVICE_ENABLE_UI"`
 }
 
-// Loads a configuration file formatted in TOML in to a
+// LoadFromFile loads a configuration file formatted in TOML in to a
 // TheaConfig struct ready to be passed to Processor
 func (config *TheaConfig) LoadFromFile(configPath string) error {
 	err := cleanenv.ReadConfig(configPath, config)
@@ -51,7 +51,7 @@ func (config *TheaConfig) LoadFromFile(configPath string) error {
 // cannot be derived due to an error, a panic will occur.
 func (config *TheaConfig) GetCacheDir() string {
 	if config.CacheDirPath != "" {
-		return filepath.Join(config.CacheDirPath, THEA_USER_DIR_SUFFIX)
+		return filepath.Join(config.CacheDirPath, TheaUserDirSuffix)
 	}
 
 	// Derive default
@@ -60,14 +60,14 @@ func (config *TheaConfig) GetCacheDir() string {
 		panic(fmt.Sprintf("FAILURE to derive user cache dir %s", err))
 	}
 
-	return filepath.Join(dir, THEA_USER_DIR_SUFFIX)
+	return filepath.Join(dir, TheaUserDirSuffix)
 }
 
 // GetConfigDir will return the path used for storing config information. It will first look to
 // in the config for a value, but if none is found, a default value will be returned
 func (config *TheaConfig) GetConfigDir() string {
 	if config.ConfigDirPath != "" {
-		return filepath.Join(config.ConfigDirPath, THEA_USER_DIR_SUFFIX)
+		return filepath.Join(config.ConfigDirPath, TheaUserDirSuffix)
 	}
 
 	// Derive default
@@ -76,5 +76,5 @@ func (config *TheaConfig) GetConfigDir() string {
 		panic(fmt.Sprintf("FAILURE to derive user config dir %s", err))
 	}
 
-	return filepath.Join(dir, THEA_USER_DIR_SUFFIX)
+	return filepath.Join(dir, TheaUserDirSuffix)
 }

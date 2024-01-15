@@ -25,40 +25,40 @@ type (
 )
 
 const (
-	METADATA_FAILURE TroubleType = iota
-	TMDB_FAILURE_UNKNOWN
-	TMDB_FAILURE_MULTI
-	TMDB_FAILURE_NONE
-	UNKNOWN_FAILURE
+	MetadataFailure TroubleType = iota
+	TmdbFailureUnknown
+	TmdbFailureMultipleResults
+	TmdbFailureNoResults
+	UnknownFailure
 )
 
 const (
-	RETRY ResolutionType = iota
-	SPECIFY_TMDB_ID
-	ABORT
+	Retry ResolutionType = iota
+	SpecifyTmdbID
+	Abort
 )
 
 var (
 	allowedResolutionTypes = map[TroubleType][]ResolutionType{
-		METADATA_FAILURE:     {ABORT, RETRY},
-		UNKNOWN_FAILURE:      {ABORT, RETRY},
-		TMDB_FAILURE_UNKNOWN: {ABORT, RETRY, SPECIFY_TMDB_ID},
-		TMDB_FAILURE_MULTI:   {ABORT, RETRY, SPECIFY_TMDB_ID},
-		TMDB_FAILURE_NONE:    {ABORT, RETRY, SPECIFY_TMDB_ID},
+		MetadataFailure:            {Abort, Retry},
+		UnknownFailure:             {Abort, Retry},
+		TmdbFailureUnknown:         {Abort, Retry, SpecifyTmdbID},
+		TmdbFailureMultipleResults: {Abort, Retry, SpecifyTmdbID},
+		TmdbFailureNoResults:       {Abort, Retry, SpecifyTmdbID},
 	}
 )
 
 func newTrouble(err error) Trouble {
 	switch err := err.(type) {
 	case *tmdb.NoResultError:
-		return Trouble{error: err, tType: TMDB_FAILURE_NONE}
+		return Trouble{error: err, tType: TmdbFailureNoResults}
 	case *tmdb.MultipleResultError:
-		return Trouble{error: err, tType: TMDB_FAILURE_MULTI, choices: err.Choices()}
+		return Trouble{error: err, tType: TmdbFailureMultipleResults, choices: err.Choices()}
 	case *tmdb.IllegalRequestError:
-		return Trouble{error: err, tType: TMDB_FAILURE_UNKNOWN}
+		return Trouble{error: err, tType: TmdbFailureUnknown}
 	}
 
-	return Trouble{error: err, tType: UNKNOWN_FAILURE}
+	return Trouble{error: err, tType: UnknownFailure}
 }
 
 func (t *Trouble) Type() TroubleType { return t.tType }
@@ -87,11 +87,11 @@ func (t *Trouble) GenerateResolution(resolutionMethod ResolutionType, context ma
 	}
 
 	switch resolutionMethod {
-	case ABORT:
+	case Abort:
 		return &AbortResolution{}, nil
-	case RETRY:
+	case Retry:
 		return &RetryResolution{}, nil
-	case SPECIFY_TMDB_ID:
+	case SpecifyTmdbID:
 		if id, ok := context["tmdb_id"]; ok && len(strings.TrimSpace(id)) != 0 {
 			return &TmdbIDResolution{tmdbID: id}, nil
 		}
@@ -107,7 +107,7 @@ func (t *Trouble) GenerateResolution(resolutionMethod ResolutionType, context ma
 // are choices set on the trouble (non-nil). If either of these conditions
 // are unmet, then `nil` is returned.
 func (t *Trouble) GetTmdbChoices() []tmdb.SearchResultItem {
-	if t.choices != nil && t.tType == TMDB_FAILURE_MULTI {
+	if t.choices != nil && t.tType == TmdbFailureMultipleResults {
 		return *t.choices
 	}
 
@@ -116,13 +116,13 @@ func (t *Trouble) GetTmdbChoices() []tmdb.SearchResultItem {
 
 func (t TroubleType) String() string {
 	switch t {
-	case METADATA_FAILURE:
+	case MetadataFailure:
 		return fmt.Sprintf("METADATA_FAILURE[%d]", t)
-	case TMDB_FAILURE_UNKNOWN:
+	case TmdbFailureUnknown:
 		return fmt.Sprintf("TMDB_FAILURE_UNKNOWN[%d]", t)
-	case TMDB_FAILURE_MULTI:
+	case TmdbFailureMultipleResults:
 		return fmt.Sprintf("TMDB_FAILURE_MULTI[%d]", t)
-	case TMDB_FAILURE_NONE:
+	case TmdbFailureNoResults:
 		return fmt.Sprintf("TMDB_FAILURE_NONE[%d]", t)
 	default:
 		return fmt.Sprintf("UNKNOWN[%d]", t)

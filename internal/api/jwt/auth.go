@@ -210,7 +210,7 @@ func (auth *jwtAuthProvider) RefreshTokens(allegedRefreshToken string) (*http.Co
 	}
 
 	claims := token.Claims.(*jwt.MapClaims)
-	userID, err := auth.getUserIdFromClaims(*claims)
+	userID, err := auth.getUserIDFromClaims(*claims)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to refresh: %w", err)
 	}
@@ -328,7 +328,7 @@ func (auth *jwtAuthProvider) validateTokenFromAuthInput(ctx context.Context, aut
 	}
 
 	// Extract user information (ID and permissions) from JWT
-	userID, err := auth.getUserIdFromClaims(*claims)
+	userID, err := auth.getUserIDFromClaims(*claims)
 	if err != nil {
 		return err
 	}
@@ -400,7 +400,7 @@ func (auth *jwtAuthProvider) validateJWT(token string, secret []byte) (*jwt.Toke
 	}
 
 	// Ensure the user ID is present
-	if _, err := auth.getUserIdFromClaims(*tokenClaims); err != nil {
+	if _, err := auth.getUserIDFromClaims(*tokenClaims); err != nil {
 		return nil, fmt.Errorf("failed to extract userID from JWT: %w", err)
 	}
 
@@ -486,7 +486,7 @@ func (auth *jwtAuthProvider) scheduleUserTokenCleanup(userID uuid.UUID, token st
 	})
 }
 
-func (auth *jwtAuthProvider) getUserIdFromClaims(claims jwt.MapClaims) (*uuid.UUID, error) {
+func (auth *jwtAuthProvider) getUserIDFromClaims(claims jwt.MapClaims) (*uuid.UUID, error) {
 	if userID, ok := claims["user_id"]; ok {
 		if id, err := uuid.Parse(userID.(string)); err != nil {
 			return nil, fmt.Errorf("failed to extract user ID from JWT claims: %w", err)

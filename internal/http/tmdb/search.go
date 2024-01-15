@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	tmdbBaseUrl = "https://api.themoviedb.org/3"
+	tmdbBaseURL = "https://api.themoviedb.org/3"
 
 	tmdbSearchMovieTemplate  = "%s/search/movie?query=%s&api_key=%s"
 	tmdbSearchSeriesTemplate = "%s/search/tv?query=%s&api_key=%s"
@@ -31,7 +31,7 @@ var log = logger.Get("TMDB")
 type (
 	Date   struct{ time.Time }
 	Config struct {
-		ApiKey string
+		APIKey string
 	}
 
 	Genre struct {
@@ -46,7 +46,7 @@ type (
 	}
 
 	SearchResultItem struct {
-		Id           json.Number `json:"id"`
+		ID           json.Number `json:"id"`
 		Adult        bool        `json:"adult"`
 		Title        string      `json:"name"`
 		Plot         string      `json:"overview"`
@@ -56,7 +56,7 @@ type (
 	}
 
 	Movie struct {
-		Id          json.Number `json:"id"`
+		ID          json.Number `json:"id"`
 		Adult       bool        `json:"adult"`
 		ReleaseDate string      `json:"release_date"`
 		Name        string      `json:"title"`
@@ -66,19 +66,19 @@ type (
 	}
 
 	Episode struct {
-		Id       json.Number `json:"id"`
+		ID       json.Number `json:"id"`
 		Name     string      `json:"name"`
 		Overview string      `json:"overview"`
 	}
 
 	Season struct {
-		Id       json.Number `json:"id"`
+		ID       json.Number `json:"id"`
 		Name     string      `json:"name"`
 		Overview string      `json:"overview"`
 	}
 
 	Series struct {
-		Id       json.Number `json:"id"`
+		ID       json.Number `json:"id"`
 		Adult    bool        `json:"adult"`
 		Name     string      `json:"name"`
 		Overview string      `json:"overview"`
@@ -114,14 +114,14 @@ func (searcher *tmdbSearcher) SearchForSeries(metadata *media.FileMediaMetadata)
 	}
 
 	// Search for the series
-	path := fmt.Sprintf(tmdbSearchSeriesTemplate, tmdbBaseUrl, url.QueryEscape(metadata.Title), searcher.config.ApiKey)
+	path := fmt.Sprintf(tmdbSearchSeriesTemplate, tmdbBaseURL, url.QueryEscape(metadata.Title), searcher.config.APIKey)
 	var searchResult SearchResult
-	if err := httpGetJsonResponse(path, &searchResult); err != nil {
+	if err := httpGetJSONResponse(path, &searchResult); err != nil {
 		return "", err
 	}
 
 	if result, err := searcher.handleSearchResults(searchResult.Results, metadata); err == nil {
-		return result.Id.String(), nil
+		return result.ID.String(), nil
 	} else {
 		return "", err
 	}
@@ -139,14 +139,14 @@ func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) 
 	}
 
 	// Search for the movie stub
-	path := fmt.Sprintf(tmdbSearchMovieTemplate, tmdbBaseUrl, url.QueryEscape(metadata.Title), searcher.config.ApiKey)
+	path := fmt.Sprintf(tmdbSearchMovieTemplate, tmdbBaseURL, url.QueryEscape(metadata.Title), searcher.config.APIKey)
 	var searchResult SearchResult
-	if err := httpGetJsonResponse(path, &searchResult); err != nil {
+	if err := httpGetJSONResponse(path, &searchResult); err != nil {
 		return "", err
 	}
 
 	if result, err := searcher.handleSearchResults(searchResult.Results, metadata); err == nil {
-		return result.Id.String(), nil
+		return result.ID.String(), nil
 	} else {
 		return "", err
 	}
@@ -154,10 +154,10 @@ func (searcher *tmdbSearcher) SearchForMovie(metadata *media.FileMediaMetadata) 
 
 // GetMovie will query the TMDB API for the movie with the provided string ID. This ID
 // must be a valid TMDB ID, or else an error will be returned.
-func (searcher *tmdbSearcher) GetMovie(movieId string) (*Movie, error) {
-	path := fmt.Sprintf(tmdbGetMovieTemplate, tmdbBaseUrl, movieId, searcher.config.ApiKey)
+func (searcher *tmdbSearcher) GetMovie(movieID string) (*Movie, error) {
+	path := fmt.Sprintf(tmdbGetMovieTemplate, tmdbBaseURL, movieID, searcher.config.APIKey)
 	var movie Movie
-	if err := httpGetJsonResponse(path, &movie); err != nil {
+	if err := httpGetJSONResponse(path, &movie); err != nil {
 		return nil, err
 	}
 
@@ -166,10 +166,10 @@ func (searcher *tmdbSearcher) GetMovie(movieId string) (*Movie, error) {
 
 // GetSeries will query TMDB API for the series with the provided string ID. This ID
 // must be a valid TMDB ID, or else an error will be returned.
-func (searcher *tmdbSearcher) GetSeries(seriesId string) (*Series, error) {
-	path := fmt.Sprintf(tmdbGetSeriesTemplate, tmdbBaseUrl, seriesId, searcher.config.ApiKey)
+func (searcher *tmdbSearcher) GetSeries(seriesID string) (*Series, error) {
+	path := fmt.Sprintf(tmdbGetSeriesTemplate, tmdbBaseURL, seriesID, searcher.config.APIKey)
 	var series Series
-	if err := httpGetJsonResponse(path, &series); err != nil {
+	if err := httpGetJSONResponse(path, &series); err != nil {
 		return nil, err
 	}
 
@@ -178,10 +178,10 @@ func (searcher *tmdbSearcher) GetSeries(seriesId string) (*Series, error) {
 
 // GetEpisode queries TMDB using the seriesID combined with the season and episode number. It is expected
 // that the seriesID provided is a valid TMDB ID, else the request will fail.
-func (searcher *tmdbSearcher) GetEpisode(seriesId string, seasonNumber int, episodeNumber int) (*Episode, error) {
-	path := fmt.Sprintf(tmdbGetEpisodeTemplate, tmdbBaseUrl, seriesId, seasonNumber, episodeNumber, searcher.config.ApiKey)
+func (searcher *tmdbSearcher) GetEpisode(seriesID string, seasonNumber int, episodeNumber int) (*Episode, error) {
+	path := fmt.Sprintf(tmdbGetEpisodeTemplate, tmdbBaseURL, seriesID, seasonNumber, episodeNumber, searcher.config.APIKey)
 	var episode Episode
-	if err := httpGetJsonResponse(path, &episode); err != nil {
+	if err := httpGetJSONResponse(path, &episode); err != nil {
 		return nil, err
 	}
 
@@ -190,10 +190,10 @@ func (searcher *tmdbSearcher) GetEpisode(seriesId string, seasonNumber int, epis
 
 // GetSeason will query TMDB API for the season with the provided string ID. This ID
 // must be a valid TMDB ID, or else an error will be returned.
-func (searcher *tmdbSearcher) GetSeason(seriesId string, seasonNumber int) (*Season, error) {
-	path := fmt.Sprintf(tmdbGetSeasonTemplate, tmdbBaseUrl, seriesId, seasonNumber, searcher.config.ApiKey)
+func (searcher *tmdbSearcher) GetSeason(seriesID string, seasonNumber int) (*Season, error) {
+	path := fmt.Sprintf(tmdbGetSeasonTemplate, tmdbBaseURL, seriesID, seasonNumber, searcher.config.APIKey)
 	var season Season
-	if err := httpGetJsonResponse(path, &season); err != nil {
+	if err := httpGetJSONResponse(path, &season); err != nil {
 		return nil, err
 	}
 
@@ -276,7 +276,7 @@ func filterResultsInPlace(results *[]SearchResultItem, metadata *media.FileMedia
 	*results = (*results)[:insertionIndex]
 }
 
-func httpGetJsonResponse(urlPath string, targetInterface interface{}) error {
+func httpGetJSONResponse(urlPath string, targetInterface interface{}) error {
 	log.Verbosef("GET -> %s\n", urlPath)
 	resp, err := http.Get(urlPath)
 	if err != nil {

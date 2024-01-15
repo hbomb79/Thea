@@ -18,7 +18,7 @@ type (
 	Store struct{}
 
 	Transcode struct {
-		Id        uuid.UUID `db:"id"`
+		ID        uuid.UUID `db:"id"`
 		MediaID   uuid.UUID `db:"media_id"`
 		TargetID  uuid.UUID `db:"transcode_target_id"`
 		MediaPath string    `db:"path"`
@@ -32,7 +32,7 @@ func (store *Store) SaveTranscode(db database.Queryable, task *TranscodeTask) er
 	if _, err := db.Exec(`
 		INSERT INTO media_transcodes(id, media_id, transcode_target_id, path)
 		VALUES ($1, $2, $3, $4)`,
-		task.id, task.media.Id(), task.target.ID, task.OutputPath(),
+		task.id, task.media.ID(), task.target.ID, task.OutputPath(),
 	); err != nil {
 		return fmt.Errorf("failed to create transcode row: %w", err)
 	}
@@ -64,9 +64,9 @@ func (store *Store) Get(db database.Queryable, id uuid.UUID) *Transcode {
 
 // GetForMedia returns all the saved/completed transcodes associated with the media ID
 // provided. This function operates agnostically of the type of the media.
-func (store *Store) GetForMedia(db database.Queryable, mediaId uuid.UUID) ([]*Transcode, error) {
+func (store *Store) GetForMedia(db database.Queryable, mediaID uuid.UUID) ([]*Transcode, error) {
 	var dest []*Transcode
-	if err := db.Select(&dest, `SELECT * FROM media_transcodes WHERE media_id=$1`, mediaId); err != nil {
+	if err := db.Select(&dest, `SELECT * FROM media_transcodes WHERE media_id=$1`, mediaID); err != nil {
 		return nil, fmt.Errorf("failed query for all transcodes: %w", err)
 	}
 
@@ -84,15 +84,15 @@ func (store *Store) Delete(db database.Queryable, id uuid.UUID) (string, error) 
 	return result, nil
 }
 
-func (store *Store) GetForMediaAndTarget(db database.Queryable, mediaId uuid.UUID, targetId uuid.UUID) (*Transcode, error) {
+func (store *Store) GetForMediaAndTarget(db database.Queryable, mediaID uuid.UUID, targetID uuid.UUID) (*Transcode, error) {
 	dest := &Transcode{}
 	if err := db.Get(dest, `
 		SELECT * FROM media_transcodes
 		WHERE media_id=$1
 		  AND transcode_target_id=$2`,
-		mediaId, targetId,
+		mediaID, targetID,
 	); err != nil {
-		return nil, fmt.Errorf("failed to find transcode for media %s and target %s: %v", mediaId, targetId, err)
+		return nil, fmt.Errorf("failed to find transcode for media %s and target %s: %v", mediaID, targetID, err)
 	}
 
 	return dest, nil

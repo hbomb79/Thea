@@ -12,6 +12,7 @@ import (
 // which we need for our auth/refresh cookies. It's simple
 // enough to just implement our own response which
 // correctly adds multiple of the headers
+
 type LoginResponse struct {
 	User         gen.User
 	AuthToken    http.Cookie `json:"auth-token"`

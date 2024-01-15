@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	DEBOUNCE_DURATION  time.Duration = time.Second * 2
-	MAX_TIMER_DURATION time.Duration = time.Second * 5
+	DebounceDuration time.Duration = time.Second * 2
+	MaxTimerDuration time.Duration = time.Second * 5
 
-	RAPID_EVENT_DEBOUNCE_DURATION  time.Duration = time.Millisecond * 500
-	RAPID_EVENT_MAX_TIMER_DURATION time.Duration = time.Second * 2
+	RapidEventDebounceDuration time.Duration = time.Millisecond * 500
+	RapidEventMaxTimerDuration time.Duration = time.Second * 2
 )
 
 type (
@@ -57,9 +57,9 @@ func newActivityService(broadcaster broadcaster, event event.EventHandler) *acti
 func (service *activityService) Run(ctx context.Context) error {
 	messageChan := make(chan event.HandlerEvent, 100)
 	service.eventBus.RegisterHandlerChannel(messageChan,
-		event.INGEST_UPDATE, event.INGEST_COMPLETE, event.TRANSCODE_UPDATE,
-		event.TRANSCODE_TASK_PROGRESS, event.TRANSCODE_COMPLETE, event.WORKFLOW_UPDATE,
-		event.DOWNLOAD_UPDATE, event.DOWNLOAD_COMPLETE, event.DOWNLOAD_PROGRESS)
+		event.IngestUpdateEvent, event.IngestCompleteEvent, event.TranscodeUpdateEvent,
+		event.TranscodeTaskProgressEvent, event.TranscodeCompleteEvent, event.WorkflowUpdateEvent,
+		event.DownloadUpdateEvent, event.DownloadCompleteEvent, event.DownloadProgressEvent)
 
 	log.Emit(logger.NEW, "Activity service started\n")
 	for {
@@ -84,19 +84,19 @@ func (service *activityService) handleEvent(ev event.HandlerEvent) error {
 	resourceKey := eventKey{id: resourceID, ev: ev.Event}
 
 	switch ev.Event {
-	case event.INGEST_UPDATE:
+	case event.IngestUpdateEvent:
 		fallthrough
-	case event.INGEST_COMPLETE:
+	case event.IngestCompleteEvent:
 		service.scheduleEventBroadcast(resourceKey, service.BroadcastIngestUpdate)
-	case event.TRANSCODE_UPDATE:
+	case event.TranscodeUpdateEvent:
 		fallthrough
-	case event.TRANSCODE_COMPLETE:
+	case event.TranscodeCompleteEvent:
 		service.scheduleEventBroadcast(resourceKey, service.BroadcastTranscodeUpdate)
-	case event.TRANSCODE_TASK_PROGRESS:
+	case event.TranscodeTaskProgressEvent:
 		service.scheduleRapidEventBroadcast(resourceKey, service.BroadcastTaskProgressUpdate)
-	case event.WORKFLOW_UPDATE:
+	case event.WorkflowUpdateEvent:
 		service.scheduleEventBroadcast(resourceKey, service.BroadcastWorkflowUpdate)
-	case event.DOWNLOAD_UPDATE:
+	case event.DownloadUpdateEvent:
 		fallthrough
 	// case event.DOWNLOAD_COMPLETE:
 	// 	service.scheduleEventBroadcast(resourceKey, service.BroadcastDownloadUpdate)
@@ -110,11 +110,11 @@ func (service *activityService) handleEvent(ev event.HandlerEvent) error {
 }
 
 func (service *activityService) scheduleEventBroadcast(resourceKey eventKey, handler broadcastHandler) {
-	service._scheduleEventBroadcast(resourceKey, handler, DEBOUNCE_DURATION, MAX_TIMER_DURATION)
+	service._scheduleEventBroadcast(resourceKey, handler, DebounceDuration, MaxTimerDuration)
 }
 
 func (service *activityService) scheduleRapidEventBroadcast(resourceKey eventKey, handler broadcastHandler) {
-	service._scheduleEventBroadcast(resourceKey, handler, RAPID_EVENT_DEBOUNCE_DURATION, RAPID_EVENT_MAX_TIMER_DURATION)
+	service._scheduleEventBroadcast(resourceKey, handler, RapidEventDebounceDuration, RapidEventMaxTimerDuration)
 }
 
 func (service *activityService) _scheduleEventBroadcast(resourceKey eventKey, handler broadcastHandler, debounceTime time.Duration, maxTime time.Duration) {

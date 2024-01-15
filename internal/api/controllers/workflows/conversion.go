@@ -15,7 +15,7 @@ func workflowToDto(model *workflow.Workflow) gen.Workflow {
 		Label:     model.Label,
 		Enabled:   model.Enabled,
 		Criteria:  util.ApplyConversion(model.Criteria, criteriaToDto),
-		TargetIds: util.ApplyConversion(model.Targets, getTargetId),
+		TargetIds: util.ApplyConversion(model.Targets, getTargetID),
 	}
 }
 
@@ -41,19 +41,19 @@ func criteriaCombineTypeToDto(combineType match.CombineType) gen.WorkflowCriteri
 
 func criteriaKeyToDto(key match.Key) gen.WorkflowCriteriaKey {
 	switch key {
-	case match.TITLE:
+	case match.TitleKey:
 		return gen.TITLE
-	case match.RESOLUTION:
+	case match.ResolutionKey:
 		return gen.RESOLUTION
-	case match.SEASON_NUMBER:
+	case match.SeasonNumberKey:
 		return gen.SEASONNUMBER
-	case match.EPISODE_NUMBER:
+	case match.EpisodeNumberKey:
 		return gen.EPISODENUMBER
-	case match.SOURCE_PATH:
+	case match.SourcePathKey:
 		return gen.SOURCEPATH
-	case match.SOURCE_NAME:
+	case match.SourceNameKey:
 		return gen.SOURCENAME
-	case match.SOURCE_EXTENSION:
+	case match.SourceExtensionKey:
 		return gen.SOURCEEXTENSION
 	}
 
@@ -62,21 +62,21 @@ func criteriaKeyToDto(key match.Key) gen.WorkflowCriteriaKey {
 
 func criteriaTypeToDto(t match.Type) gen.WorkflowCriteriaType {
 	switch t {
-	case match.EQUALS:
+	case match.Equals:
 		return gen.EQUALS
-	case match.NOT_EQUALS:
+	case match.NotEquals:
 		return gen.NOTEQUALS
-	case match.MATCHES:
+	case match.Matches:
 		return gen.MATCHES
-	case match.DOES_NOT_MATCH:
+	case match.DoesNotMatch:
 		return gen.DOESNOTMATCH
-	case match.LESS_THAN:
+	case match.LessThan:
 		return gen.LESSTHAN
-	case match.GREATER_THAN:
+	case match.GreaterThan:
 		return gen.GREATERTHAN
-	case match.IS_PRESENT:
+	case match.IsPresent:
 		return gen.ISPRESENT
-	case match.IS_NOT_PRESENT:
+	case match.IsNotPresent:
 		return gen.ISNOTPRESENT
 	}
 
@@ -97,19 +97,19 @@ func criteriaCombineTypeToModel(combineType gen.WorkflowCriteriaCombineType) mat
 func criteriaKeyToModel(key gen.WorkflowCriteriaKey) match.Key {
 	switch key {
 	case gen.TITLE:
-		return match.TITLE
+		return match.TitleKey
 	case gen.RESOLUTION:
-		return match.RESOLUTION
+		return match.ResolutionKey
 	case gen.SEASONNUMBER:
-		return match.SEASON_NUMBER
+		return match.SeasonNumberKey
 	case gen.EPISODENUMBER:
-		return match.EPISODE_NUMBER
+		return match.EpisodeNumberKey
 	case gen.SOURCEPATH:
-		return match.SOURCE_PATH
+		return match.SourcePathKey
 	case gen.SOURCENAME:
-		return match.SOURCE_NAME
+		return match.SourceNameKey
 	case gen.SOURCEEXTENSION:
-		return match.SOURCE_EXTENSION
+		return match.SourceExtensionKey
 	}
 
 	panic("unreachable")
@@ -118,21 +118,21 @@ func criteriaKeyToModel(key gen.WorkflowCriteriaKey) match.Key {
 func criteriaTypeToModel(t gen.WorkflowCriteriaType) match.Type {
 	switch t {
 	case gen.EQUALS:
-		return match.EQUALS
+		return match.Equals
 	case gen.NOTEQUALS:
-		return match.NOT_EQUALS
+		return match.NotEquals
 	case gen.MATCHES:
-		return match.MATCHES
+		return match.Matches
 	case gen.DOESNOTMATCH:
-		return match.DOES_NOT_MATCH
+		return match.DoesNotMatch
 	case gen.LESSTHAN:
-		return match.LESS_THAN
+		return match.LessThan
 	case gen.GREATERTHAN:
-		return match.GREATER_THAN
+		return match.GreaterThan
 	case gen.ISPRESENT:
-		return match.IS_PRESENT
+		return match.IsPresent
 	case gen.ISNOTPRESENT:
-		return match.IS_NOT_PRESENT
+		return match.IsNotPresent
 	}
 
 	panic("unreachable")
@@ -148,4 +148,4 @@ func criteriaToModel(dto gen.WorkflowCriteria) match.Criteria {
 	}
 }
 
-func getTargetId(target *ffmpeg.Target) uuid.UUID { return target.ID }
+func getTargetID(target *ffmpeg.Target) uuid.UUID { return target.ID }

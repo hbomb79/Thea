@@ -77,28 +77,28 @@ func New(config Config, eventBus event.EventCoordinator, dataStore DataStore) (*
 // will wait for it's running transcode tasks to cancel.
 func (service *transcodeService) Run(ctx context.Context) error {
 	eventChannel := make(event.HandlerChannel, 100)
-	service.eventBus.RegisterHandlerChannel(eventChannel, event.NEW_MEDIA, event.DELETE_MEDIA)
+	service.eventBus.RegisterHandlerChannel(eventChannel, event.NewMediaEvent, event.DeleteMediaEvent)
 
 	for {
 		select {
 		case <-service.queueChange:
 			service.startWaitingTasks(ctx)
-		case taskId := <-service.taskChange:
-			service.handleTaskUpdate(taskId)
+		case taskID := <-service.taskChange:
+			service.handleTaskUpdate(taskID)
 		case message := <-eventChannel:
 			ev := message.Event
 			switch ev {
-			case event.NEW_MEDIA:
-				if mediaId, ok := message.Payload.(uuid.UUID); ok {
-					log.Emit(logger.DEBUG, "newly ingested media with ID %s detected\n", mediaId)
-					service.createWorkflowTasksForMedia(mediaId)
+			case event.NewMediaEvent:
+				if mediaID, ok := message.Payload.(uuid.UUID); ok {
+					log.Emit(logger.DEBUG, "newly ingested media with ID %s detected\n", mediaID)
+					service.createWorkflowTasksForMedia(mediaID)
 				} else {
 					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
 				}
-			case event.DELETE_MEDIA:
-				if mediaId, ok := message.Payload.(uuid.UUID); ok {
-					log.Emit(logger.DEBUG, "media with ID %s deleted, cancelling any ongoing transcodes\n", mediaId)
-					service.CancelTasksForMedia(mediaId)
+			case event.DeleteMediaEvent:
+				if mediaID, ok := message.Payload.(uuid.UUID); ok {
+					log.Emit(logger.DEBUG, "media with ID %s deleted, cancelling any ongoing transcodes\n", mediaID)
+					service.CancelTasksForMedia(mediaID)
 				} else {
 					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
 				}
@@ -118,7 +118,7 @@ func (service *transcodeService) AllTasks() []*TranscodeTask { return service.ta
 // a matching ID, if it can be found. If no such task exists, nil is returned.
 func (service *transcodeService) Task(id uuid.UUID) *TranscodeTask {
 	for _, t := range service.tasks {
-		if t.Id() == id {
+		if t.ID() == id {
 			return t
 		}
 	}
@@ -127,10 +127,10 @@ func (service *transcodeService) Task(id uuid.UUID) *TranscodeTask {
 }
 
 // ActiveTasksForMedia returns all the tasks which are running against the given media ID
-func (service *transcodeService) ActiveTasksForMedia(mediaId uuid.UUID) []*TranscodeTask {
+func (service *transcodeService) ActiveTasksForMedia(mediaID uuid.UUID) []*TranscodeTask {
 	tasks := make([]*TranscodeTask, 0)
 	for _, t := range service.tasks {
-		if t.media.Id() == mediaId {
+		if t.media.ID() == mediaID {
 			tasks = append(tasks, t)
 		}
 	}
@@ -147,8 +147,8 @@ func (service *transcodeService) CancelTasksForMedia(mediaID uuid.UUID) {
 
 	toDelete := make([]uuid.UUID, 0)
 	for _, t := range service.tasks {
-		if t.Media().Id() == mediaID {
-			toDelete = append(toDelete, t.Id())
+		if t.Media().ID() == mediaID {
+			toDelete = append(toDelete, t.ID())
 		}
 	}
 
@@ -163,9 +163,9 @@ func (service *transcodeService) CancelTasksForMedia(mediaID uuid.UUID) {
 // TaskForMediaAndTarget searches through all the tasks in this service and looks for one
 // which was created for the media and target matching the IDs provided. If no such task exists
 // then nil is returned.
-func (service *transcodeService) ActiveTaskForMediaAndTarget(mediaId uuid.UUID, targetId uuid.UUID) *TranscodeTask {
+func (service *transcodeService) ActiveTaskForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) *TranscodeTask {
 	for _, t := range service.tasks {
-		if t.media.Id() == mediaId && t.target.ID == targetId {
+		if t.media.ID() == mediaID && t.target.ID == targetID {
 			return t
 		}
 	}
@@ -177,15 +177,15 @@ func (service *transcodeService) ActiveTaskForMediaAndTarget(mediaId uuid.UUID, 
 // a task using the result.
 // If the media/target fail to be retrieved, or if a transcode task for the
 // media+target already exists, an error is returned.
-func (service *transcodeService) NewTask(mediaId uuid.UUID, targetId uuid.UUID) error {
-	media := service.dataStore.GetMedia(mediaId)
+func (service *transcodeService) NewTask(mediaID uuid.UUID, targetID uuid.UUID) error {
+	media := service.dataStore.GetMedia(mediaID)
 	if media == nil {
-		return fmt.Errorf("media %s not found", mediaId)
+		return fmt.Errorf("media %s not found", mediaID)
 	}
 
-	target := service.dataStore.GetTarget(targetId)
+	target := service.dataStore.GetTarget(targetID)
 	if target == nil {
-		return fmt.Errorf("target %s not found", targetId)
+		return fmt.Errorf("target %s not found", targetID)
 	}
 
 	return service.spawnFfmpegTarget(media, target)
@@ -284,7 +284,7 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 
 			updateHandler := func(prog *ffmpeg.Progress) {
 				taskToStart.lastProgress = prog
-				service.eventBus.Dispatch(event.TRANSCODE_TASK_PROGRESS, taskToStart.Id())
+				service.eventBus.Dispatch(event.TranscodeTaskProgressEvent, taskToStart.ID())
 			}
 
 			taskToStart.status = WORKING
@@ -311,7 +311,7 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 			service.Lock()
 			defer service.Unlock()
 			service.consumedThreads -= threadCost
-			log.Emit(logger.DEBUG, "Task %s has released %d threads\n", taskToStart.Id(), threadCost)
+			log.Emit(logger.DEBUG, "Task %s has released %d threads\n", taskToStart.ID(), threadCost)
 		}(task, service.taskWg, requiredBudget)
 	}
 }
@@ -319,8 +319,8 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 // handleTaskUpdate is the handler for any task updates in this service.
 // Any dead tasks are removed from the queue. Completed tasks are committed
 // to the database before being removed from the queue.
-func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
-	task := service.Task(taskId)
+func (service *transcodeService) handleTaskUpdate(taskID uuid.UUID) {
+	task := service.Task(taskID)
 	if task == nil {
 		return
 	}
@@ -330,7 +330,7 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 			// TODO: implement a retry logic here because otherwise this transcode is lost
 			log.Errorf("failed to save transcode %s due to error: %v\n", task, err)
 		} else {
-			service.eventBus.Dispatch(event.TRANSCODE_COMPLETE, taskId)
+			service.eventBus.Dispatch(event.TranscodeCompleteEvent, taskID)
 			service.removeTaskFromQueue(task.id)
 
 			return
@@ -341,32 +341,32 @@ func (service *transcodeService) handleTaskUpdate(taskId uuid.UUID) {
 		service.removeTaskFromQueue(task.id)
 	}
 
-	service.eventBus.Dispatch(event.TRANSCODE_UPDATE, taskId)
+	service.eventBus.Dispatch(event.TranscodeUpdateEvent, taskID)
 }
 
 // createWorkflowTasksForMedia takes a media ID, and queries the Ffmpeg Store for a workflow
 // matching the media provided. The first workflow to be found as eligible will see the associatted
 // tasks be created, managed and monitored by this service.
-func (service *transcodeService) createWorkflowTasksForMedia(mediaId uuid.UUID) {
-	media := service.dataStore.GetMedia(mediaId)
+func (service *transcodeService) createWorkflowTasksForMedia(mediaID uuid.UUID) {
+	media := service.dataStore.GetMedia(mediaID)
 	workflows := service.dataStore.GetAllWorkflows()
 
 	for _, workflow := range workflows {
 		if workflow.IsMediaEligible(media) {
 			for _, target := range workflow.Targets {
 				if err := service.spawnFfmpegTarget(media, target); err != nil {
-					log.Emit(logger.ERROR, "failed to spawn ffmpeg target %s for media %s: %v\n", target, media.Id(), err)
+					log.Emit(logger.ERROR, "failed to spawn ffmpeg target %s for media %s: %v\n", target, media.ID(), err)
 				}
 			}
 
-			log.Emit(logger.NEW, "Media %s met the conditions of workflow %v... Automated transcodes queued\n", mediaId, workflow)
+			log.Emit(logger.NEW, "Media %s met the conditions of workflow %v... Automated transcodes queued\n", mediaID, workflow)
 			return
 		}
 	}
 
 	// TODO: Maybe we create some sort of a notification or something about not being able to find an eligible
 	//		 workflow? I could see that being useful.
-	log.Emit(logger.DEBUG, "Media %s did not meet the conditions of any known workflows. No automated transcoding will occur\n", mediaId)
+	log.Emit(logger.DEBUG, "Media %s did not meet the conditions of any known workflows. No automated transcoding will occur\n", mediaID)
 }
 
 // spawnFfmpegTarget will create a new transcode task assigned to the media and target provided,
@@ -378,12 +378,12 @@ func (service *transcodeService) spawnFfmpegTarget(m *media.Container, target *f
 	service.Lock()
 	defer service.Unlock()
 
-	if existing := service.ActiveTaskForMediaAndTarget(m.Id(), target.ID); existing != nil {
-		return fmt.Errorf("an active task for media %s and target %s already exists", m.Id(), target.ID)
+	if existing := service.ActiveTaskForMediaAndTarget(m.ID(), target.ID); existing != nil {
+		return fmt.Errorf("an active task for media %s and target %s already exists", m.ID(), target.ID)
 	}
 
-	if existing, _ := service.dataStore.GetForMediaAndTarget(m.Id(), target.ID); existing != nil {
-		return fmt.Errorf("a completed task for media %s and target %s already exists", m.Id(), target.ID)
+	if existing, _ := service.dataStore.GetForMediaAndTarget(m.ID(), target.ID); existing != nil {
+		return fmt.Errorf("a completed task for media %s and target %s already exists", m.ID(), target.ID)
 	}
 
 	newTask, err := NewTranscodeTask(m, target, ffmpeg.Config{
@@ -403,9 +403,9 @@ func (service *transcodeService) spawnFfmpegTarget(m *media.Container, target *f
 // removeTaskFromQueue will look for and remove the task with the ID provided
 // from the services queue.
 // NOTE: The task will NOT be cancelled as part of removal
-func (service *transcodeService) removeTaskFromQueue(taskId uuid.UUID) {
+func (service *transcodeService) removeTaskFromQueue(taskID uuid.UUID) {
 	for i, v := range service.tasks {
-		if v.id == taskId {
+		if v.id == taskID {
 			service.tasks = append(service.tasks[:i], service.tasks[i+1:]...)
 			service.queueChange <- true
 

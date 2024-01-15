@@ -35,20 +35,20 @@ func (criteria *Criteria) ValidateLegal() error {
 	}
 
 	switch criteria.Type {
-	case MATCHES:
+	case Matches:
 		fallthrough
-	case DOES_NOT_MATCH:
+	case DoesNotMatch:
 		// expects regular expression
 		if _, err := regexp.Compile(criteria.Value); err != nil {
 			return fmt.Errorf("match type %s expects a valid regular expression as the value; '%v' is not parseable as a regular expression", criteria.Type, criteria.Value)
 		}
-	case LESS_THAN:
+	case LessThan:
 		fallthrough
-	case GREATER_THAN:
+	case GreaterThan:
 		fallthrough
-	case EQUALS:
+	case Equals:
 		fallthrough
-	case NOT_EQUALS:
+	case NotEquals:
 		// expects a integer
 		if _, err := strconv.Atoi(criteria.Value); err != nil {
 			return fmt.Errorf("match type %s expects a valid int as the value; '%v' is not a valid int", criteria.Type, criteria.Value)
@@ -65,27 +65,27 @@ func (criteria *Criteria) ValidateLegal() error {
 func (criteria *Criteria) IsMediaAcceptable(m *media.Container) (bool, error) {
 	var valueToCheck any
 	switch criteria.Key {
-	case TITLE:
+	case TitleKey:
 		valueToCheck = m.Title()
-	case RESOLUTION:
+	case ResolutionKey:
 		valueToCheck, _ = m.Resolution()
-	case EPISODE_NUMBER:
+	case EpisodeNumberKey:
 		if m.EpisodeNumber() != -1 {
 			valueToCheck = m.EpisodeNumber()
 		} else {
 			valueToCheck = nil
 		}
-	case SEASON_NUMBER:
+	case SeasonNumberKey:
 		if m.SeasonNumber() != -1 {
 			valueToCheck = m.SeasonNumber()
 		} else {
 			valueToCheck = nil
 		}
-	case SOURCE_EXTENSION:
+	case SourceExtensionKey:
 		valueToCheck = filepath.Ext(m.Source())
-	case SOURCE_NAME:
+	case SourceNameKey:
 		valueToCheck = filepath.Base(m.Source())
-	case SOURCE_PATH:
+	case SourcePathKey:
 		valueToCheck = m.Source()
 	}
 
@@ -107,9 +107,9 @@ func (criteria *Criteria) IsMediaAcceptable(m *media.Container) (bool, error) {
 func (criteria *Criteria) isValueAcceptable(valToTest interface{}) (bool, error) {
 	if valToTest == nil {
 		switch criteria.Type {
-		case IS_PRESENT:
+		case IsPresent:
 			return false, nil
-		case IS_NOT_PRESENT:
+		case IsNotPresent:
 			return true, nil
 		default:
 			return false, fmt.Errorf("nil is not acceptable for criteria type %s", criteria.Type)
@@ -117,26 +117,26 @@ func (criteria *Criteria) isValueAcceptable(valToTest interface{}) (bool, error)
 	}
 
 	switch criteria.Type {
-	case IS_PRESENT:
+	case IsPresent:
 		return true, nil
-	case IS_NOT_PRESENT:
+	case IsNotPresent:
 		return false, nil
-	case MATCHES:
+	case Matches:
 		return criteria.testStringEquality(valToTest)
-	case DOES_NOT_MATCH:
+	case DoesNotMatch:
 		match, err := criteria.testStringEquality(valToTest)
 		if err != nil {
 			return false, err
 		}
 
 		return !match, nil
-	case LESS_THAN:
+	case LessThan:
 		fallthrough
-	case GREATER_THAN:
+	case GreaterThan:
 		fallthrough
-	case EQUALS:
+	case Equals:
 		fallthrough
-	case NOT_EQUALS:
+	case NotEquals:
 		return criteria.performIntComparison(valToTest)
 	}
 
@@ -201,13 +201,13 @@ func (criteria *Criteria) performIntComparison(valToTest interface{}) (bool, err
 	}
 
 	switch criteria.Type {
-	case LESS_THAN:
+	case LessThan:
 		return criteriaIntValue < intToCheck, nil
-	case GREATER_THAN:
+	case GreaterThan:
 		return criteriaIntValue > intToCheck, nil
-	case EQUALS:
+	case Equals:
 		return criteriaIntValue == intToCheck, nil
-	case NOT_EQUALS:
+	case NotEquals:
 		return criteriaIntValue != intToCheck, nil
 	default:
 		return false, fmt.Errorf("criteria type %s is not valid for key %s (integer type)", criteria.Type, criteria.Key)

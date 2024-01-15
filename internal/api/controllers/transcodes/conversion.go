@@ -34,13 +34,13 @@ func statusToDto(status transcode.TranscodeTaskStatus) gen.TranscodeTaskStatus {
 }
 
 func NewDtoFromModel(model *transcode.Transcode) gen.TranscodeTask {
-	return gen.TranscodeTask{Id: model.Id, MediaId: model.MediaID, TargetId: model.TargetID, OutputPath: model.MediaPath, Status: gen.TranscodeTaskStatusCOMPLETE, Progress: nil}
+	return gen.TranscodeTask{Id: model.ID, MediaId: model.MediaID, TargetId: model.TargetID, OutputPath: model.MediaPath, Status: gen.TranscodeTaskStatusCOMPLETE, Progress: nil}
 }
 
 func NewDtoFromTask(model *transcode.TranscodeTask) gen.TranscodeTask {
 	return gen.TranscodeTask{
-		Id:         model.Id(),
-		MediaId:    model.Media().Id(),
+		Id:         model.ID(),
+		MediaId:    model.Media().ID(),
 		TargetId:   model.Target().ID,
 		OutputPath: model.OutputPath(),
 		Status:     statusToDto(model.Status()),

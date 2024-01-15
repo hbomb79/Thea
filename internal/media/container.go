@@ -8,13 +8,14 @@ import (
 )
 
 type (
+	ContainerType int
+
 	// Container is a struct which contains either a Movie or
 	// an Episode. This is indicated using the 'Type' enum. If
 	// container is holding an 'Episode' type, then the 'Season'
 	// and 'Series' that the episode belongs to will also be populated
 	// if available
-	ContainerType int
-	Container     struct {
+	Container struct {
 		Type    ContainerType
 		Movie   *Movie
 		Episode *Episode
@@ -24,15 +25,15 @@ type (
 )
 
 const (
-	MOVIE ContainerType = iota
-	EPISODE
-	SERIES
+	MovieContainerType ContainerType = iota
+	EpisodeContainerType
+	SeriesContainerType
 )
 
 func (cont *Container) Resolution() (int, int) { return 0, 0 }
-func (cont *Container) Id() uuid.UUID          { return cont.model().ID }
+func (cont *Container) ID() uuid.UUID          { return cont.model().ID }
 func (cont *Container) Title() string          { return cont.model().Title }
-func (cont *Container) TmdbId() string         { return cont.model().TmdbID }
+func (cont *Container) TmdbID() string         { return cont.model().TmdbID }
 func (cont *Container) CreatedAt() time.Time   { return cont.model().CreatedAt }
 func (cont *Container) UpdatedAt() time.Time   { return cont.model().UpdatedAt }
 func (cont *Container) Source() string         { return cont.watchable().SourcePath }
@@ -40,7 +41,7 @@ func (cont *Container) Source() string         { return cont.watchable().SourceP
 // EpisodeNumber returns the episode number for the media IF it is an Episode. -1
 // is returned if the container is holding a Movie.
 func (cont *Container) EpisodeNumber() int {
-	if cont.Type == MOVIE {
+	if cont.Type == MovieContainerType {
 		return -1
 	}
 
@@ -50,7 +51,7 @@ func (cont *Container) EpisodeNumber() int {
 // SeasonNumber returns the season number for the media IF it is an Episode. -1
 // is returned if the container is holding a Movie.
 func (cont *Container) SeasonNumber() int {
-	if cont.Type == MOVIE {
+	if cont.Type == MovieContainerType {
 		return -1
 	}
 
@@ -63,9 +64,9 @@ func (cont *Container) String() string {
 
 func (cont *Container) watchable() *Watchable {
 	switch cont.Type {
-	case MOVIE:
+	case MovieContainerType:
 		return &cont.Movie.Watchable
-	case EPISODE:
+	case EpisodeContainerType:
 		return &cont.Episode.Watchable
 	default:
 		panic("Cannot fetch watchable from container due to unknown container type")
@@ -74,11 +75,11 @@ func (cont *Container) watchable() *Watchable {
 
 func (cont *Container) model() *Model {
 	switch cont.Type {
-	case MOVIE:
+	case MovieContainerType:
 		return &cont.Movie.Model
-	case EPISODE:
+	case EpisodeContainerType:
 		return &cont.Episode.Model
-	case SERIES:
+	case SeriesContainerType:
 		return &cont.Series.Model
 	default:
 		panic("Cannot fetch model from container due to unknown container type")

@@ -61,7 +61,7 @@ type (
 )
 
 const (
-	THEA_USER_DIR_SUFFIX = "/thea/"
+	TheaUserDirSuffix = "/thea/"
 )
 
 // Thea represents the top-level object for the server, and is responsible
@@ -124,14 +124,14 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to construct data orchestrator: %w", err)
 	}
 	thea.storeOrchestrator = store
-	if err := thea.syncDbPermissions(); err != nil {
+	if err := thea.syncDBPermissions(); err != nil {
 		return fmt.Errorf("failed to sync db permissions: %w", err)
 	}
 	if err := thea.createInitialUserIfNonePresent(); err != nil {
 		return fmt.Errorf("failed to create initial user: %w", err)
 	}
 
-	searcher := tmdb.NewSearcher(tmdb.Config{ApiKey: thea.config.OmdbKey})
+	searcher := tmdb.NewSearcher(tmdb.Config{APIKey: thea.config.OmdbKey})
 	scraper := media.NewScraper(media.ScraperConfig{FfprobeBinPath: thea.config.Format.FfprobeBinaryPath})
 	if serv, err := ingest.New(thea.config.IngestService, searcher, scraper, thea.storeOrchestrator, thea.eventBus); err == nil {
 		thea.ingestService = serv
@@ -205,7 +205,7 @@ func (thea *theaImpl) initialiseDockerServices(config TheaConfig, crashHandler f
 	return nil
 }
 
-func (thea *theaImpl) syncDbPermissions() error {
+func (thea *theaImpl) syncDBPermissions() error {
 	// Raise an error if a permission has been removed - a manual DB migration should be performed
 	// to protect against accidental removal of a permission
 	allPerms := permissions.All()

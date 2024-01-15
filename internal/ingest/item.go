@@ -31,11 +31,11 @@ type (
 )
 
 const (
-	IDLE IngestItemState = iota
-	IMPORT_HOLD
-	INGESTING
-	TROUBLED
-	COMPLETE
+	Idle IngestItemState = iota
+	ImportHold
+	Ingesting
+	Troubled
+	Complete
 )
 
 var (
@@ -57,9 +57,9 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 	if item.ScrapedMetadata == nil {
 		log.Emit(logger.DEBUG, "Performing file system scrape of %s\n", item.Path)
 		if meta, err := scraper.ScrapeFileForMediaInfo(item.Path); err != nil {
-			return Trouble{error: err, tType: METADATA_FAILURE}
+			return Trouble{error: err, tType: MetadataFailure}
 		} else if meta == nil {
-			return Trouble{error: errors.New("metadata scrape returned no error, but nil payload received"), tType: METADATA_FAILURE}
+			return Trouble{error: errors.New("metadata scrape returned no error, but nil payload received"), tType: MetadataFailure}
 		} else {
 			log.Emit(logger.DEBUG, "Scraped metadata for item %s:\n%#v\n", item, meta)
 			item.ScrapedMetadata = meta
@@ -93,12 +93,12 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 			series = found
 		}
 
-		season, err := searcher.GetSeason(series.Id.String(), meta.SeasonNumber)
+		season, err := searcher.GetSeason(series.ID.String(), meta.SeasonNumber)
 		if err != nil {
 			return newTrouble(err)
 		}
 
-		episode, err := searcher.GetEpisode(series.Id.String(), meta.SeasonNumber, meta.EpisodeNumber)
+		episode, err := searcher.GetEpisode(series.ID.String(), meta.SeasonNumber, meta.EpisodeNumber)
 		if err != nil {
 			return newTrouble(err)
 		}
@@ -114,7 +114,7 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 		}
 
 		log.Emit(logger.SUCCESS, "Saved newly ingested episode %v\n", ep)
-		eventBus.Dispatch(event.NEW_MEDIA, ep.ID)
+		eventBus.Dispatch(event.NewMediaEvent, ep.ID)
 	} else {
 		var movie *tmdb.Movie = nil
 		if item.OverrideTmdbID != nil {
@@ -148,7 +148,7 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 		}
 
 		log.Emit(logger.SUCCESS, "Saved newly ingested movie %v\n", mov)
-		eventBus.Dispatch(event.NEW_MEDIA, mov.ID)
+		eventBus.Dispatch(event.NewMediaEvent, mov.ID)
 	}
 
 	return nil
@@ -170,13 +170,13 @@ func (item *IngestItem) String() string {
 
 func (s IngestItemState) String() string {
 	switch s {
-	case IDLE:
+	case Idle:
 		return fmt.Sprintf("IDLE[%d]", s)
-	case IMPORT_HOLD:
+	case ImportHold:
 		return fmt.Sprintf("IMPORT_HOLD[%d]", s)
-	case INGESTING:
+	case Ingesting:
 		return fmt.Sprintf("INGESTING[%d]", s)
-	case TROUBLED:
+	case Troubled:
 		return fmt.Sprintf("TROUBLED[%d]", s)
 	default:
 		return fmt.Sprintf("UNKNOWN[%d]", s)

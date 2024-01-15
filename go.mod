@@ -3,6 +3,7 @@ module github.com/hbomb79/Thea
 go 1.21
 
 require (
+	github.com/deepmap/oapi-codegen/v2 v2.0.0
 	github.com/docker/docker v24.0.2+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/floostack/transcoder v1.1.2-0.20210806093423-9367de148a50
@@ -13,22 +14,17 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/ilyakaznacheev/cleanenv v1.4.2
 	github.com/jmoiron/sqlx v1.3.5
-	github.com/labstack/echo-jwt/v4 v4.2.0
 	github.com/labstack/echo/v4 v4.11.4
 	github.com/lib/pq v1.10.9
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/pressly/goose/v3 v3.13.4
 	github.com/rjeczalik/notify v0.9.3
 	github.com/simukti/sqldb-logger v0.0.0-20230108155151-646c1a075551
 )
 
-require (
-	github.com/deepmap/oapi-codegen/v2 v2.0.0 // indirect
-	github.com/dmarkham/enumer v1.5.9 // indirect
-	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	github.com/pascaldekloe/name v1.0.0 // indirect
-)
+require gopkg.in/yaml.v2 v2.4.0 // indirect
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
@@ -41,13 +37,11 @@ require (
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/oapi-codegen/echo-middleware v1.0.1
 	github.com/perimeterx/marshmallow v1.1.4 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.0.0
 	github.com/kr/pretty v0.3.0 // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 
 require (

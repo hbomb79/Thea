@@ -1,3 +1,4 @@
+.bin
 .vscode
 .env
 *.gen.go

@@ -3,4 +3,4 @@ generate:
   echo-server: true
   strict-server: true
   embedded-spec: true
-output: ./internal/api/gen/server.gen.go
+output: server.gen.go

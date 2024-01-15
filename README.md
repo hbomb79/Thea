@@ -22,10 +22,12 @@ When the project is completed, Thea aims to
 
 
 # Installation, Configuration, Building, Running and More...
-Thea uses OpenAPI to specify it's routes, and we use code generation for the request/response models. As such, you'll need to call
-`go generate` before building the project. For example:
+Refer to the Makefile to build and run Thea locally. For example:
 
-`go generate && go install && Thea`
+- `make audit` checks your code complies with static code analysis and formatting rules
+- `make build` builds Thea, placing the binary in `.bin/`
+- `make run` runs `make build` and then executes the executable
+- `make run/live` is a live-reloading version of `make run`
 
 For more information, see the [Wiki](https://github.com/hbomb79/Thea/wiki)!
 

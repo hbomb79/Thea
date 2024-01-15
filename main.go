@@ -16,16 +16,13 @@ import (
 
 const VERSION = 1.0
 
-//go:generate go run github.com/deepmap/oapi-codegen/v2/cmd/oapi-codegen --config=./internal/api/gen/types.cfg.yaml ./internal/api/thea.openapi.yaml
-//go:generate go run github.com/deepmap/oapi-codegen/v2/cmd/oapi-codegen --config=./internal/api/gen/server.cfg.yaml -templates=./internal/api/gen/templates ./internal/api/thea.openapi.yaml
-
 var (
 	log = logger.Get("Bootstrap")
 
-	conf         *internal.TheaConfig = &internal.TheaConfig{}
-	logLevelFlag                      = flag.String("log-level", "info", "Define logging level from one of [verbose, debug, info, important, warning, error]")
-	helpFlag                          = flag.Bool("help", false, "Whether to display help information")
-	configFlag                        = flag.String("config", filepath.Join(conf.GetConfigDir(), "/config.toml"), "The path to the config file that Thea will load")
+	conf         = &internal.TheaConfig{}
+	logLevelFlag = flag.String("log-level", "info", "Define logging level from one of [verbose, debug, info, important, warning, error]")
+	helpFlag     = flag.Bool("help", false, "Whether to display help information")
+	configFlag   = flag.String("config", filepath.Join(conf.GetConfigDir(), "/config.toml"), "The path to the config file that Thea will load")
 )
 
 func main() {

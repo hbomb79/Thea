@@ -37,9 +37,9 @@ type (
 
 	DataStore interface {
 		GetAllMediaSourcePaths() ([]string, error)
-		GetSeasonWithTmdbId(string) (*media.Season, error)
-		GetSeriesWithTmdbId(string) (*media.Series, error)
-		GetEpisodeWithTmdbId(string) (*media.Episode, error)
+		GetSeasonWithTmdbID(string) (*media.Season, error)
+		GetSeriesWithTmdbID(string) (*media.Series, error)
+		GetEpisodeWithTmdbID(string) (*media.Episode, error)
 
 		SaveEpisode(*media.Episode, *media.Season, *media.Series) error
 		SaveMovie(*media.Movie) error
@@ -129,7 +129,7 @@ func (service *ingestService) Run(ctx context.Context) error {
 	defer service.workerPool.Close()
 
 	ev := make(event.HandlerChannel, 100)
-	service.eventBus.RegisterHandlerChannel(ev, event.INGEST_COMPLETE)
+	service.eventBus.RegisterHandlerChannel(ev, event.IngestCompleteEvent)
 
 	service.DiscoverNewFiles()
 
@@ -141,7 +141,7 @@ func (service *ingestService) Run(ctx context.Context) error {
 			service.DiscoverNewFiles()
 		case message := <-ev:
 			ev := message.Event
-			if ev != event.INGEST_COMPLETE {
+			if ev != event.IngestCompleteEvent {
 				log.Emit(logger.WARNING, "received unknown event %s\n", ev)
 				continue
 			}
@@ -172,13 +172,13 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 	}
 
 	log.Emit(logger.DEBUG, "Item %s claimed by worker %s for ingestion\n", item, w)
-	service.eventBus.Dispatch(event.INGEST_UPDATE, item.ID)
+	service.eventBus.Dispatch(event.IngestUpdateEvent, item.ID)
 
 	if err := item.ingest(service.eventBus, service.scraper, service.searcher, service.dataStore); err != nil {
-		service.eventBus.Dispatch(event.INGEST_UPDATE, item.ID)
+		service.eventBus.Dispatch(event.IngestUpdateEvent, item.ID)
 		if trbl, ok := err.(Trouble); ok {
 			item.Trouble = &trbl
-			item.State = TROUBLED
+			item.State = Troubled
 
 			log.Emit(logger.ERROR, "Ingestion of item %s failed, raising trouble {message='%s' type=%s}\n", item, item.Trouble, item.Trouble.Type())
 		} else {
@@ -187,8 +187,8 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 		}
 	} else {
 		log.Emit(logger.SUCCESS, "Ingestion of item %s complete!\n", item)
-		item.State = COMPLETE
-		service.eventBus.Dispatch(event.INGEST_COMPLETE, item.ID)
+		item.State = Complete
+		service.eventBus.Dispatch(event.IngestCompleteEvent, item.ID)
 	}
 
 	return false, nil
@@ -232,10 +232,10 @@ func (service *ingestService) DiscoverNewFiles() {
 		itemID := uuid.New()
 		timeDiff := time.Since(itemInfo.ModTime())
 
-		itemState := IMPORT_HOLD
+		itemState := ImportHold
 		if timeDiff > minModtimeAge {
 			dirty = true
-			itemState = IDLE
+			itemState = Idle
 		}
 
 		ingestItem := &IngestItem{
@@ -245,7 +245,7 @@ func (service *ingestService) DiscoverNewFiles() {
 		}
 
 		service.items = append(service.items, ingestItem)
-		if itemState == IMPORT_HOLD {
+		if itemState == ImportHold {
 			service.scheduleImportHoldTimer(itemID, timeDiff-minModtimeAge)
 		}
 	}
@@ -273,7 +273,7 @@ func (service *ingestService) removeIngest(itemID uuid.UUID) error {
 	for k, v := range service.items {
 		if v.ID == itemID {
 			// Remove item from service
-			if v.State == INGESTING {
+			if v.State == Ingesting {
 				return fmt.Errorf("cannot remove item %v as a worker is currently ingesting it", itemID)
 			}
 
@@ -305,7 +305,7 @@ func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method Res
 		return ErrIngestNotFound
 	}
 
-	if item.Trouble == nil || item.State != TROUBLED {
+	if item.Trouble == nil || item.State != Troubled {
 		return ErrNoTrouble
 	}
 
@@ -320,12 +320,12 @@ func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method Res
 			return err
 		}
 	case *RetryResolution:
-		item.State = IDLE
+		item.State = Idle
 		item.Trouble = nil
 		// An item has been updated, so we need to inform the service to check for work to be done
 		service.wakeupWorkerPool()
 	case *TmdbIDResolution:
-		item.State = IDLE
+		item.State = Idle
 		item.Trouble = nil
 		item.OverrideTmdbID = &v.tmdbID
 		// An item has been updated, so we need to inform the service to check for work to be done
@@ -334,7 +334,7 @@ func (service *ingestService) ResolveTroubledIngest(itemID uuid.UUID, method Res
 		return fmt.Errorf("trouble resolution type of %T was not expected. This is likely a bug/should be unreachable", res)
 	}
 
-	service.eventBus.Dispatch(event.INGEST_UPDATE, item.ID)
+	service.eventBus.Dispatch(event.IngestUpdateEvent, item.ID)
 	return nil
 }
 
@@ -359,7 +359,7 @@ func (service *ingestService) evaluateItemHold(id uuid.UUID) {
 	defer service.Unlock()
 
 	item := service.GetIngest(id)
-	if item == nil || item.State != IMPORT_HOLD {
+	if item == nil || item.State != ImportHold {
 		return
 	}
 
@@ -376,7 +376,7 @@ func (service *ingestService) evaluateItemHold(id uuid.UUID) {
 		return
 	}
 
-	item.State = IDLE
+	item.State = Idle
 	service.wakeupWorkerPool()
 }
 
@@ -418,8 +418,8 @@ func (service *ingestService) claimIdleItem() *IngestItem {
 	defer service.Unlock()
 
 	for _, item := range service.items {
-		if item.State == IDLE {
-			item.State = INGESTING
+		if item.State == Idle {
+			item.State = Ingesting
 			return item
 		}
 	}

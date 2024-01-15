@@ -64,13 +64,13 @@ func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
 	return false
 }
 
-func (profile *Workflow) SetCriteria(criteria []match.Criteria) error {
+func (workflow *Workflow) SetCriteria(criteria []match.Criteria) error {
 	for _, cond := range criteria {
 		if err := cond.ValidateLegal(); err != nil {
 			return err
 		}
 	}
 
-	profile.Criteria = criteria
+	workflow.Criteria = criteria
 	return nil
 }

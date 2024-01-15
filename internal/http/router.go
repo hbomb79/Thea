@@ -27,9 +27,9 @@ func trimTrailingSlashesMiddleware(next http.Handler) http.Handler {
 }
 
 type RouterOptions struct {
-	ApiRoot string
-	ApiPort int
-	ApiHost string
+	APIRoot string
+	APIPort int
+	APIHost string
 }
 
 type Router struct {
@@ -76,7 +76,7 @@ func (router *Router) Start(opts *RouterOptions) error {
 	log.Emit(logger.NEW, "Starting HTTP router\n")
 	router.buildRoutes(opts)
 
-	host := fmt.Sprintf("%v:%v", opts.ApiHost, opts.ApiPort)
+	host := fmt.Sprintf("%v:%v", opts.APIHost, opts.APIPort)
 	router.server = &http.Server{Addr: host, Handler: trimTrailingSlashesMiddleware(router.Mux)}
 	if err := router.server.ListenAndServe(); err != nil {
 		return err
@@ -105,7 +105,7 @@ func (router *Router) Stop() {
 // are removed.
 func (router *Router) buildRoutes(opts *RouterOptions) {
 	for _, route := range router.routes {
-		routePath := strings.ReplaceAll(fmt.Sprintf("%s/%s", opts.ApiRoot, route.path), "//", "/")
+		routePath := strings.ReplaceAll(fmt.Sprintf("%s/%s", opts.APIRoot, route.path), "//", "/")
 		log.Emit(logger.NEW, "Building Mux route %v %v\n", routePath, route.methods)
 
 		muxRoute := router.Mux.HandleFunc(routePath, route.handler)
@@ -118,7 +118,7 @@ func (router *Router) buildRoutes(opts *RouterOptions) {
 // validateOpts checks that the user provided options are valid
 // so we can use them to configure our router
 func validateOpts(opts *RouterOptions) error {
-	if opts.ApiHost == "" || opts.ApiPort == 0 || opts.ApiRoot == "" {
+	if opts.APIHost == "" || opts.APIPort == 0 || opts.APIRoot == "" {
 		return errors.New("router options must contain ApiHost, ApiPort and ApiRoot to be used for routing")
 	}
 

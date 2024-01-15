@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	SqlDialect          = "postgres"
-	SqlConnectionString = "host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Pacific/Auckland"
+	SQLDialect          = "postgres"
+	SQLConnectionString = "host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Pacific/Auckland"
 )
 
 var (
@@ -29,13 +29,13 @@ var (
 )
 
 type (
-	SqlLogger struct {
+	SQLLogger struct {
 		logger logger.Logger
 	}
 
 	Manager interface {
 		Connect(DatabaseConfig) error
-		GetSqlxDb() *sqlx.DB
+		GetSqlxDB() *sqlx.DB
 		WrapTx(func(*sqlx.Tx) error) error
 	}
 	// Queryable includes all methods shared by sqlx.DB and sqlx.Tx, allowing
@@ -65,7 +65,7 @@ type (
 	}
 
 	manager struct {
-		rawDb *sql.DB
+		rawDB *sql.DB
 		db    *sqlx.DB
 	}
 )
@@ -75,13 +75,13 @@ func New() *manager {
 }
 
 func (db *manager) Connect(config DatabaseConfig) error {
-	dsn := fmt.Sprintf(SqlConnectionString, config.Host, config.User, config.Password, config.Name, config.Port)
-	sql, err := sql.Open(SqlDialect, dsn)
+	dsn := fmt.Sprintf(SQLConnectionString, config.Host, config.User, config.Password, config.Name, config.Port)
+	sql, err := sql.Open(SQLDialect, dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open postgres connection: %w", err)
 	}
 
-	sql = sqldblogger.OpenDriver(dsn, sql.Driver(), &SqlLogger{dbLogger})
+	sql = sqldblogger.OpenDriver(dsn, sql.Driver(), &SQLLogger{dbLogger})
 
 	attempt := 1
 	for {
@@ -98,8 +98,8 @@ func (db *manager) Connect(config DatabaseConfig) error {
 			}
 		}
 
-		db.rawDb = sql
-		db.db = sqlx.NewDb(sql, SqlDialect)
+		db.rawDB = sql
+		db.db = sqlx.NewDb(sql, SQLDialect)
 
 		break
 	}
@@ -118,20 +118,20 @@ func (db *manager) Connect(config DatabaseConfig) error {
 // Note that this method must only be called following a successful DB connection. If the connection
 // is not yet established, then this method panics.
 func (db *manager) executeMigrations() error {
-	rawDb := db.rawDb
-	if rawDb == nil {
+	rawDB := db.rawDB
+	if rawDB == nil {
 		return fmt.Errorf("cannot execute migrations when DB manager has not yet connected")
 	}
 
 	goose.SetBaseFS(migrations)
 	goose.SetLogger(dbLogger)
-	if err := goose.SetDialect(SqlDialect); err != nil {
+	if err := goose.SetDialect(SQLDialect); err != nil {
 		return fmt.Errorf("failed to set dialect for DB migration: %w", err)
 	}
 
 	dbLogger.Emit(logger.INFO, "Checking for pending DB migrations...\n")
-	goose.Status(rawDb, "migrations")
-	if err := goose.Up(rawDb, "migrations"); err != nil {
+	goose.Status(rawDB, "migrations")
+	if err := goose.Up(rawDB, "migrations"); err != nil {
 		return fmt.Errorf("failed to migrate DB: %w", err)
 	}
 
@@ -141,7 +141,7 @@ func (db *manager) executeMigrations() error {
 
 // GetInstances returns the Goqu database connection if
 // one has been opened using 'Connect'. Otherwise, nil is returned
-func (db *manager) GetSqlxDb() *sqlx.DB {
+func (db *manager) GetSqlxDB() *sqlx.DB {
 	return db.db
 }
 
@@ -155,7 +155,7 @@ func (db *manager) WrapTx(f func(tx *sqlx.Tx) error) error {
 	return WrapTx(db.db, f)
 }
 
-func (l *SqlLogger) Log(_ context.Context, level sqldblogger.Level, msg string, data map[string]any) {
+func (l *SQLLogger) Log(_ context.Context, level sqldblogger.Level, msg string, data map[string]any) {
 	template := "%s - %v\n"
 	switch level {
 	case sqldblogger.LevelTrace:
@@ -207,11 +207,11 @@ func InExec(db Queryable, query string, arg any) error {
 	return nil
 }
 
-type JsonColumn[T any] struct {
+type JSONColumn[T any] struct {
 	val *T
 }
 
-func (j *JsonColumn[T]) Scan(src any) error {
+func (j *JSONColumn[T]) Scan(src any) error {
 	if src == nil {
 		j.val = nil
 		return nil
@@ -221,6 +221,6 @@ func (j *JsonColumn[T]) Scan(src any) error {
 	return json.Unmarshal(src.([]byte), j.val)
 }
 
-func (j *JsonColumn[T]) Get() *T {
+func (j *JSONColumn[T]) Get() *T {
 	return j.val
 }

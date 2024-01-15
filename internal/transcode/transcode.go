@@ -60,7 +60,7 @@ type TranscodeTask struct {
 }
 
 func NewTranscodeTask(m *media.Container, t *ffmpeg.Target, config ffmpeg.Config) (*TranscodeTask, error) {
-	dir := filepath.Join(config.GetOutputBaseDirectory(), m.Id().String(), t.ID.String())
+	dir := filepath.Join(config.GetOutputBaseDirectory(), m.ID().String(), t.ID.String())
 	if err := os.MkdirAll(filepath.Dir(dir), 0777); err != nil {
 		log.Errorf("Failed to create required directories (%s) for transcoding output: %v\n", filepath.Dir(dir), err)
 		return nil, ErrPathDirectoryCreation
@@ -194,18 +194,18 @@ func (task *TranscodeTask) cleanup() {
 	}
 }
 
-// LastKnownProgress is an accessor function to the latest ffmpeg progress
+// LastProgress is an accessor function to the latest ffmpeg progress
 // from the underlying ffmpeg command.
 // If no last progress is available, nil will be returned.
 func (task *TranscodeTask) LastProgress() *ffmpeg.Progress { return task.lastProgress }
-func (task *TranscodeTask) Id() uuid.UUID                  { return task.id }
+func (task *TranscodeTask) ID() uuid.UUID                  { return task.id }
 func (task *TranscodeTask) Media() *media.Container        { return task.media }
 func (task *TranscodeTask) Target() *ffmpeg.Target         { return task.target }
 func (task *TranscodeTask) OutputPath() string             { return task.outputPath }
 func (task *TranscodeTask) Status() TranscodeTaskStatus    { return task.status }
 func (task *TranscodeTask) Trouble() any                   { return nil }
 func (task *TranscodeTask) String() string {
-	return fmt.Sprintf("Task{ID=%s MediaID=%s TargetID=%s Status=%s OutputPath=%s}", task.id, task.media.Id(), task.target.ID, task.status, task.outputPath)
+	return fmt.Sprintf("Task{ID=%s MediaID=%s TargetID=%s Status=%s OutputPath=%s}", task.id, task.media.ID(), task.target.ID, task.status, task.outputPath)
 }
 
 func (s TranscodeTaskStatus) String() string {

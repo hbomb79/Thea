@@ -13,7 +13,7 @@ type Config struct {
 	// The IngestService uses a directory watcher, but a
 	// 'force' sync can be performed on a regular interval
 	// to protect against the watcher failing.
-	ForceSyncSeconds int `toml:"force_sync_seconds" env-default:""`
+	ForceSyncSeconds int `toml:"force_sync_seconds" env-default:"500"`
 
 	// The path to the directory the service should monitor
 	// for new files

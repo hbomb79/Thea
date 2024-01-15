@@ -29,7 +29,7 @@ type SocketHub struct {
 	running            bool
 }
 
-// Returns a new SocketHub with the channels,
+// New returns a new SocketHub with the channels,
 // maps and slices initialised to sane starting
 // values
 func New() *SocketHub {
@@ -44,15 +44,7 @@ func New() *SocketHub {
 	}
 }
 
-// WithConnectionPayload sets a callback that will be executed each time a new client
-// connects to this socketHub. This allows the client to be furnished with a payload
-// of the servers current state, without having to wait for an UPDATE packet from the
-// server (which may never come if the content does not change).
-func (hub *SocketHub) WithConnectionCallback(callback func() map[string]interface{}) {
-	hub.connectionCallback = callback
-}
-
-// Binds a provided particular command to a particular socker handler
+// BindCommand a provided particular command to a particular socker handler
 func (hub *SocketHub) BindCommand(command string, handler SocketHandler) *SocketHub {
 	hub.handlers[command] = handler
 	return hub
@@ -146,7 +138,7 @@ func (hub *SocketHub) Send(message *SocketMessage) {
 	hub.sendCh <- message
 }
 
-// Upgrades a given HTTP request to a websocket and adds the new clients to the hub
+// UpgradeToSocket upgrades a given HTTP request to a websocket and adds the new clients to the hub
 func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	if !hub.running {
 		socketLogger.Emit(logger.ERROR, "Failed to upgrade incoming HTTP request to a websocket: SocketHub has not been started!\n")
@@ -240,7 +232,7 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 	replyWithError := func(err string) {
 		hub.Send(&SocketMessage{
 			Title:  "COMMAND_FAILURE",
-			Id:     command.Id,
+			ID:     command.ID,
 			Target: command.Origin,
 			Body:   map[string]interface{}{"command": command, "error": err},
 			Type:   ErrorResponse,

@@ -19,7 +19,7 @@ var dockerLogger = logger.Get("Docker")
  * locally. This is used to spawn services such as Theas PostgreSQL database, or the NPM front end.
  */
 
-const DOCKER_NETWORK = "thea_network"
+const DockerNetworkName = "thea_network"
 
 type DockerManager interface {
 	SpawnContainer(DockerContainer) error
@@ -50,7 +50,7 @@ func NewDockerManager() DockerManager {
 		panic(err)
 	}
 
-	_, err = c.NetworkCreate(ctx, DOCKER_NETWORK, types.NetworkCreate{
+	_, err = c.NetworkCreate(ctx, DockerNetworkName, types.NetworkCreate{
 		CheckDuplicate: true,
 		Driver:         "bridge",
 	})
@@ -84,7 +84,7 @@ func (docker *docker) SpawnContainer(container DockerContainer) error {
 		return err
 	}
 
-	if err := docker.cli.NetworkConnect(docker.ctx, DOCKER_NETWORK, container.ID(), nil); err != nil {
+	if err := docker.cli.NetworkConnect(docker.ctx, DockerNetworkName, container.ID(), nil); err != nil {
 		dockerLogger.Emit(logger.ERROR, "Failed to connect container %s to network: %v\n", container, err)
 	}
 
@@ -106,7 +106,7 @@ func (docker *docker) Shutdown(timeout time.Duration) {
 	}
 
 	docker.wg.Wait()
-	docker.cli.NetworkRemove(docker.ctx, DOCKER_NETWORK)
+	docker.cli.NetworkRemove(docker.ctx, DockerNetworkName)
 }
 
 func (docker *docker) CloseContainer(name string, timeout time.Duration) {

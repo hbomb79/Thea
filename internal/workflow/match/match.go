@@ -3,13 +3,13 @@ package match
 type Key int
 
 const (
-	TITLE Key = iota
-	RESOLUTION
-	SEASON_NUMBER
-	EPISODE_NUMBER
-	SOURCE_PATH
-	SOURCE_NAME
-	SOURCE_EXTENSION
+	TitleKey Key = iota
+	ResolutionKey
+	SeasonNumberKey
+	EpisodeNumberKey
+	SourcePathKey
+	SourceNameKey
+	SourceExtensionKey
 )
 
 func (e Key) Values() []string {
@@ -23,14 +23,14 @@ func (e Key) String() string {
 type Type int
 
 const (
-	EQUALS Type = iota
-	NOT_EQUALS
-	MATCHES
-	DOES_NOT_MATCH
-	LESS_THAN
-	GREATER_THAN
-	IS_PRESENT
-	IS_NOT_PRESENT
+	Equals Type = iota
+	NotEquals
+	Matches
+	DoesNotMatch
+	LessThan
+	GreaterThan
+	IsPresent
+	IsNotPresent
 )
 
 func IsTypeAcceptable(key Key, t Type) bool {
@@ -48,13 +48,13 @@ func IsTypeAcceptable(key Key, t Type) bool {
 
 func keyAcceptableTypes() map[Key][]Type {
 	return map[Key][]Type{
-		TITLE:            {MATCHES, DOES_NOT_MATCH, IS_NOT_PRESENT, IS_PRESENT},
-		RESOLUTION:       {MATCHES, DOES_NOT_MATCH, IS_NOT_PRESENT, IS_PRESENT},
-		SEASON_NUMBER:    {EQUALS, NOT_EQUALS, LESS_THAN, GREATER_THAN, IS_NOT_PRESENT, IS_PRESENT},
-		EPISODE_NUMBER:   {EQUALS, NOT_EQUALS, LESS_THAN, GREATER_THAN, IS_NOT_PRESENT, IS_PRESENT},
-		SOURCE_PATH:      {MATCHES, DOES_NOT_MATCH, IS_PRESENT, IS_NOT_PRESENT},
-		SOURCE_NAME:      {MATCHES, DOES_NOT_MATCH, IS_PRESENT, IS_NOT_PRESENT},
-		SOURCE_EXTENSION: {MATCHES, DOES_NOT_MATCH, IS_PRESENT, IS_NOT_PRESENT},
+		TitleKey:           {Matches, DoesNotMatch, IsNotPresent, IsPresent},
+		ResolutionKey:      {Matches, DoesNotMatch, IsNotPresent, IsPresent},
+		SeasonNumberKey:    {Equals, NotEquals, LessThan, GreaterThan, IsNotPresent, IsPresent},
+		EpisodeNumberKey:   {Equals, NotEquals, LessThan, GreaterThan, IsNotPresent, IsPresent},
+		SourcePathKey:      {Matches, DoesNotMatch, IsPresent, IsNotPresent},
+		SourceNameKey:      {Matches, DoesNotMatch, IsPresent, IsNotPresent},
+		SourceExtensionKey: {Matches, DoesNotMatch, IsPresent, IsNotPresent},
 	}
 }
 

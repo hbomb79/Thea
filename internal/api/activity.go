@@ -4,15 +4,15 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/hbomb79/Thea/internal/api/ingests"
-	"github.com/hbomb79/Thea/internal/api/transcodes"
+	"github.com/hbomb79/Thea/internal/api/controllers/ingests"
+	"github.com/hbomb79/Thea/internal/api/controllers/transcodes"
 	"github.com/hbomb79/Thea/internal/http/websocket"
 )
 
 const (
-	TITLE_INGEST_UPDATE             = "INGEST_UPDATE"
-	TITLE_TRANSCODE_UPDATE          = "TRANSCODE_TASK_UPDATE"
-	TITLE_TRANSCODE_PROGRESS_UPDATE = "TRANSCODE_TASK_PROGRESS_UPDATE"
+	TitleIngestUpdate            = "INGEST_UPDATE"
+	TitleTranscodeUpdate         = "TRANSCODE_TASK_UPDATE"
+	TitleTranscodeProgressUpdate = "TRANSCODE_TASK_PROGRESS_UPDATE"
 )
 
 type broadcaster struct {
@@ -33,7 +33,7 @@ func newBroadcaster(
 
 func (hub *broadcaster) BroadcastTranscodeUpdate(id uuid.UUID) error {
 	item := hub.transcodeService.Task(id)
-	hub.broadcast(TITLE_TRANSCODE_UPDATE, map[string]interface{}{
+	hub.broadcast(TitleTranscodeUpdate, map[string]interface{}{
 		"id":        id,
 		"transcode": nullsafeNewDto(item, transcodes.NewDtoFromTask),
 	})
@@ -46,7 +46,7 @@ func (hub *broadcaster) BroadcastTaskProgressUpdate(id uuid.UUID) error {
 		return nil
 	}
 
-	hub.broadcast(TITLE_TRANSCODE_PROGRESS_UPDATE, map[string]interface{}{
+	hub.broadcast(TitleTranscodeProgressUpdate, map[string]interface{}{
 		"transcode_id": id,
 		"progress":     item.LastProgress(),
 	})
@@ -55,7 +55,7 @@ func (hub *broadcaster) BroadcastTaskProgressUpdate(id uuid.UUID) error {
 
 func (hub *broadcaster) BroadcastIngestUpdate(id uuid.UUID) error {
 	item := hub.ingestService.GetIngest(id)
-	hub.broadcast(TITLE_INGEST_UPDATE, map[string]interface{}{
+	hub.broadcast(TitleIngestUpdate, map[string]interface{}{
 		"ingest_id": id,
 		"ingest":    nullsafeNewDto(item, ingests.NewDto),
 	})
@@ -81,10 +81,11 @@ func (hub *broadcaster) BroadcastMediaUpdate(id uuid.UUID) error {
 // nullsafeNewDto returns nil if the given model is nil, else it will call the
 // provided generator with the model as it's only parameter. This is basically
 // shorthand for "only try and create a DTO if the 'model' isn't nil".
-func nullsafeNewDto[M any, D any](model *M, generator func(*M) *D) *D {
+func nullsafeNewDto[M any, D any](model *M, generator func(*M) D) *D {
 	if model == nil {
 		return nil
 	}
 
-	return generator(model)
+	out := generator(model)
+	return &out
 }

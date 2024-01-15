@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/hbomb79/Thea/internal/ingest"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/internal/transcode"
+	"github.com/hbomb79/Thea/internal/user/permissions"
 	"github.com/hbomb79/Thea/pkg/docker"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
@@ -59,7 +61,7 @@ type (
 )
 
 const (
-	THEA_USER_DIR_SUFFIX = "/thea/"
+	TheaUserDirSuffix = "/thea/"
 )
 
 // Thea represents the top-level object for the server, and is responsible
@@ -69,7 +71,7 @@ type theaImpl struct {
 	eventBus          event.EventCoordinator
 	dockerManager     docker.DockerManager
 	storeOrchestrator *storeOrchestrator
-	activityManager   *activityManager
+	activityService   *activityService
 	config            TheaConfig
 
 	restGateway      RestGateway
@@ -122,8 +124,14 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to construct data orchestrator: %w", err)
 	}
 	thea.storeOrchestrator = store
+	if err := thea.syncDBPermissions(); err != nil {
+		return fmt.Errorf("failed to sync db permissions: %w", err)
+	}
+	if err := thea.createInitialUserIfNonePresent(); err != nil {
+		return fmt.Errorf("failed to create initial user: %w", err)
+	}
 
-	searcher := tmdb.NewSearcher(tmdb.Config{ApiKey: thea.config.OmdbKey})
+	searcher := tmdb.NewSearcher(tmdb.Config{APIKey: thea.config.OmdbKey})
 	scraper := media.NewScraper(media.ScraperConfig{FfprobeBinPath: thea.config.Format.FfprobeBinaryPath})
 	if serv, err := ingest.New(thea.config.IngestService, searcher, scraper, thea.storeOrchestrator, thea.eventBus); err == nil {
 		thea.ingestService = serv
@@ -138,14 +146,14 @@ func (thea *theaImpl) Run(parent context.Context) error {
 	}
 
 	thea.restGateway = api.NewRestGateway(&thea.config.RestConfig, thea.ingestService, thea.transcodeService, thea.storeOrchestrator)
-	thea.activityManager = newActivityManager(thea.restGateway, thea.eventBus)
+	thea.activityService = newActivityService(thea.restGateway, thea.eventBus)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(4)
 	go thea.spawnService(ctx, wg, thea.ingestService, "ingest-service", crashHandler)
 	go thea.spawnService(ctx, wg, thea.transcodeService, "transcode-service", crashHandler)
 	go thea.spawnService(ctx, wg, thea.restGateway, "rest-gateway", crashHandler)
-	go thea.spawnService(ctx, wg, thea.activityManager, "activity-manager", crashHandler)
+	go thea.spawnService(ctx, wg, thea.activityService, "activity-service", crashHandler)
 	log.Emit(logger.SUCCESS, "Thea services spawned! [CTRL+C to stop]\n")
 
 	wg.Wait()
@@ -195,4 +203,33 @@ func (thea *theaImpl) initialiseDockerServices(config TheaConfig, crashHandler f
 	}
 
 	return nil
+}
+
+func (thea *theaImpl) syncDBPermissions() error {
+	// Raise an error if a permission has been removed - a manual DB migration should be performed
+	// to protect against accidental removal of a permission
+	allPerms := permissions.All()
+	outstanding, err := thea.storeOrchestrator.anyOutstandingPermissions(allPerms...)
+	if err != nil {
+		return err
+	}
+	if outstanding {
+		return errors.New("permissions have been removed from code but still exist in db, manual migration required")
+	}
+
+	return thea.storeOrchestrator.createPermissions(permissions.All()...)
+}
+
+func (thea *theaImpl) createInitialUserIfNonePresent() error {
+	users, err := thea.storeOrchestrator.ListUsers()
+	if err != nil {
+		return fmt.Errorf("failed to check for existing users during bootstrapping: %w", err)
+	} else if len(users) > 0 {
+		log.Debugf("Existing users found (%d), not creating initial user\n", len(users))
+		return nil
+	}
+
+	log.Emit(logger.NEW, "No existing users found, creating initial user [username='admin', password=REDACTED {refer to your configuration}]\n")
+	_, err = thea.storeOrchestrator.CreateUser([]byte("admin"), []byte("admin"), permissions.All()...)
+	return err
 }

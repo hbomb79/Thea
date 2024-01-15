@@ -19,10 +19,10 @@ const VERSION = 1.0
 var (
 	log = logger.Get("Bootstrap")
 
-	conf         *internal.TheaConfig = &internal.TheaConfig{}
-	logLevelFlag                      = flag.String("log-level", "info", "Define logging level from one of [verbose, debug, info, important, warning, error]")
-	helpFlag                          = flag.Bool("help", false, "Whether to display help information")
-	configFlag                        = flag.String("config", filepath.Join(conf.GetConfigDir(), "/config.toml"), "The path to the config file that Thea will load")
+	conf         = &internal.TheaConfig{}
+	logLevelFlag = flag.String("log-level", "info", "Define logging level from one of [verbose, debug, info, important, warning, error]")
+	helpFlag     = flag.Bool("help", false, "Whether to display help information")
+	configFlag   = flag.String("config", filepath.Join(conf.GetConfigDir(), "/config.toml"), "The path to the config file that Thea will load")
 )
 
 func main() {

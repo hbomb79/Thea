@@ -26,14 +26,14 @@ const (
 type SocketMessage struct {
 	Title  string                 `json:"title"`
 	Body   map[string]interface{} `json:"arguments"`
-	Id     int                    `json:"id"`
+	ID     int                    `json:"id"`
 	Type   socketMessageType      `json:"type"`
 	Origin *uuid.UUID             `json:"-"`
 	Target *uuid.UUID             `json:"-"`
 }
 
 func (message *SocketMessage) ValidateArguments(required map[string]string) error {
-	const ERR_FMT = "failed to validate key '%v' with type '%v' - %#v"
+	const errTemplate = "failed to validate key '%v' with type '%v' - %#v"
 
 	for key, value := range required {
 		if v, ok := message.Body[key]; ok {
@@ -47,16 +47,16 @@ func (message *SocketMessage) ValidateArguments(required map[string]string) erro
 			case "number", "int":
 				_, ok := v.(float64)
 				if !ok {
-					return fmt.Errorf(ERR_FMT, key, value, v)
+					return fmt.Errorf(errTemplate, key, value, v)
 				}
 
 			case "string":
 				if givenValue == "" {
-					return fmt.Errorf(ERR_FMT, key, value, v)
+					return fmt.Errorf(errTemplate, key, value, v)
 				}
 
 			default:
-				return fmt.Errorf(ERR_FMT, key, value, "unknown type")
+				return fmt.Errorf(errTemplate, key, value, "unknown type")
 			}
 		} else {
 			// Error, missing key
@@ -80,7 +80,7 @@ func (message *SocketMessage) FormReply(replyTitle string, replyBody map[string]
 		Title:  replyTitle,
 		Body:   replyBody,
 		Type:   replyType,
-		Id:     message.Id,
+		ID:     message.ID,
 		Target: message.Origin,
 	}
 }

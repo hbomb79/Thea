@@ -25,7 +25,7 @@ func (store *mediaGenreStore) SaveMovieGenreAssociations(db database.Queryable, 
 		}
 		genreAssocs := make([]genreAssoc, len(genres))
 		for k, v := range genres {
-			genreAssocs[k] = genreAssoc{uuid.New(), movieID, v.Id}
+			genreAssocs[k] = genreAssoc{uuid.New(), movieID, v.ID}
 		}
 
 		if err := database.InExec(db, `DELETE FROM movie_genres mg WHERE mg.movie_id=$1`, movieID); err != nil {
@@ -59,7 +59,7 @@ func (store *mediaGenreStore) SaveSeriesGenreAssociations(db database.Queryable,
 		}
 		genreAssocs := make([]genreAssoc, len(genres))
 		for k, v := range genres {
-			genreAssocs[k] = genreAssoc{uuid.New(), seriesID, v.Id}
+			genreAssocs[k] = genreAssoc{uuid.New(), seriesID, v.ID}
 		}
 
 		if err := database.InExec(db, `DELETE FROM series_genres sg WHERE sg.series_id=$1`, seriesID); err != nil {
@@ -120,7 +120,7 @@ func (store *mediaGenreStore) ListGenres(db database.Queryable) ([]*Genre, error
 
 func (store *mediaGenreStore) GetGenresForMovie(db database.Queryable, movieID uuid.UUID) ([]*Genre, error) {
 	var results []*Genre
-	if err := db.Select(&results, getGenresForSql("movie_genres", "movie_id"), movieID); err != nil {
+	if err := db.Select(&results, getGenresForSQL("movie_genres", "movie_id"), movieID); err != nil {
 		return nil, err
 	}
 
@@ -129,14 +129,14 @@ func (store *mediaGenreStore) GetGenresForMovie(db database.Queryable, movieID u
 
 func (store *mediaGenreStore) GetGenresForSeries(db database.Queryable, seriesID uuid.UUID) ([]*Genre, error) {
 	var results []*Genre
-	if err := db.Select(&results, getGenresForSql("series_genres", "series_id"), seriesID); err != nil {
+	if err := db.Select(&results, getGenresForSQL("series_genres", "series_id"), seriesID); err != nil {
 		return nil, err
 	}
 
 	return results, nil
 }
 
-func getGenresForSql(tableName string, tableColumn string) string {
+func getGenresForSQL(tableName string, tableColumn string) string {
 	template := `
 		SELECT genre.* FROM TABLENAME
 		INNER JOIN genre

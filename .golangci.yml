@@ -15,6 +15,7 @@ linters:
     - gofumpt
     - gomnd
     - gosec
+    - govet
     - lll
     - maintidx
     - misspell

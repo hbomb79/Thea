@@ -30,6 +30,11 @@ tidy:
 	go fmt ./...
 	go mod tidy -v
 
+.PHONY: fix
+fix: build
+	go mod tidy -v
+	golangci-lint run --fix
+
 ## audit: run quality control checks
 .PHONY: audit
 audit: tidy

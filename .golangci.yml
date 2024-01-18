@@ -1,0 +1,61 @@
+linters:
+  enable:
+    - asciicheck
+    - decorder
+    - dupl
+    - dupword
+    - forcetypeassert
+    - funlen
+    - gocheckcompilerdirectives
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - gofumpt
+    - gomnd
+    - gosec
+    - lll
+    - maintidx
+    - misspell
+    - nakedret
+    - nestif
+    - prealloc
+    - tagliatelle
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+    - nilnil
+    - nilerr
+    - inamedparam
+    - errorlint
+    - exhaustive
+    - errname
+    - nolintlint
+    - nonamedreturns
+    - reassign
+    - unconvert
+    - stylecheck
+    - unparam
+    - gochecksumtype
+    - makezero
+linters-settings:
+  funlen:
+    # Checks the number of lines in a function.
+    # If lower than 0, disable the check.
+    lines: 120
+    # Checks the number of statements in a function.
+    # If lower than 0, disable the check.
+    statements: 50
+    # Ignore comments when counting lines.
+    ignore-comments: true
+  lll:
+    # Max line length, lines longer will be reported.
+    # '\t' is counted as 1 character by default, and can be changed with the tab-width option.
+    line-length: 200
+    # Tab width in spaces.
+    tab-width: 1
+  tagliatelle:
+    case:
+      rules:
+        json: snake

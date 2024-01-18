@@ -24,10 +24,12 @@ require (
 	github.com/simukti/sqldb-logger v0.0.0-20230108155151-646c1a075551
 )
 
-require gopkg.in/yaml.v2 v2.4.0 // indirect
-
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
+)
+
+require (
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/swag v0.22.4 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect

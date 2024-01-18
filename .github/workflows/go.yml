@@ -20,11 +20,11 @@ jobs:
     - name: Verify Go Mod
       run: go mod verify
 
-    - name: Check for pkg vulverabilities
-      run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-    
     - name: Build
       run: make build
+
+    - name: Check for pkg vulverabilities
+      run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
     - name: Run staticcheck
       run: go run honnef.co/go/tools/cmd/staticcheck@latest -f stylish -checks=all,-ST1000,-U1000 ./...

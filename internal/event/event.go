@@ -1,4 +1,4 @@
-// A collection of event names and common methods used to handle the events, typically
+// Package event contains a collection of event names and common methods used to handle the events, typically
 // redirecting the handling to a service method or other method via the `Handler` interface.
 package event
 
@@ -15,7 +15,7 @@ var log = logger.Get("Activity")
 // Events emitted by various parts of Thea that should be handled by another, silo'd part
 // of Theas' architecture.
 // Each silo/service of Thea's architecture listens for a specific event, which indicates
-// an item is ready for processing by that service
+// an item is ready for processing by that service.
 type (
 	Event         string
 	Payload       any
@@ -28,13 +28,13 @@ type (
 	}
 
 	EventDispatcher interface {
-		Dispatch(Event, Payload)
+		Dispatch(event Event, payload Payload)
 	}
 
 	EventHandler interface {
-		RegisterAsyncHandlerFunction(Event, HandlerMethod)
-		RegisterHandlerFunction(Event, HandlerMethod)
-		RegisterHandlerChannel(HandlerChannel, ...Event)
+		RegisterAsyncHandlerFunction(event Event, handler HandlerMethod)
+		RegisterHandlerFunction(event Event, handler HandlerMethod)
+		RegisterHandlerChannel(ch HandlerChannel, events ...Event)
 	}
 
 	EventCoordinator interface {
@@ -85,7 +85,7 @@ func New() EventCoordinator {
 // This method can be used multiple times for different events on the same channel.
 //
 // If the channel is BLOCKED when the event bus attempts to send the message on the handler channel,
-// then the thread dispatching the event will also be BLOCKED. It is recomended to buffer the handler channels
+// then the thread dispatching the event will also be BLOCKED. It is recommended to buffer the handler channels
 // appropiately to avoid dispatcher-side blocking.
 func (handler *eventHandler) RegisterHandlerChannel(handle HandlerChannel, events ...Event) {
 	handler.Lock()

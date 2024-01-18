@@ -36,11 +36,11 @@ type DockerConfig struct {
 }
 
 // LoadFromFile loads a configuration file formatted in TOML in to a
-// TheaConfig struct ready to be passed to Processor
+// TheaConfig struct ready to be passed to Processor.
 func (config *TheaConfig) LoadFromFile(configPath string) error {
 	err := cleanenv.ReadConfig(configPath, config)
 	if err != nil {
-		return fmt.Errorf("failed to load configuration for ProcessorConfig - %v", err)
+		return fmt.Errorf("failed to load configuration for ProcessorConfig: %w", err)
 	}
 
 	return nil
@@ -64,7 +64,7 @@ func (config *TheaConfig) GetCacheDir() string {
 }
 
 // GetConfigDir will return the path used for storing config information. It will first look to
-// in the config for a value, but if none is found, a default value will be returned
+// in the config for a value, but if none is found, a default value will be returned.
 func (config *TheaConfig) GetConfigDir() string {
 	if config.ConfigDirPath != "" {
 		return filepath.Join(config.ConfigDirPath, TheaUserDirSuffix)

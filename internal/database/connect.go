@@ -19,6 +19,9 @@ import (
 const (
 	SQLDialect          = "postgres"
 	SQLConnectionString = "host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Pacific/Auckland"
+
+	connectionFailureDelay = 3 * time.Second
+	connectionMaxRetries   = 5
 )
 
 var (
@@ -34,12 +37,13 @@ type (
 	}
 
 	Manager interface {
-		Connect(DatabaseConfig) error
+		Connect(config DatabaseConfig) error
 		GetSqlxDB() *sqlx.DB
-		WrapTx(func(*sqlx.Tx) error) error
+		WrapTx(wrapper func(tx *sqlx.Tx) error) error
 	}
 	// Queryable includes all methods shared by sqlx.DB and sqlx.Tx, allowing
 	// either type to be used interchangeably.
+	//nolint
 	Queryable interface {
 		sqlx.Ext
 		sqlx.ExecerContext
@@ -87,13 +91,13 @@ func (db *manager) Connect(config DatabaseConfig) error {
 	for {
 		err := sql.Ping()
 		if err != nil {
-			if attempt >= 5 {
+			if attempt >= connectionMaxRetries {
 				dbLogger.Emit(logger.ERROR, "All attempts FAILED!\n")
 				return err
 			} else {
 				dbLogger.Emit(logger.WARNING, "Attempt (%v/5) failed... Retrying in 3s\n", attempt)
 				attempt++
-				time.Sleep(time.Second * 3)
+				time.Sleep(connectionFailureDelay)
 				continue
 			}
 		}
@@ -130,7 +134,9 @@ func (db *manager) executeMigrations() error {
 	}
 
 	dbLogger.Emit(logger.INFO, "Checking for pending DB migrations...\n")
-	goose.Status(rawDB, "migrations")
+	if err := goose.Status(rawDB, "migrations"); err != nil {
+		return fmt.Errorf("failed to check status of DB migrations: %w", err)
+	}
 	if err := goose.Up(rawDB, "migrations"); err != nil {
 		return fmt.Errorf("failed to migrate DB: %w", err)
 	}
@@ -140,7 +146,7 @@ func (db *manager) executeMigrations() error {
 }
 
 // GetInstances returns the Goqu database connection if
-// one has been opened using 'Connect'. Otherwise, nil is returned
+// one has been opened using 'Connect'. Otherwise, nil is returned.
 func (db *manager) GetSqlxDB() *sqlx.DB {
 	return db.db
 }
@@ -181,7 +187,7 @@ func WrapTx(db *sqlx.DB, f func(tx *sqlx.Tx) error) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() //nolint
 
 	if err := f(tx); err != nil {
 		dbLogger.Errorf("Transaction failed... rolling back. Error: %v\n", err)
@@ -217,8 +223,13 @@ func (j *JSONColumn[T]) Scan(src any) error {
 		return nil
 	}
 
+	srcBytes, ok := src.([]byte)
+	if !ok {
+		return fmt.Errorf("expected src to be []byte, not %T", src)
+	}
+
 	j.val = new(T)
-	return json.Unmarshal(src.([]byte), j.val)
+	return json.Unmarshal(srcBytes, j.val)
 }
 
 func (j *JSONColumn[T]) Get() *T {

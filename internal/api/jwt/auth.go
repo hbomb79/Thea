@@ -37,6 +37,8 @@ const (
 
 	RefreshTokenCookieName = "refresh-token"
 	RefreshTokenLifespan   = time.Hour * 24 * 30 // 30 days
+
+	tokenExpiryCleanupDelay = 5 * time.Second
 )
 
 type (
@@ -101,7 +103,7 @@ type (
 // refresh token (it should only be sent to the server when it's going
 // to be used).
 // Finally, the two secrets which are used to sign the tokens. These two
-// secrets should not match, and should be >= 256 bits in size
+// secrets should not match, and should be >= 256 bits in size.
 func NewJwtAuth(store Store, refreshRoutePath string, authTokenSecret []byte, refreshTokenSecret []byte) *jwtAuthProvider {
 	return &jwtAuthProvider{
 		store,
@@ -109,7 +111,8 @@ func NewJwtAuth(store Store, refreshRoutePath string, authTokenSecret []byte, re
 		refreshTokenSecret,
 		refreshRoutePath,
 		new(sync.TypedSyncMap[string, struct{}]),
-		new(sync.TypedSyncMap[uuid.UUID, []string])}
+		new(sync.TypedSyncMap[uuid.UUID, []string]),
+	}
 }
 
 // generateTokensAndSetCookies generates an auth token and a refresh token
@@ -168,7 +171,7 @@ func (auth *jwtAuthProvider) GetAuthenticatedUserFromContext(ec echo.Context) (*
 // RevokeTokensInContext revokes the auth and refresh token in this
 // request context, assuming they are provided. A missing token/cookie
 // is ignored. An expired auth and refresh token is returned, with the intention
-// that they are sent back to the client in the response
+// that they are sent back to the client in the response.
 func (auth *jwtAuthProvider) RevokeTokensInContext(ec echo.Context) (*http.Cookie, *http.Cookie) {
 	if cookie, err := ec.Cookie(AuthTokenCookieName); err == nil && cookie != nil {
 		auth.revokeToken(cookie.Value)
@@ -202,14 +205,17 @@ func (auth *jwtAuthProvider) RevokeAllForUser(userID uuid.UUID) (*http.Cookie, *
 
 // RefreshTokens generates new auth and refresh tokens and stores them in
 // the request cookies IF the request contains a valid refresh token. The
-// new cookies are returned to the caller on success
+// new cookies are returned to the caller on success.
 func (auth *jwtAuthProvider) RefreshTokens(allegedRefreshToken string) (*http.Cookie, *http.Cookie, error) {
 	token, err := auth.validateJWT(allegedRefreshToken, auth.refreshTokenSecret)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to refresh: %w", err)
 	}
 
-	claims := token.Claims.(*jwt.MapClaims)
+	claims, ok := token.Claims.(*jwt.MapClaims)
+	if !ok {
+		return nil, nil, fmt.Errorf("token claims invalid type %T (expected *jwt.MapClaims)", token.Claims)
+	}
 	userID, err := auth.getUserIDFromClaims(*claims)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to refresh: %w", err)
@@ -222,7 +228,7 @@ func (auth *jwtAuthProvider) RefreshTokens(allegedRefreshToken string) (*http.Co
 // inspect incoming requests and determine whether or not they're
 // valid. This includes ensuring the request meets the spec, and that
 // the security scheme specified for that request is satisfied (authentication
-// by way of JWT token, and authorization by way of permissions)
+// by way of JWT token, and authorization by way of permissions).
 func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware(basePath string) echo.MiddlewareFunc {
 	spec, err := gen.GetSwagger()
 	if err != nil {
@@ -240,7 +246,7 @@ func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware(basePath string) ech
 			// We specifically allow OPTION requests to pass through un-encumbered
 			// as they are not documented in our OpenAPI spec, and so they will
 			// be rejected as 'method not allowed' if we don't skip them.
-			//TODO: there is surely a better way to handle this?
+			// TODO: there is surely a better way to handle this?
 			return ec.Request().Method == http.MethodOptions
 		},
 		ErrorHandler: func(_ echo.Context, err *echo.HTTPError) error {
@@ -258,11 +264,7 @@ func (auth *jwtAuthProvider) GetSecurityValidatorMiddleware(basePath string) ech
 	})
 }
 
-// validateSpecSecurity ensures that the security requirements of the
-// provided OpenAPI spec do not reference any permissions or security schems
-// which we don't know about. This would make those endpoints unreachable
-// and so is likely a mistake.
-func (auth *jwtAuthProvider) validateSpecSecurity(spec *openapi3.T) {
+func (auth *jwtAuthProvider) getPermissionsReferencedBySpec(spec *openapi3.T) map[string]struct{} {
 	referencedPermissions := make(map[string]struct{})
 	for _, security := range spec.Security {
 		if perms, ok := security[PermissionAuthSecuritySchemeName]; ok {
@@ -289,17 +291,26 @@ func (auth *jwtAuthProvider) validateSpecSecurity(spec *openapi3.T) {
 		}
 	}
 
+	return referencedPermissions
+}
+
+// validateSpecSecurity ensures that the security requirements of the
+// provided OpenAPI spec do not reference any permissions or security schems
+// which we don't know about. This would make those endpoints unreachable
+// and so is likely a mistake.
+func (auth *jwtAuthProvider) validateSpecSecurity(spec *openapi3.T) {
 	knownPermissions := permissions.All()
 	knownPermissionsMap := make(map[string]struct{})
 	for _, p := range knownPermissions {
 		knownPermissionsMap[p] = struct{}{}
 	}
+
+	referencedPermissions := auth.getPermissionsReferencedBySpec(spec)
 	for referenced := range referencedPermissions {
 		if _, ok := knownPermissionsMap[referenced]; !ok {
 			panic(fmt.Sprintf("validation of OpenAPI spec failed: permission '%s' is referenced by one or more security requirements, however this permission is not recognized by Thea", referenced))
 		}
 	}
-
 }
 
 // validateTokenFromAuthInput accepts an OpenAPI authentication input
@@ -466,9 +477,9 @@ func (auth *jwtAuthProvider) generateRefreshToken(userID uuid.UUID) (string, tim
 // scheduleUserTokenCleanup will remove the specified token from the users token map
 // at the time specified. This allows for us to store any newly generated
 // user tokens inside the map without worrying about the size of the map
-// growing with no limit
+// growing with no limit.
 func (auth *jwtAuthProvider) scheduleUserTokenCleanup(userID uuid.UUID, token string, expiry time.Time) {
-	until := time.Until(expiry.Add(time.Second * 5))
+	until := time.Until(expiry.Add(tokenExpiryCleanupDelay))
 	log.Debugf("Scheduling cleanup of a token for user %s in %s\n", userID, until)
 
 	time.AfterFunc(until, func() {

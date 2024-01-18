@@ -28,7 +28,7 @@ type Criteria struct {
 // ValidateLegal ensures the criteria is LEGAL:
 // - Does the key specified exist,
 // - Is the match key specified compatible with the match type provided (e.g., you can't perform LESS_THAN on a STRING type.)
-// - Is the value specified sensible for the match key (i.e. you cannot use a number as the right-side of a 'MATCHES' match type)
+// - Is the value specified sensible for the match key (i.e. you cannot use a number as the right-side of a 'MATCHES' match type).
 func (criteria *Criteria) ValidateLegal() error {
 	if !IsTypeAcceptable(criteria.Key, criteria.Type) {
 		return fmt.Errorf("match key %s does not accept match type %s", criteria.Key, criteria.Type)
@@ -53,6 +53,10 @@ func (criteria *Criteria) ValidateLegal() error {
 		if _, err := strconv.Atoi(criteria.Value); err != nil {
 			return fmt.Errorf("match type %s expects a valid int as the value; '%v' is not a valid int", criteria.Type, criteria.Value)
 		}
+	case IsPresent:
+		return nil
+	case IsNotPresent:
+		return nil
 	}
 
 	return nil
@@ -61,7 +65,7 @@ func (criteria *Criteria) ValidateLegal() error {
 // IsMediaAcceptable accepts a media container and checks to see if the criteria
 // is a valid match against the media. It does this by using the critera's key to extract
 // relevant information from the container, and then performing simple checks against it
-// using the Type and Value of the criteria
+// using the Type and Value of the criteria.
 func (criteria *Criteria) IsMediaAcceptable(m *media.Container) (bool, error) {
 	var valueToCheck any
 	switch criteria.Key {
@@ -91,7 +95,7 @@ func (criteria *Criteria) IsMediaAcceptable(m *media.Container) (bool, error) {
 
 	isMatch, err := criteria.isValueAcceptable(valueToCheck)
 	if err != nil {
-		return false, fmt.Errorf("media %s is not acceptable for criteria %s: %v", m, criteria, err)
+		return false, fmt.Errorf("media %s is not acceptable for criteria %s: %w", m, criteria, err)
 	}
 
 	return isMatch, nil
@@ -106,6 +110,7 @@ func (criteria *Criteria) IsMediaAcceptable(m *media.Container) (bool, error) {
 // the criteria is valid but simply wasn't a match for this val.
 func (criteria *Criteria) isValueAcceptable(valToTest interface{}) (bool, error) {
 	if valToTest == nil {
+		//exhaustive:ignore
 		switch criteria.Type {
 		case IsPresent:
 			return false, nil
@@ -143,10 +148,10 @@ func (criteria *Criteria) isValueAcceptable(valToTest interface{}) (bool, error)
 	return false, fmt.Errorf("criteria type %s unknown, cannot test %v and %v", criteria.Type, criteria.Value, valToTest)
 }
 
-// performStringComparison attempts to test the given value against the criterias Value. If either the
+// performStringComparison attempts to test the given value against the criteria Value. If either the
 // criteria Value or the valToTets provided cannot be coerced to a string, an error will be returned.
 //
-// This function checks for equality differently depending on whether the critiera Value (not the valToTest
+// This function checks for equality differently depending on whether the criteria Value (not the valToTest
 // passed to the function) is marked as a regular expression:
 //
 // If it IS marked as a regular expression (surrounded with '/'):
@@ -182,8 +187,8 @@ func (criteria *Criteria) testStringEquality(valToTest any) (bool, error) {
 	return strings.Compare(criteriaStrValue, strValToTest) == 0, nil
 }
 
-// performIntComparison accepts a valToTest and attempts to compare it with the criterias Value
-// according to the criterias Type.
+// performIntComparison accepts a valToTest and attempts to compare it with the criteria Value
+// according to the criteria Type.
 // If either the criteria Value or the valToTest cannot be coereced to an int, an error is returned.
 func (criteria *Criteria) performIntComparison(valToTest interface{}) (bool, error) {
 	if valToTest == nil {
@@ -200,6 +205,7 @@ func (criteria *Criteria) performIntComparison(valToTest interface{}) (bool, err
 		return false, fmt.Errorf("value to check illegal: %w", err)
 	}
 
+	//exhaustive:ignore
 	switch criteria.Type {
 	case LessThan:
 		return criteriaIntValue < intToCheck, nil

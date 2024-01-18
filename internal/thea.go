@@ -25,7 +25,7 @@ var log = logger.Get("Core")
 
 type (
 	RunnableService interface {
-		Run(context.Context) error
+		Run(ctx context.Context) error
 	}
 
 	RestGateway interface {
@@ -62,10 +62,12 @@ type (
 
 const (
 	TheaUserDirSuffix = "/thea/"
+
+	dockerShutdownTimeout = time.Second * 10
 )
 
 // Thea represents the top-level object for the server, and is responsible
-// for initialising embedded support services, services, stores, event
+// for initialising embedded support services, stores, event
 // handling, et cetera...
 type theaImpl struct {
 	eventBus          event.EventCoordinator
@@ -100,7 +102,7 @@ func New(config TheaConfig) *theaImpl {
 // will also cause Thea to stop.
 func (thea *theaImpl) Run(parent context.Context) error {
 	thea.dockerManager = docker.NewDockerManager()
-	defer thea.dockerManager.Shutdown(time.Second * 10)
+	defer thea.dockerManager.Shutdown(dockerShutdownTimeout)
 
 	ctx, cancel := context.WithCancel(parent)
 	crashHandler := func(label string, err error) {
@@ -161,7 +163,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 }
 
 // spawnService will run the provided function/service as it's own
-// go-routine, ensuring that the Thea service waitgroup is updated correctly
+// go-routine, ensuring that the Thea service waitgroup is updated correctly.
 func (thea *theaImpl) spawnService(context context.Context, wg *sync.WaitGroup, service RunnableService, serviceLabel string, crashHandler func(string, error)) {
 	log.Emit(logger.NEW, "Spawning %s\n", serviceLabel)
 
@@ -179,7 +181,7 @@ func (thea *theaImpl) spawnService(context context.Context, wg *sync.WaitGroup, 
 }
 
 // initialiseDockerServices will initialise all supporting services
-// for Thea (Postgres, PgAdmin)
+// for Thea (Postgres, PgAdmin).
 func (thea *theaImpl) initialiseDockerServices(config TheaConfig, crashHandler func(string, error)) error {
 	if config.Services.EnablePostgres {
 		log.Emit(logger.INFO, "Initialising embedded database...\n")

@@ -15,7 +15,7 @@ type mediaGenreStore struct{}
 // SaveMovieGenreAssociations handles only the upserting of the genre associations
 // for a given movie model.
 //
-// NB: This query will FAIL if any of the given genres do not have a row in the genre table
+// NB: This query will FAIL if any of the given genres do not have a row in the genre table.
 func (store *mediaGenreStore) SaveMovieGenreAssociations(db database.Queryable, movieID uuid.UUID, genres []*Genre) error {
 	if len(genres) > 0 {
 		type genreAssoc struct {
@@ -49,7 +49,7 @@ func (store *mediaGenreStore) SaveMovieGenreAssociations(db database.Queryable, 
 // SaveSeriesGenreAssociations handles only the upserting of the genre associations
 // for a given series model.
 //
-// NB: This query will FAIL if any of the given genres do not have a row in the genre table
+// NB: This query will FAIL if any of the given genres do not have a row in the genre table.
 func (store *mediaGenreStore) SaveSeriesGenreAssociations(db database.Queryable, seriesID uuid.UUID, genres []*Genre) error {
 	if len(genres) > 0 {
 		type genreAssoc struct {

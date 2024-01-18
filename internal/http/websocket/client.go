@@ -32,7 +32,7 @@ func (client *socketClient) Read(receiveCh chan *SocketMessage) error {
 	}
 }
 
-// Close will close this clients socket
+// Close will close this clients socket.
 func (client *socketClient) Close() {
 	client.socket.Close()
 }

@@ -134,7 +134,7 @@ func (store *Store) UpdateWorkflowCriteriaTx(tx *sqlx.Tx, workflowID uuid.UUID, 
 }
 
 // UpdateWorkflowTargetsTx updates a workflows transcode targets by modifying the rows
-// in the join table as needed. For simplicitly, this function will drop all rows
+// in the join table as needed. For simplicity, this function will drop all rows
 // for the given workflow and re-create them.
 //
 // NOTE: This DB action is intended to be used as part of an over-arching transaction; user-story
@@ -160,7 +160,7 @@ func (store *Store) UpdateWorkflowTargetsTx(tx *sqlx.Tx, workflowID uuid.UUID, t
 // Get queries the database for a specific workflow, and all it's related information.
 // The workflows criteria/targets are accessed via a join and aggregated in to
 // the result row as a JSONB array, which is then unmarshalled and used to
-// construct a 'Workflow'
+// construct a 'Workflow'.
 func (store *Store) Get(db database.Queryable, id uuid.UUID) *Workflow {
 	dest := &workflowModel{}
 	if err := db.Get(dest, getWorkflowSQL(`WHERE w.id=$1`), id); err != nil {
@@ -174,7 +174,7 @@ func (store *Store) Get(db database.Queryable, id uuid.UUID) *Workflow {
 // GetAll queries the database for all workflows, and all the related information.
 // The workflows criteria/targets are accessed via a join and aggregated in to
 // the result row as a JSONB array, which is then unmarshalled and used to
-// construct a 'Workflow'
+// construct a 'Workflow'.
 func (store *Store) GetAll(db database.Queryable) []*Workflow {
 	var dest []*workflowModel
 	if err := db.Select(&dest, getWorkflowSQL("")); err != nil {
@@ -194,7 +194,6 @@ func (store *Store) GetAll(db database.Queryable) []*Workflow {
 // the relevant update method should be used instead.
 func (store *Store) Delete(db database.Queryable, id uuid.UUID) {
 	_, err := db.Exec(`DELETE FROM workflow WHERE id=$1;`, id)
-
 	if err != nil {
 		log.Fatalf("Failed to delete workflow with ID = %v due to error: %v\n", id, err)
 	}

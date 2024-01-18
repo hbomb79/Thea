@@ -12,6 +12,11 @@ import (
 	"github.com/hbomb79/Thea/pkg/logger"
 )
 
+const (
+	httpServerReadHeaderTimeout = time.Second * 5
+	shutdownTimeout             = time.Second * 10
+)
+
 var log = logger.Get("HTTP")
 
 // trimTrailingSlashesMiddleware is a middleware function
@@ -45,7 +50,7 @@ type routerListener struct {
 }
 
 // NewRouter creates a new Router struct and creates the mux router and the
-// slice of routes before returning the *Router
+// slice of routes before returning the *Router.
 func NewRouter() *Router {
 	return &Router{
 		Mux:    mux.NewRouter(),
@@ -77,7 +82,7 @@ func (router *Router) Start(opts *RouterOptions) error {
 	router.buildRoutes(opts)
 
 	host := fmt.Sprintf("%v:%v", opts.APIHost, opts.APIPort)
-	router.server = &http.Server{Addr: host, Handler: trimTrailingSlashesMiddleware(router.Mux)}
+	router.server = &http.Server{Addr: host, ReadHeaderTimeout: httpServerReadHeaderTimeout, Handler: trimTrailingSlashesMiddleware(router.Mux)}
 	if err := router.server.ListenAndServe(); err != nil {
 		return err
 	}
@@ -92,10 +97,12 @@ func (router *Router) Stop() {
 	}
 
 	log.Emit(logger.STOP, "Closing HTTP router\n")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	router.server.Shutdown(ctx)
+	if err := router.server.Shutdown(ctx); err != nil {
+		log.Errorf("Failed to stop HTTP router due to error: %v\n", err)
+	}
 }
 
 // buildRoutes is used internally to take the list of routes
@@ -116,7 +123,7 @@ func (router *Router) buildRoutes(opts *RouterOptions) {
 }
 
 // validateOpts checks that the user provided options are valid
-// so we can use them to configure our router
+// so we can use them to configure our router.
 func validateOpts(opts *RouterOptions) error {
 	if opts.APIHost == "" || opts.APIPort == 0 || opts.APIRoot == "" {
 		return errors.New("router options must contain ApiHost, ApiPort and ApiRoot to be used for routing")

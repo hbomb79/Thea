@@ -22,11 +22,11 @@ var (
 
 type (
 	DataStore interface {
-		SaveTranscode(*TranscodeTask) error
+		SaveTranscode(task *TranscodeTask) error
 		GetAllWorkflows() []*workflow.Workflow
-		GetMedia(uuid.UUID) *media.Container
-		GetTarget(uuid.UUID) *ffmpeg.Target
-		GetForMediaAndTarget(uuid.UUID, uuid.UUID) (*Transcode, error)
+		GetMedia(mediaID uuid.UUID) *media.Container
+		GetTarget(targetID uuid.UUID) *ffmpeg.Target
+		GetForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) (*Transcode, error)
 	}
 
 	// transcodeService is Thea's solution to pre-transcoding of user media.
@@ -51,7 +51,7 @@ type (
 )
 
 // New creates a new transcodeService, injecting all required stores. Error is returned
-// in the configuration provided is not valid (e.g., ffmpeg path is wrong)
+// in the configuration provided is not valid (e.g., ffmpeg path is wrong).
 func New(config Config, eventBus event.EventCoordinator, dataStore DataStore) (*transcodeService, error) {
 	// Check for output path dir, create if not found
 
@@ -86,21 +86,21 @@ func (service *transcodeService) Run(ctx context.Context) error {
 		case taskID := <-service.taskChange:
 			service.handleTaskUpdate(taskID)
 		case message := <-eventChannel:
-			ev := message.Event
-			switch ev {
+			//exhaustive:ignore
+			switch message.Event {
 			case event.NewMediaEvent:
 				if mediaID, ok := message.Payload.(uuid.UUID); ok {
 					log.Emit(logger.DEBUG, "newly ingested media with ID %s detected\n", mediaID)
 					service.createWorkflowTasksForMedia(mediaID)
 				} else {
-					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
+					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", message.Event, message.Payload)
 				}
 			case event.DeleteMediaEvent:
 				if mediaID, ok := message.Payload.(uuid.UUID); ok {
 					log.Emit(logger.DEBUG, "media with ID %s deleted, cancelling any ongoing transcodes\n", mediaID)
 					service.CancelTasksForMedia(mediaID)
 				} else {
-					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", ev, message.Payload)
+					log.Emit(logger.ERROR, "failed to extract UUID from %s event (payload %#v)\n", message.Event, message.Payload)
 				}
 			}
 		case <-ctx.Done():
@@ -126,7 +126,7 @@ func (service *transcodeService) Task(id uuid.UUID) *TranscodeTask {
 	return nil
 }
 
-// ActiveTasksForMedia returns all the tasks which are running against the given media ID
+// ActiveTasksForMedia returns all the tasks which are running against the given media ID.
 func (service *transcodeService) ActiveTasksForMedia(mediaID uuid.UUID) []*TranscodeTask {
 	tasks := make([]*TranscodeTask, 0)
 	for _, t := range service.tasks {
@@ -402,7 +402,7 @@ func (service *transcodeService) spawnFfmpegTarget(m *media.Container, target *f
 
 // removeTaskFromQueue will look for and remove the task with the ID provided
 // from the services queue.
-// NOTE: The task will NOT be cancelled as part of removal
+// NOTE: The task will NOT be cancelled as part of removal.
 func (service *transcodeService) removeTaskFromQueue(taskID uuid.UUID) {
 	for i, v := range service.tasks {
 		if v.id == taskID {

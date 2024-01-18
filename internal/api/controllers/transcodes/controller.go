@@ -25,10 +25,10 @@ type (
 	}
 
 	Store interface {
-		GetTranscodesForMedia(uuid.UUID) ([]*transcode.Transcode, error)
-		GetTranscode(uuid.UUID) *transcode.Transcode
+		GetTranscodesForMedia(transcodeID uuid.UUID) ([]*transcode.Transcode, error)
+		GetTranscode(transcodeID uuid.UUID) *transcode.Transcode
 		GetAllTranscodes() ([]*transcode.Transcode, error)
-		DeleteTranscode(id uuid.UUID) error
+		DeleteTranscode(transcodeID uuid.UUID) error
 	}
 
 	TranscodesController struct {
@@ -122,10 +122,10 @@ func (controller *TranscodesController) DeleteTranscodeTask(ec echo.Context, req
 	return gen.DeleteTranscodeTask204Response{}, nil
 }
 
-func (controller *TranscodesController) postTroubleResolution(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
-}
+// func (controller *TranscodesController) postTroubleResolution(ec echo.Context) error {
+// 	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
+// }
 
-func (controller *TranscodesController) stream(ec echo.Context) error {
-	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
-}
+// func (controller *TranscodesController) stream(ec echo.Context) error {
+// 	return echo.NewHTTPError(http.StatusNotImplemented, "not yet implemented")
+// }

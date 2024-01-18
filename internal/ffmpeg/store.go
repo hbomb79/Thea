@@ -10,8 +10,7 @@ const (
 	TargetTable = "transcode_target"
 )
 
-type Store struct {
-}
+type Store struct{}
 
 func (store *Store) Save(db database.Queryable, target *Target) error {
 	_, err := db.NamedExec(`

@@ -14,7 +14,7 @@ var cacheLogger = logger.Get("Cache")
 // The Cache is a struct from the cache package that allows other parts
 // of the Thea to store persistent information about items inside the queue.
 // The primary use case for this cache is to allow us to store the current
-// status of queue items to enable persistent memory over server-restarts
+// status of queue items to enable persistent memory over server-restarts.
 type Cache struct {
 	filePath string
 	content  map[string]interface{}
@@ -92,7 +92,7 @@ func (cache *Cache) IterItems(cb func(*Cache, string, interface{}) bool) {
 
 // Save will attempt to save the cache to file, errors will be reported in console
 // This calls the private 'save' method to execute the save, this method just acts
-// as a public wrapper
+// as a public wrapper.
 func (cache *Cache) Save() {
 	if err := cache.save(); err != nil {
 		cacheLogger.Emit(logger.ERROR, "Failed to save cache! %v\n", err)
@@ -101,7 +101,7 @@ func (cache *Cache) Save() {
 
 // Load will check the local filesystem (cache.filePath) for an existing cache
 // and loads it in to memory if found. If not found, an empty cache map is
-// constructed which is then saved to the filesystem with 'save'
+// constructed which is then saved to the filesystem with 'save'.
 func (cache *Cache) Load() {
 	if err := cache.load(); err != nil {
 		cacheLogger.Emit(logger.WARNING, "Unable to load cache file(%s): %v. Using empty cache!\n", cache.filePath, err)
@@ -124,8 +124,7 @@ func (cache *Cache) load() error {
 	defer handle.Close()
 
 	fileCnt, _ := io.ReadAll(handle)
-	json.Unmarshal(fileCnt, &cache.content)
-	return nil
+	return json.Unmarshal(fileCnt, &cache.content)
 }
 
 // save is a private method that will encode the data for this cache to JSON
@@ -135,7 +134,7 @@ func (cache *Cache) save() error {
 		return err
 	}
 
-	handle, err := os.OpenFile(cache.filePath, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0755)
+	handle, err := os.OpenFile(cache.filePath, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0o755)
 	if err != nil {
 		return err
 	}

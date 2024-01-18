@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -17,28 +18,28 @@ import (
 type ContainerStatus int
 
 const (
-	// Container struct instance has just been created
+	// Container struct instance has just been created.
 	INIT ContainerStatus = iota
 
-	// Container image has been pulled to local docker daemon, but the container has not yet been created
+	// Container image has been pulled to local docker daemon, but the container has not yet been created.
 	PULLED
 
-	// Container has been created from a previously PULLED image
+	// Container has been created from a previously PULLED image.
 	CREATED
 
-	// Container is UP and working normally
+	// Container is UP and working normally.
 	UP
 
-	// Container has CRASHED
+	// Container has CRASHED.
 	CRASHED
 
-	// Container is being closed intentionally, next status should always be DOWN
+	// Container is being closed intentionally, next status should always be DOWN.
 	CLOSING
 
-	// Container is DOWN (intentionally closed)
+	// Container is DOWN (intentionally closed).
 	DOWN
 
-	// Container has been removed
+	// Container has been removed.
 	DEAD
 )
 
@@ -49,7 +50,7 @@ type ContainerEvent struct {
 	ProgressDetail struct {
 		Current int `json:"current"`
 		Total   int `json:"total"`
-	} `json:"progressDetail"`
+	} `json:"progressDetail"` //nolint:tagliatelle
 }
 
 func (e ContainerStatus) String() string {
@@ -61,12 +62,12 @@ type DockerContainer interface {
 	// a container via the Docker SDK. An error will be returned from this method if
 	// this process fails, however monitoring of this container occurs asynchronously
 	// so no error will be returned if the container crashes after successfully starting.
-	Start(context.Context, client.APIClient) error
+	Start(ctx context.Context, client client.APIClient) error
 
 	// Close shuts down this container by killing the running container (if running), and
 	// removing the container from the docker daemon via the Docker SDK. If closing or removing
 	// the container fails, this method will return an error.
-	Close(context.Context, client.APIClient, time.Duration) error
+	Close(ctx context.Context, client client.APIClient, timeout time.Duration) error
 
 	// MessageChannel returns the channel used by a running container to broadcast new
 	// messages from the stdout/stderr of the container. A DEAD container will have a closed
@@ -120,7 +121,7 @@ func (container *dockerContainer) Start(ctx context.Context, cli client.APIClien
 
 	out, err := cli.ImagePull(ctx, container.imageID, types.ImagePullOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to pull image %v for container %s: %v", container.imageID, container, err)
+		return fmt.Errorf("failed to pull image %v for container %s: %w", container.imageID, container, err)
 	}
 	defer out.Close()
 
@@ -128,7 +129,7 @@ func (container *dockerContainer) Start(ctx context.Context, cli client.APIClien
 	var event *ContainerEvent
 	for {
 		if err := eventStream.Decode(&event); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 
@@ -142,13 +143,13 @@ func (container *dockerContainer) Start(ctx context.Context, cli client.APIClien
 
 	resp, err := cli.ContainerCreate(ctx, container.containerConf, container.containerHostConf, nil, nil, container.label)
 	if err != nil {
-		return fmt.Errorf("failed to create container for %s: %v", container, err)
+		return fmt.Errorf("failed to create container for %s: %w", container, err)
 	}
 	container.containerID = resp.ID
 	container.setStatus(CREATED)
 
 	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		return fmt.Errorf("failed to start container for %s: %v", container, err)
+		return fmt.Errorf("failed to start container for %s: %w", container, err)
 	}
 	container.setStatus(UP)
 
@@ -165,7 +166,7 @@ func (container *dockerContainer) Close(ctx context.Context, cli client.APIClien
 		container.setStatus(CLOSING)
 		timeoutSeconds := int(timeout.Seconds())
 		if err := cli.ContainerStop(ctx, container.containerID, dCont.StopOptions{Timeout: &timeoutSeconds}); err != nil {
-			return fmt.Errorf("failed to stop container %s: %v", container, err)
+			return fmt.Errorf("failed to stop container %s: %w", container, err)
 		}
 
 		container.setStatus(DOWN)
@@ -173,7 +174,7 @@ func (container *dockerContainer) Close(ctx context.Context, cli client.APIClien
 
 	if container.canRemove() {
 		if err := cli.ContainerRemove(ctx, container.containerID, types.ContainerRemoveOptions{}); err != nil {
-			return fmt.Errorf("failed to remove container %s: %v", container, err)
+			return fmt.Errorf("failed to remove container %s: %w", container, err)
 		}
 	}
 	container.setStatus(DEAD)
@@ -230,13 +231,14 @@ func (container *dockerContainer) setStatus(stat ContainerStatus) {
 }
 
 func (container *dockerContainer) parseContainerEvent(ev *ContainerEvent) {
-	if ev.Error != "" {
+	switch {
+	case ev.Error != "":
 		dockerLogger.Emit(logger.ERROR, "\n%s: %s\n", container, ev.Error)
-	} else if ev.Progress != "" {
+	case ev.Progress != "":
 		dockerLogger.Emit(logger.DEBUG, "%s: %s\n", container, ev.Progress)
-	} else if ev.Status != "" {
+	case ev.Status != "":
 		dockerLogger.Emit(logger.DEBUG, "%s: %s\n", container, ev.Status)
-	} else {
+	default:
 		dockerLogger.Emit(logger.WARNING, "Container %s emitted unknown event %v\n", container, ev)
 	}
 }

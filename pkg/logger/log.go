@@ -16,25 +16,25 @@ import (
 type LogStatus int
 
 const (
-	// Verbose
+	// Verbose.
 	VERBOSE LogStatus = iota
 
-	// Debug
+	// Debug.
 	DEBUG
 
-	// Info
+	// Info.
 	INFO
 
-	// Important
+	// Important.
 	SUCCESS
 	NEW
 	REMOVE
 	STOP
 
-	// Warning
+	// Warning.
 	WARNING
 
-	// Error
+	// Error.
 	ERROR
 	FATAL
 )
@@ -98,28 +98,27 @@ func (e LogStatus) String() string {
 
 func (e LogStatus) Color() *color.Color {
 	return []*color.Color{
-		color.New(color.FgWhite, color.Faint, color.Italic),   //Verbose
-		color.New(color.FgWhite, color.Faint, color.Italic),   //Debug
-		color.New(color.FgWhite),                              //Info
-		color.New(color.FgHiGreen),                            //Success
-		color.New(color.FgGreen, color.Italic),                //New
-		color.New(color.FgYellow, color.Italic),               //Remove
-		color.New(color.FgHiYellow),                           //Stop
-		color.New(color.FgYellow, color.Underline),            //Warning
-		color.New(color.FgHiRed, color.Bold),                  //Error
-		color.New(color.FgHiRed, color.Bold, color.Underline), //PANIC
+		color.New(color.FgWhite, color.Faint, color.Italic),   // Debug
+		color.New(color.FgWhite),                              // Info
+		color.New(color.FgHiGreen),                            // Success
+		color.New(color.FgGreen, color.Italic),                // New
+		color.New(color.FgYellow, color.Italic),               // Remove
+		color.New(color.FgHiYellow),                           // Stop
+		color.New(color.FgYellow, color.Underline),            // Warning
+		color.New(color.FgHiRed, color.Bold),                  // Error
+		color.New(color.FgHiRed, color.Bold, color.Underline), // PANIC
 	}[e]
 }
 
 type Logger interface {
-	Emit(LogStatus, string, ...any)
-	Verbosef(string, ...any)
-	Debugf(string, ...any)
-	Infof(string, ...any)
-	Warnf(string, ...any)
-	Printf(string, ...any)
-	Errorf(string, ...any)
-	Fatalf(string, ...any)
+	Emit(status LogStatus, pattern string, args ...any)
+	Verbosef(pattern string, args ...any)
+	Debugf(pattern string, args ...any)
+	Infof(pattern string, args ...any)
+	Warnf(pattern string, args ...any)
+	Printf(pattern string, args ...any)
+	Errorf(pattern string, args ...any)
+	Fatalf(pattern string, args ...any)
 }
 
 type loggerImpl struct {
@@ -161,7 +160,7 @@ func (l *loggerMgr) Emit(status LogStatus, name string, message string, interpol
 	padding := strings.Repeat(" ", l.offset-len(name))
 	msg := fmt.Sprintf("[%s] %s(%s) %s", name, padding, status, fmt.Sprintf(message, interpolations...))
 
-	status.Color().Print(msg)
+	_, _ = status.Color().Print(msg)
 }
 
 func (l *loggerMgr) setNameOffset(offset int) {

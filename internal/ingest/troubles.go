@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -38,23 +39,27 @@ const (
 	Abort
 )
 
-var (
-	allowedResolutionTypes = map[TroubleType][]ResolutionType{
-		MetadataFailure:            {Abort, Retry},
-		UnknownFailure:             {Abort, Retry},
-		TmdbFailureUnknown:         {Abort, Retry, SpecifyTmdbID},
-		TmdbFailureMultipleResults: {Abort, Retry, SpecifyTmdbID},
-		TmdbFailureNoResults:       {Abort, Retry, SpecifyTmdbID},
-	}
-)
+var allowedResolutionTypes = map[TroubleType][]ResolutionType{
+	MetadataFailure:            {Abort, Retry},
+	UnknownFailure:             {Abort, Retry},
+	TmdbFailureUnknown:         {Abort, Retry, SpecifyTmdbID},
+	TmdbFailureMultipleResults: {Abort, Retry, SpecifyTmdbID},
+	TmdbFailureNoResults:       {Abort, Retry, SpecifyTmdbID},
+}
 
 func newTrouble(err error) Trouble {
-	switch err := err.(type) {
-	case *tmdb.NoResultError:
+	var noResultError tmdb.NoResultError
+	if errors.As(err, &noResultError) {
 		return Trouble{error: err, tType: TmdbFailureNoResults}
-	case *tmdb.MultipleResultError:
-		return Trouble{error: err, tType: TmdbFailureMultipleResults, choices: err.Choices()}
-	case *tmdb.IllegalRequestError:
+	}
+
+	var multipleResultError tmdb.MultipleResultError
+	if errors.As(err, &multipleResultError) {
+		return Trouble{error: err, tType: TmdbFailureMultipleResults, choices: multipleResultError.Choices()}
+	}
+
+	var illegalRequestError tmdb.IllegalRequestError
+	if errors.As(err, &illegalRequestError) {
 		return Trouble{error: err, tType: TmdbFailureUnknown}
 	}
 
@@ -115,6 +120,7 @@ func (t *Trouble) GetTmdbChoices() []tmdb.SearchResultItem {
 }
 
 func (t TroubleType) String() string {
+	//exhaustive:enforce
 	switch t {
 	case MetadataFailure:
 		return fmt.Sprintf("METADATA_FAILURE[%d]", t)
@@ -124,7 +130,9 @@ func (t TroubleType) String() string {
 		return fmt.Sprintf("TMDB_FAILURE_MULTI[%d]", t)
 	case TmdbFailureNoResults:
 		return fmt.Sprintf("TMDB_FAILURE_NONE[%d]", t)
-	default:
-		return fmt.Sprintf("UNKNOWN[%d]", t)
+	case UnknownFailure:
+		return fmt.Sprintf("UNKNOWN_FAILURE[%d]", t)
 	}
+
+	panic("unreachable")
 }

@@ -10,9 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-var (
-	ErrDuplicate = errors.New("a transcode task already exists for the media/target specified")
-)
+var ErrDuplicate = errors.New("a transcode task already exists for the media/target specified")
 
 type (
 	Store struct{}
@@ -37,7 +35,7 @@ func (store *Store) SaveTranscode(db database.Queryable, task *TranscodeTask) er
 		return fmt.Errorf("failed to create transcode row: %w", err)
 	}
 
-	log.Emit(logger.SUCCESS, "Successfuly saved transcode %s to db\n", task)
+	log.Emit(logger.SUCCESS, "Successfully saved transcode %s to db\n", task)
 	return nil
 }
 
@@ -92,7 +90,7 @@ func (store *Store) GetForMediaAndTarget(db database.Queryable, mediaID uuid.UUI
 		  AND transcode_target_id=$2`,
 		mediaID, targetID,
 	); err != nil {
-		return nil, fmt.Errorf("failed to find transcode for media %s and target %s: %v", mediaID, targetID, err)
+		return nil, fmt.Errorf("failed to find transcode for media %s and target %s: %w", mediaID, targetID, err)
 	}
 
 	return dest, nil
@@ -100,7 +98,7 @@ func (store *Store) GetForMediaAndTarget(db database.Queryable, mediaID uuid.UUI
 
 // DeleteForMedias deletes all media transcode row associated
 // with any of the given media IDs. The paths of the deleted media
-// transcodes are returned to allow for file-system cleanup
+// transcodes are returned to allow for file-system cleanup.
 func (store *Store) DeleteForMedias(db database.Queryable, mediaIDs []uuid.UUID) ([]string, error) {
 	query, args, err := sqlx.In(`
 		DELETE FROM media_transcodes

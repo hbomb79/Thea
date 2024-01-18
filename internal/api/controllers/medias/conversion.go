@@ -18,6 +18,7 @@ func newWatchTarget(target *ffmpeg.Target, t gen.MediaWatchTargetType, ready boo
 func episodeToStubDto(episode *media.Episode) gen.EpisodeStub {
 	return gen.EpisodeStub{Adult: episode.Adult, Id: episode.ID, Title: episode.Title}
 }
+
 func episodesToStubDtos(episodes []*media.Episode) []gen.EpisodeStub {
 	return util.ApplyConversion(episodes, episodeToStubDto)
 }
@@ -25,6 +26,7 @@ func episodesToStubDtos(episodes []*media.Episode) []gen.EpisodeStub {
 func inflatedSeasonToDto(season *media.InflatedSeason) gen.Season {
 	return gen.Season{Episodes: episodesToStubDtos(season.Episodes)}
 }
+
 func infaltedSeasonsToDtos(seasons []*media.InflatedSeason) []gen.Season {
 	return util.ApplyConversion(seasons, inflatedSeasonToDto)
 }
@@ -54,10 +56,26 @@ func newListDtos(results []*media.MediaListResult) ([]gen.MediaListItem, error) 
 func newListDto(result *media.MediaListResult) (*gen.MediaListItem, error) {
 	if result.IsMovie() {
 		movie := result.Movie
-		return &gen.MediaListItem{Type: gen.MOVIE, Id: movie.ID, Title: movie.Title, TmdbId: movie.TmdbID, UpdatedAt: movie.UpdatedAt, SeasonCount: nil, Genres: genreModelsToDtos(movie.Genres)}, nil
+		return &gen.MediaListItem{
+			Type:        gen.MOVIE,
+			Id:          movie.ID,
+			Title:       movie.Title,
+			TmdbId:      movie.TmdbID,
+			UpdatedAt:   movie.UpdatedAt,
+			SeasonCount: nil,
+			Genres:      genreModelsToDtos(movie.Genres),
+		}, nil
 	} else if result.IsSeries() {
 		series := result.Series
-		return &gen.MediaListItem{Type: gen.SERIES, Id: series.ID, Title: series.Title, TmdbId: series.TmdbID, UpdatedAt: series.UpdatedAt, SeasonCount: &series.SeasonCount, Genres: genreModelsToDtos(series.Genres)}, nil
+		return &gen.MediaListItem{
+			Type:        gen.SERIES,
+			Id:          series.ID,
+			Title:       series.Title,
+			TmdbId:      series.TmdbID,
+			UpdatedAt:   series.UpdatedAt,
+			SeasonCount: &series.SeasonCount,
+			Genres:      genreModelsToDtos(series.Genres),
+		}, nil
 	}
 
 	return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Media %v found during listing has an illegal type. Expected movie or series.", result))

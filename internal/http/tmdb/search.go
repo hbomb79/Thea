@@ -202,7 +202,7 @@ func (searcher *tmdbSearcher) GetSeason(seriesID string, seasonNumber int) (*Sea
 
 // PruneSearchResults accepts a list of search stubs from TMDB and attempts
 // to whittle them down to a singular result. To do so, the year and popularity
-// of the results is taken in to consideration
+// of the results is taken in to consideration.
 func (searcher *tmdbSearcher) handleSearchResults(results []SearchResultItem, metadata *media.FileMediaMetadata) (*SearchResultItem, error) {
 	if metadata.Year != nil {
 		if metadata.Episodic {
@@ -257,7 +257,7 @@ func (date *Date) UnmarshalJSON(dateBytes []byte) error {
 }
 
 // filterResultsInPlace will filter the given array of results IN PLACE by modifying
-// the provided slice and returning
+// the provided slice and returning.
 func filterResultsInPlace(results *[]SearchResultItem, metadata *media.FileMediaMetadata, filterFn func(dateFromResult time.Time, dateFromMetadata time.Time) bool) {
 	timeFromYear := func(year int) time.Time {
 		return time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -278,7 +278,7 @@ func filterResultsInPlace(results *[]SearchResultItem, metadata *media.FileMedia
 
 func httpGetJSONResponse(urlPath string, targetInterface interface{}) error {
 	log.Verbosef("GET -> %s\n", urlPath)
-	resp, err := http.Get(urlPath)
+	resp, err := http.Get(urlPath) //nolint
 	if err != nil {
 		return &UnknownRequestError{fmt.Sprintf("failed to perform GET(%s) to TMDB: %v", urlPath, err)}
 	}
@@ -321,15 +321,17 @@ type (
 	IllegalRequestError struct{ reason string }
 )
 
-func (err *UnknownRequestError) Error() string {
+func (err UnknownRequestError) Error() string {
 	return fmt.Sprintf("unknown error occurred while communicating with TMDB: %s", err.reason)
 }
-func (err *IllegalRequestError) Error() string {
+
+func (err IllegalRequestError) Error() string {
 	return fmt.Sprintf("illegal search request because %s", err.reason)
 }
-func (err *FailedRequestError) Error() string {
+
+func (err FailedRequestError) Error() string {
 	return fmt.Sprintf("Request failure (HTTP %d): %s", err.httpCode, err.message)
 }
-func (err *NoResultError) Error() string                      { return "no results returned from TMDB" }
-func (err *MultipleResultError) Error() string                { return "too many results returned from TMDB" }
-func (err *MultipleResultError) Choices() *[]SearchResultItem { return &err.results }
+func (err NoResultError) Error() string                      { return "no results returned from TMDB" }
+func (err MultipleResultError) Error() string                { return "too many results returned from TMDB" }
+func (err MultipleResultError) Choices() *[]SearchResultItem { return &err.results }

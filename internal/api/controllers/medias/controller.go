@@ -20,7 +20,7 @@ type (
 		GetMovie(movieID uuid.UUID) (*media.Movie, error)
 		GetEpisode(episodeID uuid.UUID) (*media.Episode, error)
 		GetInflatedSeries(seriesID uuid.UUID) (*media.InflatedSeries, error)
-		GetTranscodesForMedia(uuid.UUID) ([]*transcode.Transcode, error)
+		GetTranscodesForMedia(mediaID uuid.UUID) ([]*transcode.Transcode, error)
 		GetAllTargets() []*ffmpeg.Target
 
 		ListMedia(includeTypes []media.MediaListType, titleFilter string, includeGenres []int, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error)
@@ -63,7 +63,7 @@ func New(transcodeService TranscodeService, store Store) *MediaController {
 // ListMedia is an endpoint used to retrieve a list of movies and series which have been
 // updated recently (this includes episodes being added to a series). The caller of this endpoint
 // can specify filtering options such as the type (movie|series), a limit to the number
-// of results, or the genres which apply to the content
+// of results, or the genres which apply to the content.
 func (controller *MediaController) ListMedia(ec echo.Context, request gen.ListMediaRequestObject) (gen.ListMediaResponseObject, error) {
 	allowedTypesRaw := []string{}
 	if request.Params.AllowedType != nil {
@@ -266,7 +266,7 @@ func (controller *MediaController) getMediaWatchTargets(mediaID uuid.UUID) ([]ge
 
 	// 1. Add completed transcodes as valid pre-transcoded targets
 	targetsNotEligibleForLiveTranscode := make(map[uuid.UUID]struct{}, len(activeTranscodes))
-	watchTargets := make([]gen.MediaWatchTarget, len(completedTranscodes))
+	watchTargets := make([]gen.MediaWatchTarget, 0, len(completedTranscodes))
 	for k, v := range completedTranscodes {
 		targetsNotEligibleForLiveTranscode[v.TargetID] = struct{}{}
 		watchTargets[k] = newWatchTarget(findTarget(v.TargetID), gen.PRETRANSCODE, true)

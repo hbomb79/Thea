@@ -8,13 +8,10 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/database"
-	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/jmoiron/sqlx"
 )
 
 var ErrUserNotFound = errors.New("user does not exist")
-
-var log = logger.Get("UserStore")
 
 type (
 	userBase struct {
@@ -32,7 +29,7 @@ type (
 	// a JSON representation of the coalesced permission rows which are
 	// joined in to the query. We use a separate struct as part of
 	// the public API of this store to hide the use of the JsonColumn container
-	// to prevent against breakages if we change this in the future
+	// to prevent against breakages if we change this in the future.
 	userModel struct {
 		userBase
 		Permissions database.JSONColumn[[]string] `db:"permissions"`
@@ -40,7 +37,7 @@ type (
 
 	// User is the external/public API for the user model. It uses a special
 	// Permissions type for the users permissions which allows for common
-	// operations to be performed against the set of permissions
+	// operations to be performed against the set of permissions.
 	User struct {
 		userBase
 		Permissions []string
@@ -53,7 +50,7 @@ type (
 
 func NewStore() *Store {
 	return &Store{
-		//TODO figure out the best values for this
+		// TODO figure out the best values for this
 		newArgon2IdHasher(1, 64, 64*1024, 1, 128),
 	}
 }
@@ -88,8 +85,8 @@ func (store *Store) List(db database.Queryable) ([]*User, error) {
 	}
 
 	output := make([]*User, len(results))
-	for k, v := range results {
-		output[k] = userModelToUser(&v)
+	for i := range results {
+		output[i] = userModelToUser(&results[i])
 	}
 
 	return output, nil
@@ -111,7 +108,7 @@ func (store *Store) GetWithUsernameAndPassword(db database.Queryable, username [
 	}
 
 	if err := store.hasher.Compare(user.HashedPassword, user.HashSalt, rawPassword); err != nil {
-		return nil, fmt.Errorf("password supplied for user %s is invalid: %v", username, err)
+		return nil, fmt.Errorf("password supplied for user %s is invalid: %w", username, err)
 	}
 
 	return userModelToUser(&user), nil

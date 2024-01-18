@@ -28,9 +28,11 @@ func statusToDto(status transcode.TranscodeTaskStatus) gen.TranscodeTaskStatus {
 		return gen.TranscodeTaskStatusCANCELLED
 	case transcode.COMPLETE:
 		return gen.TranscodeTaskStatusCOMPLETE
-	default:
+	case transcode.TROUBLED:
 		return gen.TranscodeTaskStatusTROUBLED
 	}
+
+	panic("unreachable")
 }
 
 func NewDtoFromModel(model *transcode.Transcode) gen.TranscodeTask {

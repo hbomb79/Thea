@@ -14,7 +14,7 @@ type (
 	// an Episode. This is indicated using the 'Type' enum. If
 	// container is holding an 'Episode' type, then the 'Season'
 	// and 'Series' that the episode belongs to will also be populated
-	// if available
+	// if available.
 	Container struct {
 		Type    ContainerType
 		Movie   *Movie
@@ -68,9 +68,11 @@ func (cont *Container) watchable() *Watchable {
 		return &cont.Movie.Watchable
 	case EpisodeContainerType:
 		return &cont.Episode.Watchable
-	default:
-		panic("Cannot fetch watchable from container due to unknown container type")
+	case SeriesContainerType:
+		return nil
 	}
+
+	panic("unreachable")
 }
 
 func (cont *Container) model() *Model {
@@ -81,7 +83,7 @@ func (cont *Container) model() *Model {
 		return &cont.Episode.Model
 	case SeriesContainerType:
 		return &cont.Series.Model
-	default:
-		panic("Cannot fetch model from container due to unknown container type")
 	}
+
+	panic("unreachable")
 }

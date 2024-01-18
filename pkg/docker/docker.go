@@ -22,7 +22,7 @@ var dockerLogger = logger.Get("Docker")
 const DockerNetworkName = "thea_network"
 
 type DockerManager interface {
-	SpawnContainer(DockerContainer) error
+	SpawnContainer(container DockerContainer) error
 	Shutdown(timeout time.Duration)
 	CloseContainer(name string, timeout time.Duration)
 	WaitForContainer(container DockerContainer, statuses ...ContainerStatus) (ContainerStatus, error)
@@ -55,7 +55,11 @@ func NewDockerManager() DockerManager {
 		Driver:         "bridge",
 	})
 	if err != nil {
-		dockerLogger.Emit(logger.WARNING, "Failed to create docker container network: %v. This is usually safe to ignore if the error is due to the network already existing, however other errors should be investigated\n", err)
+		dockerLogger.Emit(
+			logger.WARNING,
+			"Failed to create docker container network: %v. This is usually safe to ignore if the error is due to the network already existing\n",
+			err,
+		)
 	}
 
 	broker := broker.NewBroker[*dockerContainerStatus]()
@@ -106,7 +110,9 @@ func (docker *docker) Shutdown(timeout time.Duration) {
 	}
 
 	docker.wg.Wait()
-	docker.cli.NetworkRemove(docker.ctx, DockerNetworkName)
+	if err := docker.cli.NetworkRemove(docker.ctx, DockerNetworkName); err != nil {
+		dockerLogger.Warnf("Failed to remove docker network: %s\n", err)
+	}
 }
 
 func (docker *docker) CloseContainer(name string, timeout time.Duration) {
@@ -148,12 +154,14 @@ func (docker *docker) WaitForContainer(container DockerContainer, statuses ...Co
 	return DEAD, fmt.Errorf("wait on container %s aborted as container has closed", container)
 }
 
-func (docker *docker) closeContainer(cont DockerContainer, timeout time.Duration) {
-	dockerLogger.Emit(logger.STOP, "Closing container %s...\n", cont)
-	cont.Close(docker.ctx, docker.cli, timeout)
+func (docker *docker) closeContainer(container DockerContainer, timeout time.Duration) {
+	dockerLogger.Emit(logger.STOP, "Closing container %s...\n", container)
+	container.Close(docker.ctx, docker.cli, timeout)
 
-	dockerLogger.Emit(logger.STOP, "Waiting for container %s to change state to DEAD...\n", cont)
-	docker.WaitForContainer(cont, DEAD)
+	dockerLogger.Emit(logger.STOP, "Waiting for container %s to change state to DEAD...\n", container)
+	if _, err := docker.WaitForContainer(container, DEAD); err != nil {
+		dockerLogger.Warnf("Failed while waiting for container %s to change state to DEAD: %s\n", container, err)
+	}
 }
 
 func (docker *docker) monitorContainer(container DockerContainer, wg *sync.WaitGroup) {

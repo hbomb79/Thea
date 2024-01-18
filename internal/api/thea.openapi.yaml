@@ -858,7 +858,7 @@ components:
           type: string
         state:
           type: string
-          enum: [IDLE, IMPORT_HOLD, INGESTING, TROUBLED]
+          enum: [COMPLETE, IDLE, IMPORT_HOLD, INGESTING, TROUBLED]
         trouble:
             $ref: '#/components/schemas/IngestTrouble'
         metadata:

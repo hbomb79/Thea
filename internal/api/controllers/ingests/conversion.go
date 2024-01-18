@@ -19,32 +19,6 @@ type TmdbChoiceDTO struct {
 	PosterPath string      `json:"poster_url_path"`
 }
 
-func troubleResolutionDtoMethodToModel(method gen.IngestTroubleResolutionType) ingest.ResolutionType {
-	switch method {
-	case gen.ABORT:
-		return ingest.Abort
-	case gen.SPECIFYTMDBID:
-		return ingest.SpecifyTmdbID
-	case gen.RETRY:
-		return ingest.Retry
-	default:
-		panic("invalid enum value for resolution method")
-	}
-}
-
-func troubleResolutionModelMethodToDto(model ingest.ResolutionType) gen.IngestTroubleResolutionType {
-	switch model {
-	case ingest.Abort:
-		return gen.ABORT
-	case ingest.SpecifyTmdbID:
-		return gen.SPECIFYTMDBID
-	case ingest.Retry:
-		return gen.RETRY
-	}
-
-	panic("invalid resolution type")
-}
-
 // NewDto creates a IngestDto using the IngestItem model.
 func NewDto(item *ingest.IngestItem) gen.Ingest {
 	var trbl *gen.IngestTrouble = nil
@@ -75,13 +49,14 @@ func NewDto(item *ingest.IngestItem) gen.Ingest {
 }
 
 func ExtractTroubleContext(trouble *ingest.Trouble) (map[string]any, error) {
+	//exhaustive:ignore
 	switch trouble.Type() {
 	case ingest.TmdbFailureMultipleResults:
 		// Return a context which contains the choices we could make. The client will be expected
 		// to use the unique TMDB ID of the choice when resolving this trouble.
 		modelChoices := trouble.GetTmdbChoices()
 		if modelChoices == nil {
-			return nil, fmt.Errorf("failed to extract trouble context for %s. Type mandates presence of context which is not present, resulting trouble context will be missing expected information", trouble)
+			return nil, fmt.Errorf("failed to extract trouble context for %w. Type mandates presence of context which is not present, resulting trouble context will be missing expected information", trouble)
 		}
 		dtoChoices := make([]TmdbChoiceDTO, 0)
 		for _, v := range trouble.GetTmdbChoices() {
@@ -119,7 +94,36 @@ func scrapedMetadataToDto(metadata *media.FileMediaMetadata) *gen.FileMetadata {
 	}
 }
 
+func troubleResolutionDtoMethodToModel(method gen.IngestTroubleResolutionType) ingest.ResolutionType {
+	//exhaustive:enforce
+	switch method {
+	case gen.ABORT:
+		return ingest.Abort
+	case gen.SPECIFYTMDBID:
+		return ingest.SpecifyTmdbID
+	case gen.RETRY:
+		return ingest.Retry
+	}
+
+	panic("unreachable")
+}
+
+func troubleResolutionModelMethodToDto(model ingest.ResolutionType) gen.IngestTroubleResolutionType {
+	//exhaustive:enforce
+	switch model {
+	case ingest.Abort:
+		return gen.ABORT
+	case ingest.SpecifyTmdbID:
+		return gen.SPECIFYTMDBID
+	case ingest.Retry:
+		return gen.RETRY
+	}
+
+	panic("unreachable")
+}
+
 func TroubleTypeModelToDto(troubleType ingest.TroubleType) gen.IngestTroubleType {
+	//exhaustive:enforce
 	switch troubleType {
 	case ingest.MetadataFailure:
 		return gen.METADATAFAILURE
@@ -133,10 +137,11 @@ func TroubleTypeModelToDto(troubleType ingest.TroubleType) gen.IngestTroubleType
 		return gen.UNKNOWNFAILURE
 	}
 
-	panic(fmt.Sprintf("ingest trouble type %s is not recognized by API layer, DTO cannot be created. Please report this error.", troubleType))
+	panic("unreachable")
 }
 
 func IngestStateModelToDto(modelType ingest.IngestItemState) gen.IngestState {
+	//exhaustive:enforce
 	switch modelType {
 	case ingest.Idle:
 		return gen.IngestStateIDLE
@@ -146,7 +151,9 @@ func IngestStateModelToDto(modelType ingest.IngestItemState) gen.IngestState {
 		return gen.IngestStateINGESTING
 	case ingest.Troubled:
 		return gen.IngestStateTROUBLED
+	case ingest.Complete:
+		return gen.IngestStateCOMPLETE
 	}
 
-	panic(fmt.Sprintf("ingest type %s is not recognized by API layer, DTO cannot be created. Please report this error.", modelType))
+	panic("unreachable")
 }

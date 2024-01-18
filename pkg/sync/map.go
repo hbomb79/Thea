@@ -8,25 +8,37 @@ type TypedSyncMap[K comparable, V any] struct {
 
 func (m *TypedSyncMap[K, V]) Delete(key K) { m.m.Delete(key) }
 
-func (m *TypedSyncMap[K, V]) Load(key K) (value V, ok bool) {
+func (m *TypedSyncMap[K, V]) Load(key K) (V, bool) {
 	v, ok := m.m.Load(key)
 	if !ok {
-		return value, ok
+		return *new(V), ok
 	}
-	return v.(V), ok
+
+	if vv, ok := v.(V); ok {
+		return vv, true
+	}
+	return *new(V), false
 }
 
-func (m *TypedSyncMap[K, V]) LoadAndDelete(key K) (value V, loaded bool) {
+func (m *TypedSyncMap[K, V]) LoadAndDelete(key K) (V, bool) {
 	v, loaded := m.m.LoadAndDelete(key)
 	if !loaded {
-		return value, loaded
+		return *new(V), loaded
 	}
-	return v.(V), loaded
+
+	if vv, ok := v.(V); ok {
+		return vv, loaded
+	}
+	return *new(V), loaded
 }
 
-func (m *TypedSyncMap[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
+func (m *TypedSyncMap[K, V]) LoadOrStore(key K, value V) (V, bool) {
 	a, loaded := m.m.LoadOrStore(key, value)
-	return a.(V), loaded
+	if av, ok := a.(V); ok {
+		return av, loaded
+	}
+
+	return *new(V), loaded
 }
 
 func (m *TypedSyncMap[K, V]) Store(key K, value V) { m.m.Store(key, value) }

@@ -9,7 +9,7 @@ import (
 // also contains a sync.WaitGroup as 'wg'. The WaitGroup is
 // automatically controlled by the WorkerPool. The 'workers'
 // field is a slice that contains all the workers
-// attached to this WorkerPool
+// attached to this WorkerPool.
 type WorkerPool struct {
 	workers []Worker
 	Wg      sync.WaitGroup
@@ -17,7 +17,7 @@ type WorkerPool struct {
 }
 
 // NewWorkerPool creates a new WorkerPool struct
-// and initialises the 'workers' slice
+// and initialises the 'workers' slice.
 func NewWorkerPool() *WorkerPool {
 	return &WorkerPool{workers: make([]Worker, 0)}
 }
@@ -60,7 +60,7 @@ func (pool *WorkerPool) PushWorker(workers ...Worker) error {
 }
 
 // WakeupWorkers will search for sleeping workers in the pool
-// and will send on their WakeupChannel to wake up sleeping workers
+// and will send on their WakeupChannel to wake up sleeping workers.
 func (pool *WorkerPool) WakeupWorkers() error {
 	if !pool.started {
 		return errors.New("cannot wakeup workers on worker pool that is not started")

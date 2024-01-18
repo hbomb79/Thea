@@ -13,15 +13,15 @@ import (
 type (
 	IngestService interface {
 		GetAllIngests() []*ingest.IngestItem
-		GetIngest(uuid.UUID) *ingest.IngestItem
-		RemoveIngest(uuid.UUID) error
+		GetIngest(ingestID uuid.UUID) *ingest.IngestItem
+		RemoveIngest(ingestID uuid.UUID) error
 		DiscoverNewFiles()
 		ResolveTroubledIngest(itemID uuid.UUID, method ingest.ResolutionType, context map[string]string) error
 	}
 
 	// IngestsController is the struct which is responsible for defining the
 	// routes for this controller. Additionally, it holds the reference to
-	// the store used to retrieve information about ingests from Thea
+	// the store used to retrieve information about ingests from Thea.
 	IngestsController struct {
 		service IngestService
 	}
@@ -45,7 +45,7 @@ func (controller *IngestsController) ListIngests(ec echo.Context, _ gen.ListInge
 }
 
 // GetIngest uses the 'id' path param from the context and retrieves the ingest from the
-// underlying store. If found, a DTO representing the ingest is returned
+// underlying store. If found, a DTO representing the ingest is returned.
 func (controller *IngestsController) GetIngest(ec echo.Context, request gen.GetIngestRequestObject) (gen.GetIngestResponseObject, error) {
 	item := controller.service.GetIngest(request.Id)
 	if item == nil {

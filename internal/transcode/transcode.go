@@ -25,7 +25,7 @@ var (
 )
 
 type Command interface {
-	Run(context.Context, transcoder.Options, func(*ffmpeg.Progress)) error
+	Run(ctx context.Context, transcodeOptions transcoder.Options, updateHandler func(*ffmpeg.Progress)) error
 	Suspend() error
 	Continue() error
 }
@@ -61,12 +61,12 @@ type TranscodeTask struct {
 
 func NewTranscodeTask(m *media.Container, t *ffmpeg.Target, config ffmpeg.Config) (*TranscodeTask, error) {
 	dir := filepath.Join(config.GetOutputBaseDirectory(), m.ID().String(), t.ID.String())
-	if err := os.MkdirAll(filepath.Dir(dir), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o777); err != nil {
 		log.Errorf("Failed to create required directories (%s) for transcoding output: %v\n", filepath.Dir(dir), err)
 		return nil, ErrPathDirectoryCreation
 	}
 
-	//TODO: expand this to support other formats, but for now, let's keep it simple
+	// TODO: expand this to support other formats, but for now, let's keep it simple
 	if t.Ext != "mp4" {
 		return nil, ErrTargetExtensionInvalid
 	}
@@ -102,7 +102,7 @@ func (task *TranscodeTask) Run(parentCtx context.Context, updateHandler func(*ff
 		// previous checks to ensure a duplicate transcode entity have been done already, so a duplicate FILE
 		// likely indicates some cleanup failed and this file should be considered unwelcome).
 		log.Warnf("Transcode %s is expected to output to %s, however a file is already present. Removing file\n", task, task.outputPath)
-		os.Remove(task.outputPath)
+		_ = os.Remove(task.outputPath)
 	}
 
 	task.command = ffmpeg.NewCmd(task.media.Source(), task.outputPath, task.config)
@@ -119,7 +119,7 @@ func (task *TranscodeTask) Run(parentCtx context.Context, updateHandler func(*ff
 	err := task.command.Run(ctx, task.target.FfmpegOptions, updateHandler)
 	if err != nil {
 		task.status = TROUBLED
-		return fmt.Errorf("%w: %v", ErrFfmpegProblem, err)
+		return fmt.Errorf("%w: %w", ErrFfmpegProblem, err)
 	}
 
 	if ctx.Err() != nil {

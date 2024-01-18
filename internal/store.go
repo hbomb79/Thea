@@ -35,7 +35,7 @@ type (
 	//
 	// If consumers need to be able to access data stores directly, they're
 	// welcome to do so - however caution should be taken as stores have no
-	// obligation to take care of relational data (which is the orchestrator's job)
+	// obligation to take care of relational data (which is the orchestrator's job).
 	storeOrchestrator struct {
 		db             database.Manager
 		ev             event.EventDispatcher
@@ -209,7 +209,14 @@ func (orchestrator *storeOrchestrator) ListGenres() ([]*media.Genre, error) {
 	return orchestrator.mediaStore.ListGenres(orchestrator.db.GetSqlxDB())
 }
 
-func (orchestrator *storeOrchestrator) ListMedia(includeTypes []media.MediaListType, titleFilter string, includeGenres []int, orderBy []media.MediaListOrderBy, offset int, limit int) ([]*media.MediaListResult, error) {
+func (orchestrator *storeOrchestrator) ListMedia(
+	includeTypes []media.MediaListType,
+	titleFilter string,
+	includeGenres []int,
+	orderBy []media.MediaListOrderBy,
+	offset int,
+	limit int,
+) ([]*media.MediaListResult, error) {
 	return orchestrator.mediaStore.ListMedia(orchestrator.db.GetSqlxDB(), titleFilter, includeTypes, includeGenres, orderBy, offset, limit)
 }
 
@@ -351,7 +358,9 @@ func (orchestrator *storeOrchestrator) ListSeriesStubs() ([]*media.SeriesStub, e
 //    database entries.
 
 func (orchestrator *storeOrchestrator) DeleteMovie(movieID uuid.UUID) error {
-	orchestrator.DeleteTranscodesForMedia(movieID)
+	if err := orchestrator.DeleteTranscodesForMedia(movieID); err != nil {
+		return fmt.Errorf("failed to delete existing transcodes: %w", err)
+	}
 	if err := orchestrator.mediaStore.DeleteMovie(orchestrator.db.GetSqlxDB(), movieID); err != nil {
 		return err
 	}
@@ -371,7 +380,9 @@ func (orchestrator *storeOrchestrator) DeleteSeries(seriesID uuid.UUID) error {
 		episodeIDs[k] = v.ID
 	}
 
-	orchestrator.DeleteTranscodesForMedias(episodeIDs)
+	if err := orchestrator.DeleteTranscodesForMedias(episodeIDs); err != nil {
+		return fmt.Errorf("failed to delete existing transcodes: %w", err)
+	}
 	if err := orchestrator.mediaStore.DeleteSeries(orchestrator.db.GetSqlxDB(), seriesID); err != nil {
 		return err
 	}
@@ -394,7 +405,9 @@ func (orchestrator *storeOrchestrator) DeleteSeason(seasonID uuid.UUID) error {
 		episodeIDs[k] = v.ID
 	}
 
-	orchestrator.DeleteTranscodesForMedias(episodeIDs)
+	if err := orchestrator.DeleteTranscodesForMedias(episodeIDs); err != nil {
+		return fmt.Errorf("failed to delete existing transcodes: %w", err)
+	}
 	if err := orchestrator.mediaStore.DeleteSeason(orchestrator.db.GetSqlxDB(), seasonID); err != nil {
 		return err
 	}
@@ -407,7 +420,9 @@ func (orchestrator *storeOrchestrator) DeleteSeason(seasonID uuid.UUID) error {
 }
 
 func (orchestrator *storeOrchestrator) DeleteEpisode(episodeID uuid.UUID) error {
-	orchestrator.DeleteTranscodesForMedia(episodeID)
+	if err := orchestrator.DeleteTranscodesForMedia(episodeID); err != nil {
+		return fmt.Errorf("failed to delete existing transcodes: %w", err)
+	}
 	if err := orchestrator.mediaStore.DeleteEpisode(orchestrator.db.GetSqlxDB(), episodeID); err != nil {
 		return err
 	}
@@ -422,7 +437,7 @@ func (orchestrator *storeOrchestrator) DeleteEpisode(episodeID uuid.UUID) error 
 // in a single DB transaction.
 //
 // Error will be returned if any of the target IDs provided do not refer to existing Target
-// DB entries, or if the workflow infringes on any uniqueness constraints (label)
+// DB entries, or if the workflow infringes on any uniqueness constraints (label).
 func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID, enabled bool) (*workflow.Workflow, error) {
 	db := orchestrator.db.GetSqlxDB()
 	if err := orchestrator.workflowStore.Create(db, workflowID, label, enabled, targetIDs, criteria); err != nil {
@@ -433,11 +448,12 @@ func (orchestrator *storeOrchestrator) CreateWorkflow(workflowID uuid.UUID, labe
 }
 
 // UpdateWorkflow transactionally updates an existing Workflow model
-// using the optional paramaters provided. If a param is `nil` then the
+// using the optional parameters provided. If a param is `nil` then the
 // corresponding value in the model is NOT changed.
 func (orchestrator *storeOrchestrator) UpdateWorkflow(workflowID uuid.UUID, newLabel *string, newCriteria *[]match.Criteria, newTargetIDs *[]uuid.UUID, newEnabled *bool) (*workflow.Workflow, error) {
 	fail := func(desc string, err error) error {
-		if pqErr, ok := err.(*pq.Error); ok {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
 			if pqErr.Code == PgFkConstraintViolationCode && pqErr.Table == "workflow_transcode_targets" {
 				log.Debugf("DB query failure; apparent target ID FK violation %#v\n", err)
 				return ErrWorkflowTargetIDMissing
@@ -492,15 +508,19 @@ func (orchestrator *storeOrchestrator) DeleteWorkflow(id uuid.UUID) {
 func (orchestrator *storeOrchestrator) SaveTranscode(transcode *transcode.TranscodeTask) error {
 	return orchestrator.transcodeStore.SaveTranscode(orchestrator.db.GetSqlxDB(), transcode)
 }
+
 func (orchestrator *storeOrchestrator) GetTranscode(id uuid.UUID) *transcode.Transcode {
 	return orchestrator.transcodeStore.Get(orchestrator.db.GetSqlxDB(), id)
 }
+
 func (orchestrator *storeOrchestrator) GetAllTranscodes() ([]*transcode.Transcode, error) {
 	return orchestrator.transcodeStore.GetAll(orchestrator.db.GetSqlxDB())
 }
+
 func (orchestrator *storeOrchestrator) GetTranscodesForMedia(mediaID uuid.UUID) ([]*transcode.Transcode, error) {
 	return orchestrator.transcodeStore.GetForMedia(orchestrator.db.GetSqlxDB(), mediaID)
 }
+
 func (orchestrator *storeOrchestrator) DeleteTranscode(id uuid.UUID) error {
 	transcodePath, err := orchestrator.transcodeStore.Delete(orchestrator.db.GetSqlxDB(), id)
 	if err != nil {
@@ -513,9 +533,11 @@ func (orchestrator *storeOrchestrator) DeleteTranscode(id uuid.UUID) error {
 
 	return nil
 }
+
 func (orchestrator *storeOrchestrator) DeleteTranscodesForMedia(mediaID uuid.UUID) error {
 	return orchestrator.DeleteTranscodesForMedias([]uuid.UUID{mediaID})
 }
+
 func (orchestrator *storeOrchestrator) DeleteTranscodesForMedias(mediaIDs []uuid.UUID) error {
 	paths, err := orchestrator.transcodeStore.DeleteForMedias(orchestrator.db.GetSqlxDB(), mediaIDs)
 	if err != nil {
@@ -530,6 +552,7 @@ func (orchestrator *storeOrchestrator) DeleteTranscodesForMedias(mediaIDs []uuid
 
 	return nil
 }
+
 func (orchestrator *storeOrchestrator) GetForMediaAndTarget(mediaID uuid.UUID, targetID uuid.UUID) (*transcode.Transcode, error) {
 	return orchestrator.transcodeStore.GetForMediaAndTarget(orchestrator.db.GetSqlxDB(), mediaID, targetID)
 }
@@ -629,6 +652,7 @@ func (orchestrator *storeOrchestrator) updateUserPermissionsQuery(tx *sqlx.Tx, u
 
 	return nil
 }
+
 func (orchestrator *storeOrchestrator) anyOutstandingPermissions(permissions ...string) (bool, error) {
 	query, args, err := sqlx.In(`SELECT label FROM permissions WHERE label NOT IN(?)`, permissions)
 	if err != nil {

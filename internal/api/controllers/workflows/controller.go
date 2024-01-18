@@ -14,11 +14,11 @@ import (
 
 type (
 	Store interface {
-		DeleteWorkflow(uuid.UUID)
-		GetWorkflow(uuid.UUID) *workflow.Workflow
+		DeleteWorkflow(workflowID uuid.UUID)
+		GetWorkflow(workflowID uuid.UUID) *workflow.Workflow
 		GetAllWorkflows() []*workflow.Workflow
-		CreateWorkflow(uuid.UUID, string, []match.Criteria, []uuid.UUID, bool) (*workflow.Workflow, error)
-		UpdateWorkflow(uuid.UUID, *string, *[]match.Criteria, *[]uuid.UUID, *bool) (*workflow.Workflow, error)
+		CreateWorkflow(workflowID uuid.UUID, label string, criteria []match.Criteria, targetIDs []uuid.UUID, enabled bool) (*workflow.Workflow, error)
+		UpdateWorkflow(workflowID uuid.UUID, newLabel *string, newCriteria *[]match.Criteria, newTargetIDs *[]uuid.UUID, newEnabled *bool) (*workflow.Workflow, error)
 	}
 
 	WorkflowController struct{ store Store }
@@ -55,8 +55,8 @@ func (controller *WorkflowController) GetWorkflow(ec echo.Context, request gen.G
 func (controller *WorkflowController) UpdateWorkflow(ec echo.Context, request gen.UpdateWorkflowRequestObject) (gen.UpdateWorkflowResponseObject, error) {
 	var criteriaToUpdate *[]match.Criteria = nil
 	if request.Body.Criteria != nil {
-		criterias := util.ApplyConversion(*request.Body.Criteria, criteriaToModel)
-		criteriaToUpdate = &criterias
+		criteria := util.ApplyConversion(*request.Body.Criteria, criteriaToModel)
+		criteriaToUpdate = &criteria
 	}
 
 	if model, err := controller.store.UpdateWorkflow(request.Id, request.Body.Label, criteriaToUpdate, request.Body.TargetIds, request.Body.Enabled); err != nil {

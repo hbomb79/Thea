@@ -68,7 +68,7 @@ func (scraper *MetadataScraper) ScrapeFileForMediaInfo(path string) (*FileMediaM
 // - Title
 // - Year
 // - Is episode or movie?
-// - Season/episode information
+// - Season/episode information.
 func (scraper *MetadataScraper) extractTitleInformation(title string, output *FileMediaMetadata) error {
 	normaliserMatcher := regexp.MustCompile(`(?i)[\.\s\-]`)
 	seasonMatcher := regexp.MustCompile(`(?i)^(.*?)\s?s(\d+)\s?e(\d+)\s*((?:20|19)\d{2})?`)
@@ -106,14 +106,14 @@ func (scraper *MetadataScraper) extractTitleInformation(title string, output *Fi
 }
 
 // extractFfprobeInformation will read the media metadata using ffprobe. If successful,
-// the frame width/height and the runtime of the media will be populated in the output
+// the frame width/height and the runtime of the media will be populated in the output.
 func (scraper *MetadataScraper) extractFfprobeInformation(path string, output *FileMediaMetadata) error {
 	metadata, err := ffmpeg.ProbeFile(path, scraper.config.FfprobeBinPath)
 	if err != nil {
 		return ffmpeg.ParseFfmpegError(err)
 	}
 
-	//TODO Consider revising how we select the stream
+	// TODO Consider revising how we select the stream
 	streams := metadata.GetStreams()
 	stream := streams[0]
 	width := stream.GetWidth()
@@ -128,7 +128,7 @@ func (scraper *MetadataScraper) extractFfprobeInformation(path string, output *F
 
 // convertToInt is a helper method that accepts
 // a string input and will attempt to convert that string
-// to an integer - if it fails, -1 is returned
+// to an integer - if it fails, -1 is returned.
 func convertToInt(input string) int {
 	v, err := strconv.Atoi(input)
 	if err != nil {

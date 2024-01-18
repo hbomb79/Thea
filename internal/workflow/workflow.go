@@ -19,7 +19,7 @@ type Workflow struct {
 }
 
 func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
-	// Check that this item matches the the conditions specified by the profile. If there
+	// Check that this item matches the conditions specified by the profile. If there
 	// are no conditions, we assume this profile has none and will return true
 	if len(workflow.Criteria) == 0 {
 		return true

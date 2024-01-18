@@ -3,7 +3,7 @@ linters:
     - asciicheck
     - decorder
     - dupl
-    - dupword
+    # - dupword TODO: lot of false positives with this one
     - forcetypeassert
     - funlen
     - gocheckcompilerdirectives
@@ -13,7 +13,6 @@ linters:
     - gocyclo
     - godot
     - gofumpt
-    - gomnd
     - gosec
     - govet
     - lll
@@ -41,6 +40,8 @@ linters:
     - gochecksumtype
     - makezero
 linters-settings:
+  nestif:
+    min-complexity: 8
   funlen:
     # Checks the number of lines in a function.
     # If lower than 0, disable the check.

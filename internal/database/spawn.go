@@ -12,7 +12,7 @@ import (
 )
 
 // DatabaseConfig is a subset of the configuration focusing solely
-// on database connection items
+// on database connection items.
 type DatabaseConfig struct {
 	User     string `toml:"username" env:"DB_USERNAME" env-required:"true"`
 	Password string `toml:"password" env:"DB_PASSWORD" env-required:"true"`

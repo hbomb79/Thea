@@ -27,22 +27,22 @@ type (
 	}
 
 	searcher interface {
-		SearchForSeries(*media.FileMediaMetadata) (string, error)
-		SearchForMovie(*media.FileMediaMetadata) (string, error)
-		GetSeason(string, int) (*tmdb.Season, error)
-		GetSeries(string) (*tmdb.Series, error)
-		GetEpisode(string, int, int) (*tmdb.Episode, error)
-		GetMovie(string) (*tmdb.Movie, error)
+		SearchForSeries(metadata *media.FileMediaMetadata) (string, error)
+		SearchForMovie(metadata *media.FileMediaMetadata) (string, error)
+		GetSeason(seriesID string, seasonNumber int) (*tmdb.Season, error)
+		GetSeries(seriesID string) (*tmdb.Series, error)
+		GetEpisode(seriesID string, seasonNumber int, episodeNumber int) (*tmdb.Episode, error)
+		GetMovie(movieID string) (*tmdb.Movie, error)
 	}
 
 	DataStore interface {
 		GetAllMediaSourcePaths() ([]string, error)
-		GetSeasonWithTmdbID(string) (*media.Season, error)
-		GetSeriesWithTmdbID(string) (*media.Series, error)
-		GetEpisodeWithTmdbID(string) (*media.Episode, error)
+		GetSeasonWithTmdbID(seasonID string) (*media.Season, error)
+		GetSeriesWithTmdbID(seriesID string) (*media.Series, error)
+		GetEpisodeWithTmdbID(episodeID string) (*media.Episode, error)
 
-		SaveEpisode(*media.Episode, *media.Season, *media.Series) error
-		SaveMovie(*media.Movie) error
+		SaveEpisode(episode *media.Episode, season *media.Season, series *media.Series) error
+		SaveMovie(movie *media.Movie) error
 	}
 
 	// ingestService is responsible for managing the automatic detection
@@ -51,7 +51,7 @@ type (
 	// - Checked against a blacklist to ensure they should be processed
 	// - Run through a metadata scraper to find out as much information as possible
 	// - Searched for in TMDB using the information we scraped
-	// - Added to Thea's database, along with any related data
+	// - Added to Thea's database, along with any related data.
 	ingestService struct {
 		*sync.Mutex
 		scraper   scraper
@@ -81,7 +81,9 @@ func New(config Config, searcher searcher, scraper scraper, store DataStore, eve
 			return nil, fmt.Errorf("ingestion path '%s' is not a directory", ingestionPath)
 		}
 	} else if errors.Is(err, os.ErrNotExist) {
-		os.MkdirAll(ingestionPath, os.ModeDir|os.ModePerm)
+		if err := os.MkdirAll(ingestionPath, os.ModeDir|os.ModePerm); err != nil {
+			return nil, fmt.Errorf("failed to create directory: %w", err)
+		}
 	} else {
 		return nil, fmt.Errorf("ingestion path '%s' could not be accessed: %w", ingestionPath, err)
 	}
@@ -128,7 +130,8 @@ func (service *ingestService) Run(ctx context.Context) error {
 	}
 	defer service.workerPool.Close()
 
-	ev := make(event.HandlerChannel, 100)
+	handlerChannelSize := 100
+	ev := make(event.HandlerChannel, handlerChannelSize)
 	service.eventBus.RegisterHandlerChannel(ev, event.IngestCompleteEvent)
 
 	service.DiscoverNewFiles()
@@ -176,6 +179,7 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 
 	if err := item.ingest(service.eventBus, service.scraper, service.searcher, service.dataStore); err != nil {
 		service.eventBus.Dispatch(event.IngestUpdateEvent, item.ID)
+		//nolint
 		if trbl, ok := err.(Trouble); ok {
 			item.Trouble = &trbl
 			item.State = Troubled
@@ -201,14 +205,14 @@ func (service *ingestService) PerformItemIngest(w worker.Worker) (bool, error) {
 // Any paths found that match with any configured blacklists will
 // be ignored.
 //
-// Note: This function will take ownership of the mutex, and releases it when returning
+// Note: This function will take ownership of the mutex, and releases it when returning.
 func (service *ingestService) DiscoverNewFiles() {
 	service.Lock()
 	defer service.Unlock()
 
 	sourcePaths, err := service.dataStore.GetAllMediaSourcePaths()
 	if err != nil {
-		log.Fatalf("could not query DB for existing source paths: %v\n", err)
+		log.Fatalf("Could not query DB for existing source paths: %v\n", err) //nolint
 		return
 	}
 
@@ -261,7 +265,7 @@ func (service *ingestService) DiscoverNewFiles() {
 // the ingestion is not possible.
 // This method does not error if the itemID does not exist.
 //
-// Note: This function takes ownership of the mutex and releases it on return
+// Note: This function takes ownership of the mutex and releases it on return.
 func (service *ingestService) RemoveIngest(itemID uuid.UUID) error {
 	service.Lock()
 	defer service.Unlock()
@@ -351,9 +355,9 @@ func (service *ingestService) GetAllIngests() []*IngestItem {
 // If the item exists, but it's source file no longer exists, the item is removed
 // from the services state.
 // If the item exists and it's source still does not meet modtime requirements, then
-// then a new timer will be scheduled to re-evaluate the item hold.
+// a new timer will be scheduled to re-evaluate the item hold.
 //
-// Note: this function takes ownership of the mutex, and releases it when returning
+// Note: this function takes ownership of the mutex, and releases it when returning.
 func (service *ingestService) evaluateItemHold(id uuid.UUID) {
 	service.Lock()
 	defer service.Unlock()
@@ -366,7 +370,7 @@ func (service *ingestService) evaluateItemHold(id uuid.UUID) {
 	timeDiff, err := item.modtimeDiff()
 	if err != nil {
 		// Item's source file has gone away!
-		service.RemoveIngest(id)
+		_ = service.RemoveIngest(id)
 		return
 	}
 
@@ -412,7 +416,7 @@ func (service *ingestService) clearAllImportHoldTimers() {
 // and set it's state to 'INGESTING' to prevent another
 // worker from claiming it once the mutex lock is released.
 //
-// Note: This function takes ownership of the mutex, and releases it when returning
+// Note: This function takes ownership of the mutex, and releases it when returning.
 func (service *ingestService) claimIdleItem() *IngestItem {
 	service.Lock()
 	defer service.Unlock()
@@ -436,7 +440,7 @@ func (service *ingestService) wakeupWorkerPool() {
 // recursivelyWalkFileSystem will walk the file system, starting at the directory provided,
 // and construct a map of all the files inside (including any inside of nested directories).
 // Files whose paths are included in the 'known' map will NOT be included in the result.
-// The key of the returned map is the path, and the value contains the FileInfo
+// The key of the returned map is the path, and the value contains the FileInfo.
 func recursivelyWalkFileSystem(rootDirPath string, known map[string]bool) (map[string]fs.FileInfo, error) {
 	foundItems := make(map[string]fs.FileInfo, 0)
 	err := filepath.WalkDir(rootDirPath, func(path string, dir fs.DirEntry, err error) error {
@@ -457,7 +461,6 @@ func recursivelyWalkFileSystem(rootDirPath string, known map[string]bool) (map[s
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk file system: %w", err)
 	}

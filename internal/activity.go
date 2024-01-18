@@ -23,11 +23,11 @@ type (
 	broadcastHandler func(uuid.UUID) error
 
 	broadcaster interface {
-		BroadcastTranscodeUpdate(uuid.UUID) error
-		BroadcastTaskProgressUpdate(uuid.UUID) error
-		BroadcastWorkflowUpdate(uuid.UUID) error
-		BroadcastMediaUpdate(uuid.UUID) error
-		BroadcastIngestUpdate(uuid.UUID) error
+		BroadcastTranscodeUpdate(id uuid.UUID) error
+		BroadcastTaskProgressUpdate(id uuid.UUID) error
+		BroadcastWorkflowUpdate(id uuid.UUID) error
+		BroadcastMediaUpdate(id uuid.UUID) error
+		BroadcastIngestUpdate(id uuid.UUID) error
 	}
 
 	eventKey struct {
@@ -55,7 +55,8 @@ func newActivityService(broadcaster broadcaster, event event.EventHandler) *acti
 }
 
 func (service *activityService) Run(ctx context.Context) error {
-	messageChan := make(chan event.HandlerEvent, 100)
+	channelBufferSize := 100
+	messageChan := make(chan event.HandlerEvent, channelBufferSize)
 	service.eventBus.RegisterHandlerChannel(messageChan,
 		event.IngestUpdateEvent, event.IngestCompleteEvent, event.TranscodeUpdateEvent,
 		event.TranscodeTaskProgressEvent, event.TranscodeCompleteEvent, event.WorkflowUpdateEvent,
@@ -83,6 +84,7 @@ func (service *activityService) handleEvent(ev event.HandlerEvent) error {
 
 	resourceKey := eventKey{id: resourceID, ev: ev.Event}
 
+	//exhaustive:enforce
 	switch ev.Event {
 	case event.IngestUpdateEvent:
 		fallthrough
@@ -96,17 +98,19 @@ func (service *activityService) handleEvent(ev event.HandlerEvent) error {
 		service.scheduleRapidEventBroadcast(resourceKey, service.BroadcastTaskProgressUpdate)
 	case event.WorkflowUpdateEvent:
 		service.scheduleEventBroadcast(resourceKey, service.BroadcastWorkflowUpdate)
+	case event.NewMediaEvent:
+		service.scheduleEventBroadcast(resourceKey, service.BroadcastMediaUpdate)
+	case event.DeleteMediaEvent:
+		service.scheduleEventBroadcast(resourceKey, service.BroadcastMediaUpdate)
 	case event.DownloadUpdateEvent:
 		fallthrough
-	// case event.DOWNLOAD_COMPLETE:
-	// 	service.scheduleEventBroadcast(resourceKey, service.BroadcastDownloadUpdate)
-	// case event.DOWNLOAD_PROGRESS:
-	// 	service.scheduleEventBroadcast(resourceKey, service.BroadcastDownloadProgressUpdate)
-	default:
-		return errors.New("unknown event type")
+	case event.DownloadCompleteEvent:
+		fallthrough
+	case event.DownloadProgressEvent:
+		return nil
 	}
 
-	return nil
+	return errors.New("unknown event type")
 }
 
 func (service *activityService) scheduleEventBroadcast(resourceKey eventKey, handler broadcastHandler) {
@@ -149,5 +153,7 @@ func (service *activityService) broadcast(resourceKey eventKey, handler broadcas
 		delete(service.maxTimers, resourceKey)
 	}
 
-	handler(resourceKey.id)
+	if err := handler(resourceKey.id); err != nil {
+		log.Errorf("Failed to broadcast event %v due to error: %s\n", resourceKey, err)
+	}
 }

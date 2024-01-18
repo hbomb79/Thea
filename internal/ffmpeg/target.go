@@ -23,7 +23,9 @@ type (
 	Opts ffmpeg.Options
 )
 
-// Scan scan value into Jsonb, implements sql.Scanner interface
+const defaultThreads = 2
+
+// Scan scan value into Jsonb, implements sql.Scanner interface.
 func (opts *Opts) Scan(value interface{}) error {
 	bytes, ok := value.([]byte)
 	if !ok {
@@ -32,11 +34,11 @@ func (opts *Opts) Scan(value interface{}) error {
 
 	result := Opts{}
 	err := json.Unmarshal(bytes, &result)
-	*opts = Opts(result)
+	*opts = result
 	return err
 }
 
-// Value return json value, implement driver.Valuer interface
+// Value return json value, implement driver.Valuer interface.
 func (opts Opts) Value() (driver.Value, error) {
 	return json.Marshal(opts)
 }
@@ -86,4 +88,4 @@ func (target *Target) String() string {
 	return fmt.Sprintf("Target{ID=%s Label=%s}", target.ID, target.Label)
 }
 
-func (target *Target) RequiredThreads() int { return 2 }
+func (target *Target) RequiredThreads() int { return defaultThreads }

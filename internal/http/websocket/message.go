@@ -22,7 +22,7 @@ const (
 // so the receiving client is aware of which message this reply
 // is for. Origin is much for the same - it allows us to
 // send the reply to the websocket attached to the client
-// with the matching UUID
+// with the matching UUID.
 type SocketMessage struct {
 	Title  string                 `json:"title"`
 	Body   map[string]interface{} `json:"arguments"`

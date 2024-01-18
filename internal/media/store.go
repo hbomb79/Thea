@@ -36,7 +36,7 @@ type (
 
 	// Watchable represents the union of properties that we expect to see
 	// populated on all watchable media (movie/episode). Media containers,
-	// such as a series/season are not required to contain this information
+	// such as a series/season are not required to contain this information.
 	Watchable struct {
 		MediaResolution
 		SourcePath string `db:"source_path"`
@@ -78,16 +78,16 @@ type (
 	SeriesStub struct {
 		*Series
 		SeasonCount int
-		//TODO: ratings (anything else?)
+		// TODO: ratings (anything else?)
 	}
 
 	// InflatedSeries follows a similar principal to SeriesStub, in that is represents a Series *along with* other information
-	// which has been retrived using table joins/additional queries. It's a representation of the basic Series entity after
+	// which has been retrieved using table joins/additional queries. It's a representation of the basic Series entity after
 	// being 'inflated' with all the information we might reasonably want to bundle with it (such as seasons and episode [stubs]).
 	InflatedSeries struct {
 		*Series
 		Seasons []*InflatedSeason
-		//TODO: cast members, ratings, etc
+		// TODO: cast members, ratings, etc
 	}
 
 	InflatedSeason struct {
@@ -111,9 +111,7 @@ type (
 	}
 )
 
-var (
-	storeLogger = logger.Get("MediaStore")
-)
+var storeLogger = logger.Get("MediaStore")
 
 const (
 	IDCol     = "id"
@@ -159,20 +157,13 @@ type MediaListOrderBy struct {
 	Descending bool
 }
 
-type mediaType int
-
-const (
-	episodeType mediaType = iota
-	movieType
-)
-
 type Store struct{ mediaGenreStore }
 
 // SaveMovie upserts the provided Movie model to the database. Existing models
 // to update are found using the 'TmdbId' as this is expected to be a stable
 // identifier.
 //
-// NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
+// NOTE: the ID of the media may be UPDATED to match existing DB entry (if any).
 func (store *Store) SaveMovie(db database.Queryable, movie *Movie) error {
 	var updatedMovie Movie
 	if err := db.QueryRowx(`
@@ -195,7 +186,7 @@ func (store *Store) SaveMovie(db database.Queryable, movie *Movie) error {
 // to update are found using the 'TmdbID' as this is expected to be a stable
 // identifier.
 //
-// NOTE: the ID of the media may be UPDATED to match existing DB entry (if any)
+// NOTE: the ID of the media may be UPDATED to match existing DB entry (if any).
 func (store *Store) SaveSeries(db database.Queryable, series *Series) error {
 	var updatedSeries Series
 	if err := db.QueryRowx(`
@@ -218,7 +209,7 @@ func (store *Store) SaveSeries(db database.Queryable, series *Series) error {
 // to update are found using the 'TmdbID' as this is expected to be a stable
 // identifier.
 //
-// NOTE: the PK and FK ID's of the media may be UPDATED to match existing DB entry (if any)
+// NOTE: the PK and FK ID's of the media may be UPDATED to match existing DB entry (if any).
 func (store *Store) SaveSeason(db database.Queryable, season *Season) error {
 	var updatedSeason Season
 	if err := db.QueryRowx(`
@@ -242,7 +233,7 @@ func (store *Store) SaveSeason(db database.Queryable, season *Season) error {
 // and series. Existing models are found using the models 'TmdbID'
 // as this is expected to be a stable identifier.
 //
-// NOTE: the PK and FK ID's of the media may be UPDATED to match existing DB entry (if any)
+// NOTE: the PK and FK ID's of the media may be UPDATED to match existing DB entry (if any).
 func (store *Store) SaveEpisode(db database.Queryable, episode *Episode) error {
 	var updatedEpisode Episode
 	if err := db.QueryRowx(`
@@ -268,7 +259,7 @@ func (store *Store) SaveEpisode(db database.Queryable, episode *Episode) error {
 // query is successful is used to populate a media Container.
 func (store *Store) GetMedia(db database.Queryable, mediaID uuid.UUID) *Container {
 	if movie, err := store.GetMovie(db, mediaID); err != nil {
-		//TODO: consider wrapping these three in a transaction (probably overkill though)
+		// TODO: consider wrapping these three in a transaction (probably overkill though)
 		storeLogger.Emit(logger.DEBUG, "Failed to find movie with media ID %s: %v {falling back to searching for episode}\n", mediaID, err)
 		if episode, err := store.GetEpisode(db, mediaID); err != nil {
 			storeLogger.Emit(logger.DEBUG, "Failed to fetch episode with media ID %s: %v\n", mediaID, err)
@@ -276,12 +267,23 @@ func (store *Store) GetMedia(db database.Queryable, mediaID uuid.UUID) *Containe
 		} else {
 			season, err := store.GetSeason(db, episode.SeasonID)
 			if err != nil {
-				storeLogger.Emit(logger.FATAL, "Episode %s found, but error (%v) occurred when fetching referenced season. This may indicate a serious problem with the referential integrity of the DB\n", mediaID, err)
+				storeLogger.Emit(
+					logger.FATAL,
+					"Episode %s found, but error (%v) occurred when fetching referenced season. This may indicate a serious problem with the referential integrity of the DB\n",
+					mediaID,
+					err,
+				)
 				return nil
 			}
 			series, err := store.GetSeries(db, season.SeriesID)
 			if err != nil {
-				storeLogger.Emit(logger.FATAL, "Episode %s and season %s found, but error (%v) occurred when fetching referenced series. This may indicate a serious problem with the referential integrity of the DB\n", mediaID, season.ID, err)
+				storeLogger.Emit(
+					logger.FATAL,
+					"Episode %s and season %s found, but error (%v) occurred when fetching referenced series. This may indicate a serious problem with the referential integrity of the DB\n",
+					mediaID,
+					season.ID,
+					err,
+				)
 				return nil
 			}
 			return &Container{Type: EpisodeContainerType, Episode: episode, Series: series, Season: season}
@@ -292,22 +294,22 @@ func (store *Store) GetMedia(db database.Queryable, mediaID uuid.UUID) *Containe
 }
 
 // ListMovie returns the Movie models for all media of type 'movie' in the database, or an error
-// if the underpinning SQL query failed
+// if the underpinning SQL query failed.
 func (store *Store) ListMovie(db *sqlx.DB) ([]*Movie, error) {
 	var dest []*Movie
 	if err := db.Unsafe().Select(&dest, `SELECT * FROM media WHERE type='movie'`); err != nil {
-		return nil, fmt.Errorf("failed to select all movies: %v", err)
+		return nil, fmt.Errorf("failed to select all movies: %w", err)
 	}
 
 	return dest, nil
 }
 
 // ListSeries returns the Series models for series stored in the database, or an error
-// if the underpinning SQL query failed
+// if the underpinning SQL query failed.
 func (store *Store) ListSeries(db database.Queryable) ([]*Series, error) {
 	var dest []*Series
 	if err := db.Select(&dest, `SELECT * FROM series`); err != nil {
-		return nil, fmt.Errorf("failed to select all series: %v", err)
+		return nil, fmt.Errorf("failed to select all series: %w", err)
 	}
 
 	return dest, nil
@@ -321,6 +323,7 @@ func (ord *MediaListOrderBy) String() string {
 
 	return fmt.Sprintf("%s %s", ord.Column, dir)
 }
+
 func getMediaListCte(includeTypes []MediaListType) string {
 	movieEnabledClause := "AND false"
 	seriesAllowedClause := "WHERE false"
@@ -368,7 +371,6 @@ func getMediaListCte(includeTypes []MediaListType) string {
 		movieEnabledClause,
 		getCoalescedGenresSQL("series_genres", "series", "series_id"),
 		seriesAllowedClause)
-
 }
 
 // ListMedia allows for series/movies to be listed (controllable using allowedTypes). The query also
@@ -380,7 +382,15 @@ func getMediaListCte(includeTypes []MediaListType) string {
 //   - orderBy -> defaults to updated_at in ascending order
 //   - offset -> defaults to 0
 //   - limit -> default to 15, maximum 100
-func (store *Store) ListMedia(db database.Queryable, titleFilter string, allowedTypes []MediaListType, allowedGenres []int, orderBy []MediaListOrderBy, offset int, limit int) ([]*MediaListResult, error) {
+func (store *Store) ListMedia(
+	db database.Queryable,
+	titleFilter string,
+	allowedTypes []MediaListType,
+	allowedGenres []int,
+	orderBy []MediaListOrderBy,
+	offset int,
+	limit int,
+) ([]*MediaListResult, error) {
 	if len(allowedTypes) == 0 {
 		allowedTypes = []MediaListType{"movie", "series"}
 	}
@@ -459,7 +469,7 @@ func (store *Store) ListMedia(db database.Queryable, titleFilter string, allowed
 
 // CountSeasonsInSeries queries the database for the number of seasons associated with
 // each of the given series, and constructs a mapping from seriesID -> season count.
-// NB: series which did not exist in the database will be omitted from the result mapping
+// NB: series which did not exist in the database will be omitted from the result mapping.
 func (store *Store) CountSeasonsInSeries(db database.Queryable, seriesIDs []uuid.UUID) (map[uuid.UUID]int, error) {
 	query, args, err := sqlx.In(`
 		SELECT series.id AS id, COUNT(season.*) AS count FROM series
@@ -467,9 +477,8 @@ func (store *Store) CountSeasonsInSeries(db database.Queryable, seriesIDs []uuid
 		  ON season.series_id = series.id
 		WHERE series.id IN (?)
 		GROUP BY series.id`, seriesIDs)
-
 	if err != nil {
-		return nil, fmt.Errorf("failed to construct query to count seasons for series %v: %v", seriesIDs, err)
+		return nil, fmt.Errorf("failed to construct query to count seasons for series %v: %w", seriesIDs, err)
 	}
 
 	type r struct {
@@ -479,7 +488,7 @@ func (store *Store) CountSeasonsInSeries(db database.Queryable, seriesIDs []uuid
 
 	var results []*r
 	if err := db.Select(&results, db.Rebind(query), args...); err != nil {
-		return nil, fmt.Errorf("failed to count seasons asscoiated with series %v: %v", seriesIDs, err)
+		return nil, fmt.Errorf("failed to count seasons asscoiated with series %v: %w", seriesIDs, err)
 	}
 
 	finalResult := make(map[uuid.UUID]int)
@@ -516,6 +525,8 @@ func (store *Store) GetSeasonsForSeries(db database.Queryable, seriesID uuid.UUI
 //
 // NB: if a series ID does not reference an existing series, or it has no episodes, then it's key
 // will be missing from the resulting map.
+//
+//nolint:dupl // this lint error is just blatantly incorrect - I suspect it's ignoring the query string, but even the struct field 'OwningSeriesID' is different...
 func (store *Store) GetEpisodesForSeries(db database.Queryable, seriesIDs []uuid.UUID) (map[uuid.UUID][]*Episode, error) {
 	wrap := func(err error) error {
 		return fmt.Errorf("failed to get episodes for series %s: %w", seriesIDs, err)
@@ -558,6 +569,8 @@ func (store *Store) GetEpisodesForSeries(db database.Queryable, seriesIDs []uuid
 //
 // NB: if a season ID does not reference an existing season, or it has no episodes, then it's key
 // will be missing from the resulting map.
+//
+//nolint:dupl // this lint error is just blatantly incorrect - I suspect it's ignoring the query string, but even the struct field 'OwningSeasonID' is different...
 func (store *Store) GetEpisodesForSeasons(db database.Queryable, seasonIDs []uuid.UUID) (map[uuid.UUID][]*Episode, error) {
 	wrap := func(err error) error {
 		return fmt.Errorf("failed to get episodes for seasons %s: %w", seasonIDs, err)
@@ -714,7 +727,7 @@ func queryRowMovie(db database.Queryable, table string, col string, val any) (*M
 }
 
 // queryRowEpisode extracts a Media row from the database and ensures that the row returned represents
-// an episode (the type must be 'episode', and the episode-specific information must be non-nil)
+// an episode (the type must be 'episode', and the episode-specific information must be non-nil).
 func queryRowEpisode(db database.Queryable, table string, col string, val any) (*Episode, error) {
 	r, e := queryRow[media](db, table, col, val, MediaEpisodeClause)
 	if e != nil {

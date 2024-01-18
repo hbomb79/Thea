@@ -31,7 +31,7 @@ type SocketHub struct {
 
 // New returns a new SocketHub with the channels,
 // maps and slices initialised to sane starting
-// values
+// values.
 func New() *SocketHub {
 	return &SocketHub{
 		handlers: make(map[string]SocketHandler),
@@ -44,14 +44,14 @@ func New() *SocketHub {
 	}
 }
 
-// BindCommand a provided particular command to a particular socker handler
+// BindCommand a provided particular command to a particular socker handler.
 func (hub *SocketHub) BindCommand(command string, handler SocketHandler) *SocketHub {
 	hub.handlers[command] = handler
 	return hub
 }
 
 // Start beings the socket hub by listening on all related channels
-// for incoming clients and messages
+// for incoming clients and messages.
 func (hub *SocketHub) Start(ctx context.Context) {
 	if hub.running {
 		socketLogger.Emit(logger.WARNING, "Attempting to start socketHub when already running! Ignoring request.\n")
@@ -91,7 +91,9 @@ loop:
 			}
 
 			// No specific target
-			hub.broadcastMessage(message)
+			if err := hub.broadcastMessage(message); err != nil {
+				socketLogger.Warnf("Failed to broadcast message: %v\n", err)
+			}
 		case message := <-hub.receiveCh:
 			go hub.handleMessage(message)
 		case client := <-hub.registerCh:
@@ -128,7 +130,7 @@ loop:
 // Send accepts a socket message and will emit this message on
 // the send channel - message is ignored if hub is not running (see Start())
 // A message provided that has a Target will only be sent to the client with
-// a matching ID
+// a matching ID.
 func (hub *SocketHub) Send(message *SocketMessage) {
 	if !hub.running {
 		socketLogger.Emit(logger.WARNING, "Attempted to send message via socket hub, however the hub is offline. Ignoring message.\n")
@@ -138,7 +140,7 @@ func (hub *SocketHub) Send(message *SocketMessage) {
 	hub.sendCh <- message
 }
 
-// UpgradeToSocket upgrades a given HTTP request to a websocket and adds the new clients to the hub
+// UpgradeToSocket upgrades a given HTTP request to a websocket and adds the new clients to the hub.
 func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	if !hub.running {
 		socketLogger.Emit(logger.ERROR, "Failed to upgrade incoming HTTP request to a websocket: SocketHub has not been started!\n")
@@ -189,7 +191,7 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Ensure the client is deregistered once it's read loop closes
 	// If client.Start finishes, it's either because the client disconnected
-	// or an error occured - either way, we need to deregister it.
+	// or an error occurred - either way, we need to deregister it.
 	defer func() {
 		hub.deregisterCh <- client
 		client.Close()
@@ -202,7 +204,7 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 // Closes the sockethub by deregistering and closing all
-// connected clients and sockets
+// connected clients and sockets.
 func (hub *SocketHub) close() {
 	if !hub.running {
 		socketLogger.Emit(logger.WARNING, "Attempted to close a socket hub that is not running!\n")
@@ -222,7 +224,7 @@ func (hub *SocketHub) close() {
 
 // handleMessage is an internal method that accepts a message
 // and wil forward the command to the bound handler if one
-// exists. If none exists, a warning is printed to the console
+// exists. If none exists, a warning is printed to the console.
 func (hub *SocketHub) handleMessage(command *SocketMessage) {
 	if command.Type != Command {
 		socketLogger.Emit(logger.WARNING, "SocketHub received a message from client {%v} of type {%v} - this type is not allowed, only commands can be sent to the server!\n", command.Origin, command.Type)
@@ -268,7 +270,7 @@ func (hub *SocketHub) findClient(id *uuid.UUID) (int, *socketClient) {
 }
 
 // broadcastMessage sends the provided message to every connected
-// client - useful for pushing new state to all clients interested
+// client - useful for pushing new state to all clients interested.
 func (hub *SocketHub) broadcastMessage(message *SocketMessage) error {
 	for _, client := range hub.clients {
 		if err := client.SendMessage(message); err != nil {

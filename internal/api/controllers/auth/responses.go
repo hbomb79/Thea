@@ -15,19 +15,19 @@ import (
 
 type LoginResponse struct {
 	User         gen.User
-	AuthToken    http.Cookie `json:"auth-token"`
-	RefreshToken http.Cookie `json:"refresh-token"`
+	AuthToken    http.Cookie `json:"auth_token"`
+	RefreshToken http.Cookie `json:"refresh_token"`
 }
 type SetTokenCookiesResponse struct {
-	AuthToken    http.Cookie `json:"auth-token"`
-	RefreshToken http.Cookie `json:"refresh-token"`
+	AuthToken    http.Cookie `json:"auth_token"`
+	RefreshToken http.Cookie `json:"refresh_token"`
 }
 
 func (response LoginResponse) VisitLoginResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	http.SetCookie(w, &response.AuthToken)
 	http.SetCookie(w, &response.RefreshToken)
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 
 	return json.NewEncoder(w).Encode(response.User)
 }
@@ -35,7 +35,7 @@ func (response LoginResponse) VisitLoginResponse(w http.ResponseWriter) error {
 func (response SetTokenCookiesResponse) setTokensInResponse(w http.ResponseWriter) error {
 	http.SetCookie(w, &response.AuthToken)
 	http.SetCookie(w, &response.RefreshToken)
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 
 	return nil
 }
@@ -43,9 +43,11 @@ func (response SetTokenCookiesResponse) setTokensInResponse(w http.ResponseWrite
 func (response SetTokenCookiesResponse) VisitRefreshResponse(w http.ResponseWriter) error {
 	return response.setTokensInResponse(w)
 }
+
 func (response SetTokenCookiesResponse) VisitLogoutSessionResponse(w http.ResponseWriter) error {
 	return response.setTokensInResponse(w)
 }
+
 func (response SetTokenCookiesResponse) VisitLogoutAllResponse(w http.ResponseWriter) error {
 	return response.setTokensInResponse(w)
 }

@@ -65,7 +65,9 @@ func (cmd *TranscodeCmd) Run(ctx context.Context, ffmpegConfig transcoder.Option
 		Output(cmd.outputPath).
 		WithContext(&ctx)
 
-	os.MkdirAll(filepath.Dir(cmd.outputPath), os.ModeDir)
+	if err := os.MkdirAll(filepath.Dir(cmd.outputPath), os.ModeDir); err != nil {
+		return err
+	}
 
 	progressChannel, err := transcoder.Start(ffmpegConfig)
 	if err != nil {
@@ -96,8 +98,7 @@ func (cmd *TranscodeCmd) Suspend() error {
 		return fmt.Errorf("cannot suspend FFmpeg instance %v because command is not intialised", cmd)
 	}
 
-	cmd.runningCommand.Process.Signal(syscall.SIGTSTP)
-	return nil
+	return cmd.runningCommand.Process.Signal(syscall.SIGTSTP)
 }
 
 func (cmd *TranscodeCmd) Continue() error {
@@ -105,8 +106,7 @@ func (cmd *TranscodeCmd) Continue() error {
 		return fmt.Errorf("cannot continue FFmpeg instance %v because command is not initialised", cmd)
 	}
 
-	cmd.runningCommand.Process.Signal(syscall.SIGCONT)
-	return nil
+	return cmd.runningCommand.Process.Signal(syscall.SIGCONT)
 }
 
 func (cmd *TranscodeCmd) RunningCommand() *exec.Cmd {
@@ -151,6 +151,15 @@ func ParseFfmpegError(err error) error {
 	}
 
 	// Extract the exception from this result
-	ffmpegException := out["error"].(map[string]interface{})
-	return errors.New(ffmpegException["string"].(string))
+	errMap, ok := out["error"].(map[string]interface{})
+	if !ok {
+		return errors.New(groups[1])
+	}
+
+	errMsg, ok := errMap["string"].(string)
+	if !ok {
+		return errors.New(groups[1])
+	}
+
+	return fmt.Errorf("FFmpeg transcoding failed: %s", errMsg)
 }

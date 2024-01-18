@@ -13,10 +13,10 @@ import (
 
 type (
 	Store interface {
-		SaveTarget(*ffmpeg.Target) error
-		GetTarget(uuid.UUID) *ffmpeg.Target
+		SaveTarget(target *ffmpeg.Target) error
+		GetTarget(targetID uuid.UUID) *ffmpeg.Target
 		GetAllTargets() []*ffmpeg.Target
-		DeleteTarget(uuid.UUID)
+		DeleteTarget(targetID uuid.UUID)
 	}
 
 	TargetController struct {
@@ -89,7 +89,7 @@ func (controller *TargetController) DeleteTarget(ec echo.Context, request gen.De
 func ffmpegOptsToModel(opts map[string]interface{}) (*ffmpeg.Opts, error) {
 	var model ffmpeg.Opts
 	if err := mapstructure.Decode(opts, &model); err != nil {
-		return nil, fmt.Errorf("failed to decode provided ffmpeg options: %s", err)
+		return nil, fmt.Errorf("failed to decode provided ffmpeg options: %w", err)
 	}
 
 	return &model, nil

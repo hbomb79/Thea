@@ -98,6 +98,7 @@ func (e LogStatus) String() string {
 
 func (e LogStatus) Color() *color.Color {
 	return []*color.Color{
+		color.New(color.FgWhite, color.Faint, color.Italic),   // Verbose
 		color.New(color.FgWhite, color.Faint, color.Italic),   // Debug
 		color.New(color.FgWhite),                              // Info
 		color.New(color.FgHiGreen),                            // Success

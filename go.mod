@@ -22,10 +22,14 @@ require (
 	github.com/pressly/goose/v3 v3.13.4
 	github.com/rjeczalik/notify v0.9.3
 	github.com/simukti/sqldb-logger v0.0.0-20230108155151-646c1a075551
+	github.com/stretchr/testify v1.8.4
 )
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/stretchr/objx v0.5.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 

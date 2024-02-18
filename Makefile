@@ -35,6 +35,10 @@ fix: build
 	go mod tidy -v
 	golangci-lint run --fix
 
+.PHONY: lint
+lint:
+	golangci-lint run
+
 ## audit: run quality control checks
 .PHONY: audit
 audit: tidy

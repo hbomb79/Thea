@@ -22,11 +22,11 @@ import (
 var log = logger.Get("IngestServ")
 
 type (
-	scraper interface {
+	Scraper interface {
 		ScrapeFileForMediaInfo(path string) (*media.FileMediaMetadata, error)
 	}
 
-	searcher interface {
+	Searcher interface {
 		SearchForSeries(metadata *media.FileMediaMetadata) (string, error)
 		SearchForMovie(metadata *media.FileMediaMetadata) (string, error)
 		GetSeason(seriesID string, seasonNumber int) (*tmdb.Season, error)
@@ -54,8 +54,8 @@ type (
 	// - Added to Thea's database, along with any related data.
 	ingestService struct {
 		*sync.Mutex
-		scraper   scraper
-		searcher  searcher
+		scraper   Scraper
+		searcher  Searcher
 		dataStore DataStore
 		eventBus  event.EventCoordinator
 
@@ -72,7 +72,7 @@ type (
 // The configs 'IngestPath' is validated to be an existing directory.
 // If the directory is missing it will be created, if the path
 // provided points to an existing FILE, an error is returned.
-func New(config Config, searcher searcher, scraper scraper, store DataStore, eventBus event.EventCoordinator) (*ingestService, error) {
+func New(config Config, searcher Searcher, scraper Scraper, store DataStore, eventBus event.EventCoordinator) (*ingestService, error) {
 	// Ensure config ingest path is a valid directory, create it
 	// if it's missing.
 	ingestionPath := config.GetIngestPath()
@@ -250,7 +250,7 @@ func (service *ingestService) DiscoverNewFiles() {
 
 		service.items = append(service.items, ingestItem)
 		if itemState == ImportHold {
-			service.scheduleImportHoldTimer(itemID, timeDiff-minModtimeAge)
+			service.scheduleImportHoldTimer(itemID, minModtimeAge-timeDiff)
 		}
 	}
 
@@ -375,8 +375,8 @@ func (service *ingestService) evaluateItemHold(id uuid.UUID) {
 	}
 
 	thresholdModTime := service.config.RequiredModTimeAgeDuration()
-	if *timeDiff > thresholdModTime {
-		service.scheduleImportHoldTimer(id, *timeDiff-thresholdModTime)
+	if *timeDiff < thresholdModTime {
+		service.scheduleImportHoldTimer(id, thresholdModTime-*timeDiff)
 		return
 	}
 

@@ -49,16 +49,21 @@ func New(authProvider AuthProvider, store Store) *AuthController {
 //   - Generates an auth token, and a refresh token, and stores
 //     these in the requests cookies
 func (controller *AuthController) Login(ec echo.Context, request gen.LoginRequestObject) (gen.LoginResponseObject, error) {
+	// TODO: this needs fixing as we'd expect that the "LastLoginAt" field of the user
+	// is updated and provided IN the response. Currently it's up to the JWT auth code
+	// to record these login events, which means we can't really do that.
+	// An improvement would be exposing a single 'LoginAsUser' method which would
+	// record these login events and return a User model with the timestamps correctly updated
 	user, err := controller.store.GetUserWithUsernameAndPassword([]byte(request.Body.Username), []byte(request.Body.Password))
 	if err != nil {
 		log.Warnf("Failed to authenticate due to error: %v\n", err)
-		return nil, errUnauthorized
+		return nil, gen.UnauthorizedError
 	}
 
 	authTokenCookie, refreshTokenCookie, err := controller.authProvider.GenerateTokenCookies(user.ID)
 	if err != nil {
 		log.Warnf("Failed to authenticate due to error: %v\n", err)
-		return nil, errUnauthorized
+		return nil, gen.UnauthorizedError
 	}
 	return LoginResponse{User: userToDto(user), AuthToken: *authTokenCookie, RefreshToken: *refreshTokenCookie}, nil
 }

@@ -104,6 +104,7 @@ func NewRestGateway(
 
 	// -- Setup Middleware --
 	ec := echo.New()
+	ec.HTTPErrorHandler = gen.GetHTTPErrorHandler(ec.DefaultHTTPErrorHandler)
 	ec.OnAddRouteHandler = func(_ string, route echo.Route, _ echo.HandlerFunc, _ []echo.MiddlewareFunc) {
 		log.Emit(logger.DEBUG, "Registered new route %s %s\n", route.Method, route.Path)
 	}

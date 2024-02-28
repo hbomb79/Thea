@@ -1,0 +1,3 @@
+# Spawns a postgres DB, and an instance of Thea which uses this
+# testing DB for it's data store. This spawned instance will
+# peform the migrations to bring the DB up to it's expected state

@@ -105,6 +105,7 @@ type (
 // Finally, the two secrets which are used to sign the tokens. These two
 // secrets should not match, and should be >= 256 bits in size.
 func NewJwtAuth(store Store, refreshRoutePath string, authTokenSecret []byte, refreshTokenSecret []byte) *jwtAuthProvider {
+	jwt.TimePrecision = time.Microsecond
 	return &jwtAuthProvider{
 		store,
 		authTokenSecret,
@@ -439,9 +440,13 @@ func (auth *jwtAuthProvider) generateAccessToken(userID uuid.UUID) (string, time
 
 	exp := time.Now().Add(AuthTokenLifespan)
 	claims := &authTokenClaims{
-		UserID:           userID,
-		Permissions:      user.Permissions,
-		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)},
+		UserID:      userID,
+		Permissions: user.Permissions,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    auth.refreshTokenCookiePath,
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(exp),
+		},
 	}
 
 	token, err := generateToken(claims, auth.authTokenSecret)
@@ -462,8 +467,12 @@ func (auth *jwtAuthProvider) generateRefreshToken(userID uuid.UUID) (string, tim
 
 	exp := time.Now().Add(RefreshTokenLifespan)
 	claims := &refreshTokenClaims{
-		UserID:           userID,
-		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(exp)},
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    auth.refreshTokenCookiePath,
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(exp),
+		},
 	}
 
 	token, err := generateToken(claims, auth.refreshTokenSecret)

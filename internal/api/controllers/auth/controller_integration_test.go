@@ -10,11 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const (
-	loginCookiesCount = 2
-)
-
-var ctx = context.Background() // TODO: get these from env.
+var ctx = context.Background()
 
 /*
 This package performs HTTP REST API testing against

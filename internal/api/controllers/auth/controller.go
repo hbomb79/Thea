@@ -57,13 +57,13 @@ func (controller *AuthController) Login(ec echo.Context, request gen.LoginReques
 	user, err := controller.store.GetUserWithUsernameAndPassword([]byte(request.Body.Username), []byte(request.Body.Password))
 	if err != nil {
 		log.Warnf("Failed to authenticate due to error: %v\n", err)
-		return nil, gen.UnauthorizedError
+		return nil, gen.ErrAPIUnauthorized
 	}
 
 	authTokenCookie, refreshTokenCookie, err := controller.authProvider.GenerateTokenCookies(user.ID)
 	if err != nil {
 		log.Warnf("Failed to authenticate due to error: %v\n", err)
-		return nil, gen.UnauthorizedError
+		return nil, gen.ErrAPIUnauthorized
 	}
 	return LoginResponse{User: userToDto(user), AuthToken: *authTokenCookie, RefreshToken: *refreshTokenCookie}, nil
 }

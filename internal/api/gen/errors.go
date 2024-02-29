@@ -30,7 +30,7 @@ func (err APIError) Error() string {
 	return fmt.Sprintf("api error: %s", err.Message)
 }
 
-var UnauthorizedError APIError = APIError{Status: 401}
+var ErrAPIUnauthorized APIError = APIError{Status: 401}
 
 // GetHTTPErrorHandler returns an echo HTTP error handler
 // which understands how to interpret APIError. If an error is

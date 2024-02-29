@@ -63,7 +63,7 @@ func NewClientWithCredentials(t *testing.T, username string, password string) (T
 	return TestUser{User: *resp.JSON200, Password: password}, authClient
 }
 
-// newClientWithUser creates a new user using a default API client,
+// NewClientWithRandomUser creates a new user using a default API client,
 // and returns back a new client which has request editors to automatically
 // inject the new users auth tokens in to requests made with the client.
 // TODO: add cleanup task to testing context to delete user (t.Cleanup()).

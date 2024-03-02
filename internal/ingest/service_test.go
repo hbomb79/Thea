@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/event"
 	"github.com/hbomb79/Thea/internal/http/tmdb"
 	"github.com/hbomb79/Thea/internal/ingest"
@@ -42,11 +43,8 @@ type Service interface {
 	GetAllIngests() []*ingest.IngestItem
 }
 
-// startService starts an ingest service instance using the
-// config and mocks provided. A teardown function is returned, which
-// should be called when the test is complete.
-func startService(t *testing.T, config ingest.Config, searcherMock *mocks.MockSearcher, scraperMock *mocks.MockScraper, storeMock *mocks.MockDataStore) Service {
-	srv, err := ingest.New(config, searcherMock, scraperMock, storeMock, defaultEventBus)
+func startServiceWithBus(t *testing.T, config ingest.Config, searcherMock *mocks.MockSearcher, scraperMock *mocks.MockScraper, storeMock *mocks.MockDataStore, eventBus event.EventCoordinator) Service {
+	srv, err := ingest.New(config, searcherMock, scraperMock, storeMock, eventBus)
 	assert.Nil(t, err)
 
 	// Start ingest service
@@ -65,6 +63,13 @@ func startService(t *testing.T, config ingest.Config, searcherMock *mocks.MockSe
 	})
 
 	return srv
+}
+
+// startService starts an ingest service instance using the
+// config and mocks provided. A teardown function is returned, which
+// should be called when the test is complete.
+func startService(t *testing.T, config ingest.Config, searcherMock *mocks.MockSearcher, scraperMock *mocks.MockScraper, storeMock *mocks.MockDataStore) Service {
+	return startServiceWithBus(t, config, searcherMock, scraperMock, storeMock, defaultEventBus)
 }
 
 func tempDir(t *testing.T) string {
@@ -119,21 +124,10 @@ func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
 		Adult:    false,
 		Name:     "Test Series",
 		Overview: "...",
-		Genres: []tmdb.Genre{
-			{ID: json.Number("1"), Name: "Action"},
-			{ID: json.Number("2"), Name: "Adventure"},
-		},
+		Genres:   []tmdb.Genre{{ID: json.Number("1"), Name: "Action"}, {ID: json.Number("2"), Name: "Adventure"}},
 	}
-	expectedSeason := &tmdb.Season{
-		ID:       json.Number(seasonID),
-		Name:     "Test Season",
-		Overview: "...",
-	}
-	expectedEpisode := &tmdb.Episode{
-		ID:       json.Number(episodeID),
-		Name:     "Test Episode",
-		Overview: "...",
-	}
+	expectedSeason := &tmdb.Season{ID: json.Number(seasonID), Name: "Test Season", Overview: "..."}
+	expectedEpisode := &tmdb.Episode{ID: json.Number(episodeID), Name: "Test Episode", Overview: "..."}
 
 	storeMock.EXPECT().GetAllMediaSourcePaths().Return([]string{}, nil)
 
@@ -147,10 +141,12 @@ func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
 	searcherMock.EXPECT().GetEpisode(seriesID, expectedMetdata.SeasonNumber, expectedMetdata.EpisodeNumber).Return(expectedEpisode, nil).Once()
 
 	// match a save call, but with custom matchers to ignore generated UUIDs
+	var savedUUID *uuid.UUID = nil
 	storeMock.EXPECT().SaveEpisode(
 		mock.MatchedBy(func(given *media.Episode) bool {
 			expected := tmdb.TmdbEpisodeToMedia(expectedEpisode, false, &expectedMetdata)
 			expected.ID = given.ID
+			savedUUID = &given.ID
 			return reflect.DeepEqual(expected, given)
 		}),
 		mock.MatchedBy(func(given *media.Season) bool {
@@ -165,10 +161,26 @@ func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
 		}),
 	).Return(nil).Once()
 
-	srv := startService(t, cfg, searcherMock, scraperMock, storeMock)
+	bus := event.New()
+	receivedIngestComplete := false
+	receivedMediaMessage := false
+	bus.RegisterHandlerFunction(event.NewMediaEvent, func(ev event.Event, payload event.Payload) {
+		receivedMediaMessage = true
+		assert.Equal(t, ev, event.NewMediaEvent)
+		assert.Equal(t, payload, *savedUUID, "expected UUID emitted on event bus to match save call")
+	})
+	bus.RegisterHandlerFunction(event.IngestCompleteEvent, func(_ event.Event, _ event.Payload) {
+		receivedIngestComplete = true
+	})
+
+	srv := startServiceWithBus(t, cfg, searcherMock, scraperMock, storeMock, bus)
 
 	// Wait for item to leave the queue
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NotNil(c, savedUUID)
+		assert.True(c, receivedIngestComplete, "never received ingestion completion message on event bus")
+		assert.True(c, receivedMediaMessage, "never received new media message on event bus")
+
 		allIngests := srv.GetAllIngests()
 		if len(allIngests) > 0 {
 			assert.Len(c, allIngests, 1)
@@ -177,7 +189,7 @@ func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
 			assert.NotEqual(c, item.State, ingest.ImportHold)
 			assert.NotEqual(c, item.State, ingest.Idle)
 		}
-	}, time.Second*2, time.Millisecond*250)
+	}, time.Second*2, time.Millisecond*100)
 }
 
 func Test_MovieImports_CorrectlySaved(t *testing.T) {
@@ -223,18 +235,36 @@ func Test_MovieImports_CorrectlySaved(t *testing.T) {
 	searcherMock.EXPECT().GetMovie(movieID).Return(expectedMovie, nil).Once()
 
 	// match a save call, but with custom matchers to ignore generated UUIDs
+	var savedUUID *uuid.UUID = nil
 	storeMock.EXPECT().SaveMovie(
 		mock.MatchedBy(func(given *media.Movie) bool {
 			expected := tmdb.TmdbMovieToMedia(expectedMovie, &expectedMetdata)
 			expected.ID = given.ID
+			savedUUID = &given.ID
 			return reflect.DeepEqual(expected, given)
 		}),
 	).Return(nil).Once()
 
-	srv := startService(t, cfg, searcherMock, scraperMock, storeMock)
+	bus := event.New()
+	receivedIngestComplete := false
+	receivedMediaMessage := false
+	bus.RegisterHandlerFunction(event.NewMediaEvent, func(ev event.Event, payload event.Payload) {
+		receivedMediaMessage = true
+		assert.Equal(t, ev, event.NewMediaEvent)
+		assert.Equal(t, payload, *savedUUID, "expected UUID emitted on event bus to match save call")
+	})
+	bus.RegisterHandlerFunction(event.IngestCompleteEvent, func(_ event.Event, _ event.Payload) {
+		receivedIngestComplete = true
+	})
+
+	srv := startServiceWithBus(t, cfg, searcherMock, scraperMock, storeMock, bus)
 
 	// Wait for item to leave the queue
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NotNil(c, savedUUID)
+		assert.True(c, receivedIngestComplete, "never received ingestion completion message on event bus")
+		assert.True(c, receivedMediaMessage, "never received new media message on event bus")
+
 		allIngests := srv.GetAllIngests()
 		if len(allIngests) > 0 {
 			assert.Len(c, allIngests, 1)
@@ -243,7 +273,7 @@ func Test_MovieImports_CorrectlySaved(t *testing.T) {
 			assert.NotEqual(c, item.State, ingest.ImportHold)
 			assert.NotEqual(c, item.State, ingest.Idle)
 		}
-	}, time.Second*2, time.Millisecond*250)
+	}, time.Second*2, time.Millisecond*100)
 }
 
 func Test_NewFile_IgnoredIfAlreadyImported(t *testing.T) {

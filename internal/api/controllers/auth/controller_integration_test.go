@@ -12,12 +12,11 @@ import (
 
 var ctx = context.Background()
 
-/*
-This package performs HTTP REST API testing against
-this controller. It requires that an instance of
-Thea is running - externally to this test suite - on the
-URL provided.
-*/
+// This package performs HTTP REST API testing against
+// this controller. It requires that an instance of
+// Thea is running - externally to this test suite - on the
+// URL provided.
+
 func TestLogin_InvalidCredentials(t *testing.T) {
 	resp, err := helpers.NewClient(t).LoginWithResponse(ctx,
 		test.LoginRequest{

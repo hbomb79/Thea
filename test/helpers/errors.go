@@ -1,14 +1,12 @@
 package helpers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"reflect"
 	"testing"
 
 	"github.com/hbomb79/Thea/internal/api/gen"
-	"github.com/hbomb79/Thea/test"
 	"gotest.tools/v3/assert"
 )
 
@@ -49,13 +47,4 @@ func ExtractErrorResponse(t *testing.T, body []byte) gen.APIError {
 	}
 
 	return apiError
-}
-
-func WithCookies(cookies []*http.Cookie) test.RequestEditorFn {
-	return func(_ context.Context, req *http.Request) error {
-		for _, c := range cookies {
-			req.AddCookie(c)
-		}
-		return nil
-	}
 }

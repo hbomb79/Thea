@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/hbomb79/Thea/internal/user/permissions"
@@ -39,7 +40,9 @@ func NewClient(t *testing.T) *test.ClientWithResponses {
 }
 
 func NewClientWithDefaultAdminUser(t *testing.T) *test.ClientWithResponses {
-	_, client := NewClientWithCredentials(t, DefaultAdminUsername, DefaultAdminPassword)
+	adminUser, client := NewClientWithCredentials(t, DefaultAdminUsername, DefaultAdminPassword)
+	assert.Subset(t, adminUser.User.Permissions, permissions.All(), "Default admin user must contain all permissions")
+
 	return client
 }
 
@@ -53,7 +56,6 @@ func NewClientWithCredentials(t *testing.T, username string, password string) (T
 	resp, err := NewClient(t).LoginWithResponse(ctx, test.LoginRequest{Username: username, Password: password})
 	assert.Nil(t, err, "Failed to perform login request")
 	assert.NotNil(t, resp.JSON200)
-	assert.Contains(t, resp.JSON200.Permissions, permissions.CreateUserPermission, "Default admin user must contain CreateUser permission")
 
 	cookies := resp.HTTPResponse.Cookies()
 	assert.Len(t, cookies, loginCookiesCount)
@@ -81,4 +83,13 @@ func NewClientWithRandomUser(t *testing.T) (TestUser, *test.ClientWithResponses)
 
 	// Login as newly created user to get the cookies
 	return NewClientWithCredentials(t, usernameAndPassword, usernameAndPassword)
+}
+
+func WithCookies(cookies []*http.Cookie) test.RequestEditorFn {
+	return func(_ context.Context, req *http.Request) error {
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		return nil
+	}
 }

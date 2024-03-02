@@ -8,18 +8,17 @@ package ingest_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hbomb79/Thea/internal/event"
-	"github.com/hbomb79/Thea/internal/http/tmdb"
 	"github.com/hbomb79/Thea/internal/ingest"
-	"github.com/hbomb79/Thea/internal/media"
+	mocks "github.com/hbomb79/Thea/mocks/ingest"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 // A default event bus which should be used as a NOOP event bus. DO NOT subscribe to this
@@ -30,95 +29,6 @@ func init() {
 	logger.SetMinLoggingLevel(logger.VERBOSE.Level())
 }
 
-type mockSearcher struct {
-	mock.Mock
-}
-
-func (mock *mockSearcher) SearchForSeries(metadata *media.FileMediaMetadata) (string, error) {
-	args := mock.Called(metadata)
-	return args.String(0), args.Error(1)
-}
-
-func (mock *mockSearcher) SearchForMovie(metadata *media.FileMediaMetadata) (string, error) {
-	args := mock.Called(metadata)
-	return args.String(0), args.Error(1)
-}
-
-func (mock *mockSearcher) GetSeason(seriesID string, seasonNumber int) (*tmdb.Season, error) {
-	args := mock.Called(seriesID, seasonNumber)
-	//nolint:forcetypeassert
-	return args.Get(0).(*tmdb.Season), args.Error(1)
-}
-
-func (mock *mockSearcher) GetSeries(seriesID string) (*tmdb.Series, error) {
-	args := mock.Called(seriesID)
-	//nolint:forcetypeassert
-	return args.Get(0).(*tmdb.Series), args.Error(1)
-}
-
-func (mock *mockSearcher) GetEpisode(seriesID string, seasonNumber int, episodeNumber int) (*tmdb.Episode, error) {
-	args := mock.Called(seriesID, seasonNumber, episodeNumber)
-	//nolint:forcetypeassert
-	return args.Get(0).(*tmdb.Episode), args.Error(1)
-}
-
-func (mock *mockSearcher) GetMovie(movieID string) (*tmdb.Movie, error) {
-	args := mock.Called(movieID)
-	//nolint:forcetypeassert
-	return args.Get(0).(*tmdb.Movie), args.Error(1)
-}
-
-type mockScraper struct {
-	mock.Mock
-}
-
-func (mock *mockScraper) ScrapeFileForMediaInfo(path string) (*media.FileMediaMetadata, error) {
-	args := mock.Called(path)
-	if v, ok := args.Get(0).(*media.FileMediaMetadata); ok {
-		return v, args.Error(1)
-	} else {
-		return nil, args.Error(1)
-	}
-}
-
-type mockStore struct {
-	mock.Mock
-}
-
-func (mock *mockStore) GetAllMediaSourcePaths() ([]string, error) {
-	args := mock.Called()
-	//nolint:forcetypeassert
-	return args.Get(0).([]string), args.Error(1)
-}
-
-func (mock *mockStore) GetSeasonWithTmdbID(seasonID string) (*media.Season, error) {
-	args := mock.Called(seasonID)
-	//nolint:forcetypeassert
-	return args.Get(0).(*media.Season), args.Error(1)
-}
-
-func (mock *mockStore) GetSeriesWithTmdbID(seriesID string) (*media.Series, error) {
-	args := mock.Called(seriesID)
-	//nolint:forcetypeassert
-	return args.Get(0).(*media.Series), args.Error(1)
-}
-
-func (mock *mockStore) GetEpisodeWithTmdbID(episodeID string) (*media.Episode, error) {
-	args := mock.Called(episodeID)
-	//nolint:forcetypeassert
-	return args.Get(0).(*media.Episode), args.Error(1)
-}
-
-func (mock *mockStore) SaveEpisode(episode *media.Episode, season *media.Season, series *media.Series) error {
-	args := mock.Called(episode, season, series)
-	return args.Error(0)
-}
-
-func (mock *mockStore) SaveMovie(movie *media.Movie) error {
-	args := mock.Called(movie)
-	return args.Error(0)
-}
-
 type Service interface {
 	DiscoverNewFiles()
 	GetAllIngests() []*ingest.IngestItem
@@ -127,7 +37,7 @@ type Service interface {
 // startService starts an ingest service instance using the
 // config and mocks provided. A teardown function is returned, which
 // should be called when the test is complete.
-func startService(t *testing.T, config ingest.Config, searcherMock *mockSearcher, scraperMock *mockScraper, storeMock *mockStore) (Service, func()) {
+func startService(t *testing.T, config ingest.Config, searcherMock *mocks.MockSearcher, scraperMock *mocks.MockScraper, storeMock *mocks.MockDataStore) Service {
 	srv, err := ingest.New(config, searcherMock, scraperMock, storeMock, defaultEventBus)
 	assert.Nil(t, err)
 
@@ -136,24 +46,37 @@ func startService(t *testing.T, config ingest.Config, searcherMock *mockSearcher
 	wg.Add(1)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
+		defer wg.Done()
 		assert.Nil(t, srv.Run(ctx))
-		wg.Done()
 	}()
 
-	return srv, func() {
+	t.Cleanup(func() {
+		fmt.Println("Waiting for service to close...")
 		cancel()
 		wg.Wait()
-	}
+	})
+
+	return srv
 }
 
-func tempDir(t *testing.T) (string, *os.File, func()) {
+func tempDir(t *testing.T) string {
 	tempDir, err := os.MkdirTemp("", "thea_ingest_test")
-	assert.Nil(t, err)
+	assert.Nil(t, err, "failed to create temporary dir")
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
 
-	tempFile, err := os.CreateTemp(tempDir, "dummy_file")
-	assert.Nil(t, err)
+	return tempDir
+}
 
-	return tempDir, tempFile, func() { os.RemoveAll(tempDir) }
+func tempDirWithFiles(t *testing.T, files []string) (string, []string) {
+	dirPath := tempDir(t)
+	filePaths := make([]string, 0, len(files))
+	for _, filename := range files {
+		fileName, err := os.CreateTemp(dirPath, filename)
+		filePaths = append(filePaths, fileName.Name())
+		assert.Nil(t, err, "failed to create temporary file in temporary dir")
+	}
+
+	return dirPath, filePaths
 }
 
 func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
@@ -175,56 +98,47 @@ func Test_MovieImports_CorrectlySaved(t *testing.T) {
 }
 
 func Test_NewFile_CorrectlyHeld(t *testing.T) {
+	expectedErr := errors.New("test: expected error")
+
 	// Construct a new ingest service with the import delay set to a low value
 	// and noop mocks for the dependencies.
-	path, file, cleanup := tempDir(t)
-	defer cleanup()
+	tempDir, files := tempDirWithFiles(t, []string{"anynameworks"})
+	assert.Len(t, files, 1, "expected only one temp file")
 
-	cfg := ingest.Config{
-		ForceSyncSeconds:          100,
-		IngestPath:                path,
-		RequiredModTimeAgeSeconds: 2,
-		IngestionParallelism:      1,
-	}
+	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, RequiredModTimeAgeSeconds: 2, IngestionParallelism: 1}
+	searcherMock := mocks.NewMockSearcher(t)
+	scraperMock := mocks.NewMockScraper(t)
+	storeMock := mocks.NewMockDataStore(t)
 
-	searcherMock := new(mockSearcher)
-	scraperMock := new(mockScraper)
-	storeMock := new(mockStore)
+	scraperMock.EXPECT().ScrapeFileForMediaInfo(files[0]).Return(nil, expectedErr)
+	storeMock.EXPECT().GetAllMediaSourcePaths().Return([]string{}, nil)
 
-	scraperMock.On("ScrapeFileForMediaInfo", file.Name()).Return(nil, errors.New("TESTING NOOP"))
-	storeMock.On("GetAllMediaSourcePaths").Return([]string{}, nil)
-
-	srv, teardown := startService(t, cfg, searcherMock, scraperMock, storeMock)
-	defer teardown()
+	srv := startService(t, cfg, searcherMock, scraperMock, storeMock)
 
 	// Assert that dummy item is in import hold shortly after service startup
-	time.Sleep(1 * time.Second)
-	{
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		all := srv.GetAllIngests()
-		assert.Len(t, all, 1)
-		assert.Equal(t, ingest.ImportHold, all[0].State)
-	}
+		assert.Len(c, all, 1)
+		assert.Equal(c, ingest.ImportHold, all[0].State)
+	}, 1*time.Second, 500*time.Millisecond)
 
-	// Force a re-sync
+	// Assert dummy still import held after forced resync
 	srv.DiscoverNewFiles()
+	all := srv.GetAllIngests()
+	assert.Len(t, all, 1)
+	assert.Equal(t, ingest.ImportHold, all[0].State)
 
-	// Assert dummy still import held
-	{
+	// Assert dummy item is now unheld and has failed with expected error
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		all := srv.GetAllIngests()
-		assert.Len(t, all, 1)
-		assert.Equal(t, ingest.ImportHold, all[0].State)
-	}
+		assert.Len(c, all, 1)
 
-	// Wait 3 seconds
-	time.Sleep(3 * time.Second)
-
-	// Assert dummy item is now unheld and has failed due to NOOP scraper mock
-	{
-		all := srv.GetAllIngests()
-		assert.Len(t, all, 1)
-		i := all[0]
-		assert.Equal(t, ingest.Troubled, i.State)
-		assert.Equal(t, ingest.MetadataFailure, i.Trouble.Type())
-		assert.Equal(t, "TESTING NOOP", i.Trouble.Error())
-	}
+		item := all[0]
+		assert.Equal(c, ingest.Troubled, item.State)
+		assert.NotNil(c, ingest.MetadataFailure, item.Trouble)
+		if item.Trouble != nil {
+			assert.Equal(c, ingest.MetadataFailure, item.Trouble.Type())
+			assert.Equal(c, expectedErr.Error(), item.Trouble.Error())
+		}
+	}, 3*time.Second, 500*time.Millisecond)
 }

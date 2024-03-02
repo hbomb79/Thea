@@ -2,3 +2,4 @@
 .vscode
 .env
 *.gen.go
+mocks/

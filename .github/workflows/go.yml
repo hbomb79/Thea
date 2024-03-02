@@ -36,6 +36,6 @@ jobs:
         # https://github.com/golangci/golangci-lint-action/issues/807
         skip-cache: true
 
-    # - name: Test
-    #   run: go test -v ./...
+    - name: Test
+      run: go test -v ./internal/...
     

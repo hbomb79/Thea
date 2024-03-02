@@ -43,7 +43,14 @@ type Service interface {
 	GetAllIngests() []*ingest.IngestItem
 }
 
-func startServiceWithBus(t *testing.T, config ingest.Config, searcherMock *mocks.MockSearcher, scraperMock *mocks.MockScraper, storeMock *mocks.MockDataStore, eventBus event.EventCoordinator) Service {
+func startServiceWithBus(
+	t *testing.T,
+	config ingest.Config,
+	searcherMock *mocks.MockSearcher,
+	scraperMock *mocks.MockScraper,
+	storeMock *mocks.MockDataStore,
+	eventBus event.EventCoordinator,
+) Service {
 	srv, err := ingest.New(config, searcherMock, scraperMock, storeMock, eventBus)
 	assert.Nil(t, err)
 

@@ -1,10 +1,11 @@
 with-expecter: true
 filename: "mock_{{.InterfaceName}}.go"
-dir: "mocks/{{.PackageName}}"
 mockname: "Mock{{.InterfaceName}}"
 outpkg: "{{.PackageName}}"
 packages:
   github.com/hbomb79/Thea/internal/ingest:
+    config:
+      dir: "../../internal/ingest/mocks"
     interfaces:
       Searcher:
       Scraper:

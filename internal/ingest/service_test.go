@@ -19,8 +19,8 @@ import (
 	"github.com/hbomb79/Thea/internal/event"
 	"github.com/hbomb79/Thea/internal/http/tmdb"
 	"github.com/hbomb79/Thea/internal/ingest"
+	mocks "github.com/hbomb79/Thea/internal/ingest/mocks"
 	"github.com/hbomb79/Thea/internal/media"
-	mocks "github.com/hbomb79/Thea/mocks/ingest"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -306,4 +306,24 @@ func Test_NewFile_CorrectlyHeld(t *testing.T) {
 			assert.Equal(c, errExpected.Error(), item.Trouble.Error())
 		}
 	}, 3*time.Second, 500*time.Millisecond)
+}
+
+func Test_PollsFilesystemPeriodically(t *testing.T) {
+	t.Parallel()
+	tempDir := tempDir(t)
+
+	cfg := ingest.Config{ForceSyncSeconds: 1, IngestPath: tempDir, RequiredModTimeAgeSeconds: 2, IngestionParallelism: 1}
+	searcherMock := mocks.NewMockSearcher(t)
+	scraperMock := mocks.NewMockScraper(t)
+	storeMock := mocks.NewMockDataStore(t)
+
+	calls := 0
+	storeMock.EXPECT().GetAllMediaSourcePaths().RunAndReturn(func() ([]string, error) {
+		calls++
+		return []string{}, nil
+	})
+
+	_ = startService(t, cfg, searcherMock, scraperMock, storeMock)
+	time.Sleep(4 * time.Second)
+	assert.GreaterOrEqual(t, calls, 3, "Expected at least calls to 'GetAllMediaSourcePaths'")
 }

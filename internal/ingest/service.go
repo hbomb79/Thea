@@ -212,7 +212,7 @@ func (service *ingestService) DiscoverNewFiles() {
 
 	sourcePaths, err := service.dataStore.GetAllMediaSourcePaths()
 	if err != nil {
-		log.Fatalf("Could not query DB for existing source paths: %v\n", err) //nolint
+		log.Emit(logger.FATAL, "Could not query DB for existing source paths: %v\n", err)
 		return
 	}
 

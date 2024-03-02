@@ -7,23 +7,31 @@ package ingest_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hbomb79/Thea/internal/event"
+	"github.com/hbomb79/Thea/internal/http/tmdb"
 	"github.com/hbomb79/Thea/internal/ingest"
+	"github.com/hbomb79/Thea/internal/media"
 	mocks "github.com/hbomb79/Thea/mocks/ingest"
 	"github.com/hbomb79/Thea/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 // A default event bus which should be used as a NOOP event bus. DO NOT subscribe to this
 // inside of a test as the subscriber are not removed between tests.
-var defaultEventBus = event.New()
+var (
+	defaultEventBus = event.New()
+	errExpected     = errors.New("test: expected error")
+)
 
 func init() {
 	logger.SetMinLoggingLevel(logger.VERBOSE.Level())
@@ -72,45 +80,202 @@ func tempDirWithFiles(t *testing.T, files []string) (string, []string) {
 	filePaths := make([]string, 0, len(files))
 	for _, filename := range files {
 		fileName, err := os.CreateTemp(dirPath, filename)
-		filePaths = append(filePaths, fileName.Name())
 		assert.Nil(t, err, "failed to create temporary file in temporary dir")
+		filePaths = append(filePaths, fileName.Name())
 	}
 
+	assert.Len(t, filePaths, len(files), "Expected file paths recorded to match length of requested files")
 	return dirPath, filePaths
 }
 
 func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
-	// Start service
-	// Provide new file
-	// Ensure detected
-	// Mock scraper to provide episodic metadata
-	// Mock searcher to provide information for series, movie and episode
-	// Mock data store and ensure the three are saved as expected
+	t.Parallel()
+	tempDir, files := tempDirWithFiles(t, []string{"episode"})
+
+	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, IngestionParallelism: 1}
+	searcherMock := mocks.NewMockSearcher(t)
+	scraperMock := mocks.NewMockScraper(t)
+	storeMock := mocks.NewMockDataStore(t)
+
+	year := 2023
+	frameSize := 10
+	seriesID := "123"
+	seasonID := "456"
+	episodeID := "789"
+	expectedMetdata := media.FileMediaMetadata{
+		Title:         "Test Episode",
+		Episodic:      true,
+		SeasonNumber:  1,
+		EpisodeNumber: 1,
+		Runtime:       "69420",
+		Year:          &year,
+		FrameW:        &frameSize,
+		FrameH:        &frameSize,
+		Path:          files[0],
+	}
+
+	expectedSeries := &tmdb.Series{
+		ID:       json.Number(seriesID),
+		Adult:    false,
+		Name:     "Test Series",
+		Overview: "...",
+		Genres: []tmdb.Genre{
+			{ID: json.Number("1"), Name: "Action"},
+			{ID: json.Number("2"), Name: "Adventure"},
+		},
+	}
+	expectedSeason := &tmdb.Season{
+		ID:       json.Number(seasonID),
+		Name:     "Test Season",
+		Overview: "...",
+	}
+	expectedEpisode := &tmdb.Episode{
+		ID:       json.Number(episodeID),
+		Name:     "Test Episode",
+		Overview: "...",
+	}
+
+	storeMock.EXPECT().GetAllMediaSourcePaths().Return([]string{}, nil)
+
+	// Allow ingestion to get metadata for this episode
+	scraperMock.EXPECT().ScrapeFileForMediaInfo(files[0]).Return(&expectedMetdata, nil).Once()
+
+	// Allow ingestion to find TMDB metadata for this metadata
+	searcherMock.EXPECT().SearchForSeries(&expectedMetdata).Return(seriesID, nil).Once()
+	searcherMock.EXPECT().GetSeries(seriesID).Return(expectedSeries, nil).Once()
+	searcherMock.EXPECT().GetSeason(seriesID, expectedMetdata.SeasonNumber).Return(expectedSeason, nil).Once()
+	searcherMock.EXPECT().GetEpisode(seriesID, expectedMetdata.SeasonNumber, expectedMetdata.EpisodeNumber).Return(expectedEpisode, nil).Once()
+
+	// match a save call, but with custom matchers to ignore generated UUIDs
+	storeMock.EXPECT().SaveEpisode(
+		mock.MatchedBy(func(given *media.Episode) bool {
+			expected := tmdb.TmdbEpisodeToMedia(expectedEpisode, false, &expectedMetdata)
+			expected.ID = given.ID
+			return reflect.DeepEqual(expected, given)
+		}),
+		mock.MatchedBy(func(given *media.Season) bool {
+			expected := tmdb.TmdbSeasonToMedia(expectedSeason)
+			expected.ID = given.ID
+			return reflect.DeepEqual(expected, given)
+		}),
+		mock.MatchedBy(func(given *media.Series) bool {
+			expected := tmdb.TmdbSeriesToMedia(expectedSeries)
+			expected.ID = given.ID
+			return reflect.DeepEqual(expected, given)
+		}),
+	).Return(nil).Once()
+
+	srv := startService(t, cfg, searcherMock, scraperMock, storeMock)
+
+	// Wait for item to leave the queue
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		allIngests := srv.GetAllIngests()
+		if len(allIngests) > 0 {
+			assert.Len(c, allIngests, 1)
+			item := allIngests[0]
+			assert.NotNil(c, item)
+			assert.NotEqual(c, item.State, ingest.ImportHold)
+			assert.NotEqual(c, item.State, ingest.Idle)
+		}
+	}, time.Second*2, time.Millisecond*250)
 }
 
 func Test_MovieImports_CorrectlySaved(t *testing.T) {
-	// Start service
-	// Provide new file
-	// Ensure detected
-	// Mock scraper to provide movie metadata
-	// Mock searcher to provide information for a movie
-	// Mock data store to ensure the single move is saved as expected
+	t.Parallel()
+	tempDir, files := tempDirWithFiles(t, []string{"movie"})
+
+	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, IngestionParallelism: 1}
+	searcherMock := mocks.NewMockSearcher(t)
+	scraperMock := mocks.NewMockScraper(t)
+	storeMock := mocks.NewMockDataStore(t)
+
+	year := 2023
+	frameSize := 10
+	movieID := "123"
+	expectedMetdata := media.FileMediaMetadata{
+		Title:    "Test Movie",
+		Episodic: false,
+		Runtime:  "69420",
+		Year:     &year,
+		FrameW:   &frameSize,
+		FrameH:   &frameSize,
+		Path:     files[0],
+	}
+
+	expectedMovie := &tmdb.Movie{
+		ID:       json.Number(movieID),
+		Adult:    false,
+		Name:     "Test Series",
+		Overview: "...",
+		Genres: []tmdb.Genre{
+			{ID: json.Number("1"), Name: "Action"},
+			{ID: json.Number("2"), Name: "Adventure"},
+		},
+	}
+
+	storeMock.EXPECT().GetAllMediaSourcePaths().Return([]string{}, nil)
+
+	// Allow ingestion to get metadata for this episode
+	scraperMock.EXPECT().ScrapeFileForMediaInfo(files[0]).Return(&expectedMetdata, nil).Once()
+
+	// Allow ingestion to find TMDB metadata for this metadata
+	searcherMock.EXPECT().SearchForMovie(&expectedMetdata).Return(movieID, nil).Once()
+	searcherMock.EXPECT().GetMovie(movieID).Return(expectedMovie, nil).Once()
+
+	// match a save call, but with custom matchers to ignore generated UUIDs
+	storeMock.EXPECT().SaveMovie(
+		mock.MatchedBy(func(given *media.Movie) bool {
+			expected := tmdb.TmdbMovieToMedia(expectedMovie, &expectedMetdata)
+			expected.ID = given.ID
+			return reflect.DeepEqual(expected, given)
+		}),
+	).Return(nil).Once()
+
+	srv := startService(t, cfg, searcherMock, scraperMock, storeMock)
+
+	// Wait for item to leave the queue
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		allIngests := srv.GetAllIngests()
+		if len(allIngests) > 0 {
+			assert.Len(c, allIngests, 1)
+			item := allIngests[0]
+			assert.NotNil(c, item)
+			assert.NotEqual(c, item.State, ingest.ImportHold)
+			assert.NotEqual(c, item.State, ingest.Idle)
+		}
+	}, time.Second*2, time.Millisecond*250)
 }
 
-func Test_NewFile_CorrectlyHeld(t *testing.T) {
-	expectedErr := errors.New("test: expected error")
-
-	// Construct a new ingest service with the import delay set to a low value
-	// and noop mocks for the dependencies.
+func Test_NewFile_IgnoredIfAlreadyImported(t *testing.T) {
+	t.Parallel()
 	tempDir, files := tempDirWithFiles(t, []string{"anynameworks"})
-	assert.Len(t, files, 1, "expected only one temp file")
 
 	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, RequiredModTimeAgeSeconds: 2, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)
 	scraperMock := mocks.NewMockScraper(t)
 	storeMock := mocks.NewMockDataStore(t)
 
-	scraperMock.EXPECT().ScrapeFileForMediaInfo(files[0]).Return(nil, expectedErr)
+	storeMock.EXPECT().GetAllMediaSourcePaths().Return([]string{files[0]}, nil)
+
+	srv := startService(t, cfg, searcherMock, scraperMock, storeMock)
+	srv.DiscoverNewFiles()
+
+	// Ensure file is not in queue as it matches an existing import.
+	assert.Never(t, func() bool { return len(srv.GetAllIngests()) > 0 }, 2*time.Second, 500*time.Millisecond)
+}
+
+func Test_NewFile_CorrectlyHeld(t *testing.T) {
+	t.Parallel()
+	// Construct a new ingest service with the import delay set to a low value
+	// and noop mocks for the dependencies.
+	tempDir, files := tempDirWithFiles(t, []string{"anynameworks"})
+
+	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, RequiredModTimeAgeSeconds: 2, IngestionParallelism: 1}
+	searcherMock := mocks.NewMockSearcher(t)
+	scraperMock := mocks.NewMockScraper(t)
+	storeMock := mocks.NewMockDataStore(t)
+
+	scraperMock.EXPECT().ScrapeFileForMediaInfo(files[0]).Return(nil, errExpected)
 	storeMock.EXPECT().GetAllMediaSourcePaths().Return([]string{}, nil)
 
 	srv := startService(t, cfg, searcherMock, scraperMock, storeMock)
@@ -138,7 +303,7 @@ func Test_NewFile_CorrectlyHeld(t *testing.T) {
 		assert.NotNil(c, ingest.MetadataFailure, item.Trouble)
 		if item.Trouble != nil {
 			assert.Equal(c, ingest.MetadataFailure, item.Trouble.Type())
-			assert.Equal(c, expectedErr.Error(), item.Trouble.Error())
+			assert.Equal(c, errExpected.Error(), item.Trouble.Error())
 		}
 	}, 3*time.Second, 500*time.Millisecond)
 }

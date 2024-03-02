@@ -3,7 +3,6 @@ package worker
 import (
 	"errors"
 	"sync"
-	"time"
 )
 
 // WorkerPool struct embeds the sync.Mutex struct, and

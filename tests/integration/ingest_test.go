@@ -21,7 +21,7 @@ import (
 func SpawnThea(t *testing.T) {
 	req := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
-			Context:       "/home/haz/go/src/thea/",
+			Context:       "../../",
 			KeepImage:     true,
 			PrintBuildLog: true,
 		},

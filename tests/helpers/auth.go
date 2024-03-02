@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/hbomb79/Thea/internal/user/permissions"
@@ -15,10 +16,18 @@ import (
 var (
 	ctx = context.Background()
 
-	ServerBasePath       = "http://localhost:8080/api/thea/v1/"
-	DefaultAdminUsername = "admin"
-	DefaultAdminPassword = "admin"
+	ServerBasePath       = EnvVarOrDefault("THEA_URL", "http://localhost:42069/api/thea/v1/")
+	DefaultAdminUsername = EnvVarOrDefault("ADMIN_USERNAME", "admin")
+	DefaultAdminPassword = EnvVarOrDefault("ADMIN_PASSWORD", "admin")
 )
+
+func EnvVarOrDefault(key string, def string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	} else {
+		return def
+	}
+}
 
 const LoginCookiesCount = 2
 

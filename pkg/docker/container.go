@@ -148,7 +148,7 @@ func (container *dockerContainer) Start(ctx context.Context, cli client.APIClien
 	container.containerID = resp.ID
 	container.setStatus(CREATED)
 
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+	if err := cli.ContainerStart(ctx, resp.ID, dCont.StartOptions{}); err != nil {
 		return fmt.Errorf("failed to start container for %s: %w", container, err)
 	}
 	container.setStatus(UP)
@@ -173,7 +173,7 @@ func (container *dockerContainer) Close(ctx context.Context, cli client.APIClien
 	}
 
 	if container.canRemove() {
-		if err := cli.ContainerRemove(ctx, container.containerID, types.ContainerRemoveOptions{}); err != nil {
+		if err := cli.ContainerRemove(ctx, container.containerID, dCont.RemoveOptions{}); err != nil {
 			return fmt.Errorf("failed to remove container %s: %w", container, err)
 		}
 	}
@@ -244,7 +244,7 @@ func (container *dockerContainer) parseContainerEvent(ev *ContainerEvent) {
 }
 
 func (container *dockerContainer) monitorContainer(ctx context.Context, cli client.APIClient) {
-	reader, err := cli.ContainerLogs(ctx, container.containerID, types.ContainerLogsOptions{
+	reader, err := cli.ContainerLogs(ctx, container.containerID, dCont.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,

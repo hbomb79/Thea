@@ -3,6 +3,7 @@ package integration_test
 import (
 	"context"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/hbomb79/Thea/tests/gen"
@@ -12,12 +13,21 @@ import (
 
 var ctx = context.Background()
 
+func TestMain(m *testing.M) {
+	cleanup := spawnPostgres()
+	code := m.Run()
+	cleanup()
+
+	os.Exit(code)
+}
+
 // This package performs HTTP REST API testing against
 // this controller. It requires that an instance of
 // Thea is running - externally to this test suite - on the
 // URL provided.
 
 func TestLogin_InvalidCredentials(t *testing.T) {
+	SpawnThea(t)
 	resp, err := helpers.NewClient(t).LoginWithResponse(ctx,
 		gen.LoginRequest{
 			Username: "notausername",
@@ -33,6 +43,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 // Ensure that a successful login returns valid tokens
 // which can be used in a subsequent request to fetch the user.
 func TestLogin_ValidCredentials(t *testing.T) {
+	SpawnThea(t)
 	testUser, authedClient := helpers.NewClientWithRandomUser(t)
 	assertUserValid := func(user *gen.User) {
 		assert.NotNil(t, user, "Expected User payload to be non-nil")
@@ -62,6 +73,7 @@ func TestLogin_ValidCredentials(t *testing.T) {
 // of the response clearing the cookies, they should not work for
 // secured endpoints.
 func TestLogout_BlacklistsTokens(t *testing.T) {
+	SpawnThea(t)
 	_, authedClient := helpers.NewClientWithRandomUser(t)
 
 	currentUserResponse, err := authedClient.GetCurrentUserWithResponse(ctx)
@@ -84,6 +96,7 @@ func TestLogout_BlacklistsTokens(t *testing.T) {
 // when 'LogoutAll' is called. Other users active on Thea should
 // not be impacted by this.
 func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
+	SpawnThea(t)
 	assertClientState := func(t *testing.T, client *gen.ClientWithResponses, expectedUser *helpers.TestUser) {
 		resp, err := client.GetCurrentUserWithResponse(ctx)
 		assert.Nil(t, err)

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hbomb79/Thea/test"
-	"github.com/hbomb79/Thea/test/helpers"
+	"github.com/hbomb79/Thea/tests/gen"
+	"github.com/hbomb79/Thea/tests/helpers"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,7 +19,7 @@ var ctx = context.Background()
 
 func TestLogin_InvalidCredentials(t *testing.T) {
 	resp, err := helpers.NewClient(t).LoginWithResponse(ctx,
-		test.LoginRequest{
+		gen.LoginRequest{
 			Username: "notausername",
 			Password: "definitelynotapassword",
 		},
@@ -34,7 +34,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 // which can be used in a subsequent request to fetch the user.
 func TestLogin_ValidCredentials(t *testing.T) {
 	testUser, authedClient := helpers.NewClientWithRandomUser(t)
-	assertUserValid := func(user *test.User) {
+	assertUserValid := func(user *gen.User) {
 		assert.NotNil(t, user, "Expected User payload to be non-nil")
 		assert.Equal(t, testUser.User.Username, user.Username)
 
@@ -45,14 +45,12 @@ func TestLogin_ValidCredentials(t *testing.T) {
 		// assert.Less(t, user.CreatedAt, *user.LastLogin)
 	}
 
-	user := testUser.User
-	assertUserValid(&user)
+	assertUserValid(&testUser.User)
 
 	currentUserResponse, err := authedClient.GetCurrentUserWithResponse(ctx)
 	assert.Nil(t, err, "Failed to get current user")
 
-	currentUser := currentUserResponse.JSON200
-	assertUserValid(currentUser)
+	assertUserValid(currentUserResponse.JSON200)
 	// TODO: fixme
 	// assert.Equal(t, *user.LastLogin, *currentUser.LastLogin)
 	// assert.Equal(t, user.CreatedAt, currentUser.CreatedAt)
@@ -86,7 +84,7 @@ func TestLogout_BlacklistsTokens(t *testing.T) {
 // when 'LogoutAll' is called. Other users active on Thea should
 // not be impacted by this.
 func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
-	assertClientState := func(t *testing.T, client *test.ClientWithResponses, expectedUser *helpers.TestUser) {
+	assertClientState := func(t *testing.T, client *gen.ClientWithResponses, expectedUser *helpers.TestUser) {
 		resp, err := client.GetCurrentUserWithResponse(ctx)
 		assert.Nil(t, err)
 
@@ -100,7 +98,7 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 
 	// Create a new testUser and login multiple times with the testUser
 	testUser, client := helpers.NewClientWithRandomUser(t)
-	sameUserClients := make([]*test.ClientWithResponses, 0, 3)
+	sameUserClients := make([]*gen.ClientWithResponses, 0, 3)
 	sameUserClients = append(sameUserClients, client)
 	for i := 0; i < 2; i++ {
 		// Login as the same user again to get a new set of tokens

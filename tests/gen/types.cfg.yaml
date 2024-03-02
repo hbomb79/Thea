@@ -1,4 +1,4 @@
-package: test
+package: gen
 generate:
   - types
 output: types.gen.go

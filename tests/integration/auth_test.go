@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"net/http"
-	"os"
 	"testing"
 
 	"github.com/hbomb79/Thea/tests/gen"
@@ -13,12 +12,8 @@ import (
 
 var ctx = context.Background()
 
-func TestMain(m *testing.M) {
-	cleanup := spawnPostgres()
-	code := m.Run()
-	cleanup()
-
-	os.Exit(code)
+func requireSharedThea(t *testing.T) *helpers.TestService {
+	return helpers.ServicePool.RequireThea(t, "auth_integration_test")
 }
 
 // This package performs HTTP REST API testing against
@@ -27,8 +22,11 @@ func TestMain(m *testing.M) {
 // URL provided.
 
 func TestLogin_InvalidCredentials(t *testing.T) {
-	SpawnThea(t)
-	resp, err := helpers.NewClient(t).LoginWithResponse(ctx,
+	// srv := helpers.ServicePool.RequireThea(t, "invalid_creds")
+	srv := requireSharedThea(t)
+	t.Parallel()
+
+	resp, err := srv.NewClient(t).LoginWithResponse(ctx,
 		gen.LoginRequest{
 			Username: "notausername",
 			Password: "definitelynotapassword",
@@ -43,8 +41,11 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 // Ensure that a successful login returns valid tokens
 // which can be used in a subsequent request to fetch the user.
 func TestLogin_ValidCredentials(t *testing.T) {
-	SpawnThea(t)
-	testUser, authedClient := helpers.NewClientWithRandomUser(t)
+	// srv := helpers.ServicePool.RequireThea(t, "valid_creds")
+	srv := requireSharedThea(t)
+	t.Parallel()
+
+	testUser, authedClient := srv.NewClientWithRandomUser(t)
 	assertUserValid := func(user *gen.User) {
 		assert.NotNil(t, user, "Expected User payload to be non-nil")
 		assert.Equal(t, testUser.User.Username, user.Username)
@@ -73,8 +74,11 @@ func TestLogin_ValidCredentials(t *testing.T) {
 // of the response clearing the cookies, they should not work for
 // secured endpoints.
 func TestLogout_BlacklistsTokens(t *testing.T) {
-	SpawnThea(t)
-	_, authedClient := helpers.NewClientWithRandomUser(t)
+	// srv := helpers.ServicePool.RequireThea(t, "blacklisting")
+	srv := requireSharedThea(t)
+	t.Parallel()
+
+	_, authedClient := srv.NewClientWithRandomUser(t)
 
 	currentUserResponse, err := authedClient.GetCurrentUserWithResponse(ctx)
 	assert.Nil(t, err, "Failed to get current user")
@@ -96,7 +100,10 @@ func TestLogout_BlacklistsTokens(t *testing.T) {
 // when 'LogoutAll' is called. Other users active on Thea should
 // not be impacted by this.
 func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
-	SpawnThea(t)
+	// srv := helpers.ServicePool.RequireThea(t, "blacklisting_all")
+	srv := requireSharedThea(t)
+	t.Parallel()
+
 	assertClientState := func(t *testing.T, client *gen.ClientWithResponses, expectedUser *helpers.TestUser) {
 		resp, err := client.GetCurrentUserWithResponse(ctx)
 		assert.Nil(t, err)
@@ -110,20 +117,20 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 	}
 
 	// Create a new testUser and login multiple times with the testUser
-	testUser, client := helpers.NewClientWithRandomUser(t)
+	testUser, client := srv.NewClientWithRandomUser(t)
 	sameUserClients := make([]*gen.ClientWithResponses, 0, 3)
 	sameUserClients = append(sameUserClients, client)
 	for i := 0; i < 2; i++ {
 		// Login as the same user again to get a new set of tokens
 		// Sleep as JWT expiry is only accurate to the second, and so two logins in
 		// the same second generate the same payload (and therefore an identical token)
-		cl := helpers.NewClientWithUser(t, testUser)
+		cl := srv.NewClientWithUser(t, testUser)
 		sameUserClients = append(sameUserClients, cl)
 	}
 
 	// Create another user and session to ensure that this user is unaffected by
 	// our clients 'logout all'
-	otherTestUser, unrelatedClient := helpers.NewClientWithRandomUser(t)
+	otherTestUser, unrelatedClient := srv.NewClientWithRandomUser(t)
 	assertClientState(t, unrelatedClient, &otherTestUser)
 	for _, cl := range sameUserClients {
 		assertClientState(t, cl, &testUser)
@@ -141,7 +148,7 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 	}
 
 	// Check that logging in again does not revert the previous revoking of the other sessions
-	loggedInClient := helpers.NewClientWithUser(t, testUser)
+	loggedInClient := srv.NewClientWithUser(t, testUser)
 	assertClientState(t, unrelatedClient, &otherTestUser)
 	assertClientState(t, loggedInClient, &testUser)
 	for _, cl := range sameUserClients {

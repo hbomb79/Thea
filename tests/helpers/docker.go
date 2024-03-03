@@ -1,9 +1,9 @@
-package integration_test
+package helpers
 
 import (
 	"fmt"
 	"log"
-	"testing"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -12,23 +12,34 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// SpawnThea instantiates an ephemeral Thea service (which connects
-// to an existing database, as per it's configuration).
-// This has advantages over using an externally available
-// service as the test can setup the configuration
-// to ensure the tests are deterministic, while still testing
-// all layers of the application.
-func SpawnThea(t *testing.T) {
+var (
+	mutex   = sync.Mutex{}
+	portInc = 42067
+)
+
+func getNextPort() int {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	portInc++
+	return portInc
+}
+
+func SpawnTheaManualCleanup(databaseName string) *TestService {
+	port := getNextPort()
+	fmt.Printf("Spawning Thea on port %d\n", port)
+	dbManager.SeedNewDatabase(databaseName)
 	req := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
 			Context:       "../../",
 			KeepImage:     true,
 			PrintBuildLog: true,
 		},
-		ExposedPorts: []string{"42069/tcp"},
+		ExposedPorts: []string{fmt.Sprintf("%d/tcp", port)},
 		WaitingFor:   wait.ForLog("Thea services spawned!").WithStartupTimeout(time.Second * 4),
 		Env: map[string]string{
-			"API_HOST_ADDR": "0.0.0.0:42069",
+			"API_HOST_ADDR": fmt.Sprintf("0.0.0.0:%d", port),
+			"DB_NAME":       databaseName,
 		},
 		NetworkMode: "host",
 		Cmd:         []string{"-config", "/config.toml"},
@@ -36,19 +47,23 @@ func SpawnThea(t *testing.T) {
 
 	theaC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: req, Started: true})
 	if err != nil {
-		t.Errorf("Could not start Thea: %s", err)
+		log.Fatalf("Could not start Thea: %s", err)
 	}
 
-	t.Cleanup(func() {
-		t.Log("Stopping Thea...")
-		timeout := 5 * time.Second
-		if err := theaC.Stop(ctx, &timeout); err != nil {
-			fmt.Printf("Could not stop Thea: %s", err)
-		}
-	})
+	return &TestService{
+		Port:         port,
+		DatabaseName: databaseName,
+		cleanup: func() {
+			log.Println("Stopping Thea...")
+			timeout := 5 * time.Second
+			if err := theaC.Stop(ctx, &timeout); err != nil {
+				fmt.Printf("Could not stop Thea: %s", err)
+			}
+		},
+	}
 }
 
-func spawnPostgres() func() {
+func SpawnPostgres() func() {
 	dbName := "THEA_DB"
 	dbUser := "postgres"
 	dbPassword := "postgres"

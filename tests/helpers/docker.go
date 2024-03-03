@@ -54,7 +54,7 @@ func SpawnTheaManualCleanup(databaseName string) *TestService {
 		Port:         port,
 		DatabaseName: databaseName,
 		cleanup: func() {
-			log.Println("Stopping Thea...")
+			fmt.Printf("Stopping Thea...")
 			timeout := 5 * time.Second
 			if err := theaC.Stop(ctx, &timeout); err != nil {
 				fmt.Printf("Could not stop Thea: %s", err)
@@ -85,10 +85,10 @@ func SpawnPostgres() func() {
 
 	// Clean up the container
 	return func() {
-		log.Printf("Stopping postgres...")
+		fmt.Printf("Stopping postgres...")
 		timeout := 5 * time.Second
 		if err := postgresC.Stop(ctx, &timeout); err != nil {
-			fmt.Printf("Could not stop Thea: %s", err)
+			fmt.Printf("Could not stop Postgres: %s", err)
 		}
 	}
 }

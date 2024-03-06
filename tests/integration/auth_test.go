@@ -10,21 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var (
-	ctx                     = context.Background()
-	defaultContainerRequest = helpers.NewTheaContainerRequest().WithDatabaseName("integration_test")
-)
-
-// requireSharedThea requests a Thea service from the service
-// pool using the same DB name each time, meaning that the
-// pool will provide the same service instance back to the
-// test, only cleaning it up once all are compelted
-// NOTE: It is important that any t.Parallel calls come
-// AFTER a requireSharedThea call, as otherwise
-// the pool may mistakenly consider a service finished with.
-func requireSharedThea(t *testing.T) *helpers.TestService {
-	return helpers.ServicePool.RequireThea(t, defaultContainerRequest)
-}
+var ctx = context.Background()
 
 // This package performs HTTP REST API testing against
 // this controller. It requires that an instance of
@@ -32,7 +18,7 @@ func requireSharedThea(t *testing.T) *helpers.TestService {
 // URL provided.
 
 func TestLogin_InvalidCredentials(t *testing.T) {
-	srv := requireSharedThea(t)
+	srv := helpers.RequireDefaultThea(t)
 	t.Parallel()
 
 	resp, err := srv.NewClient(t).LoginWithResponse(ctx,
@@ -50,7 +36,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 // Ensure that a successful login returns valid tokens
 // which can be used in a subsequent request to fetch the user.
 func TestLogin_ValidCredentials(t *testing.T) {
-	srv := requireSharedThea(t)
+	srv := helpers.RequireDefaultThea(t)
 	t.Parallel()
 
 	testUser, authedClient := srv.NewClientWithRandomUser(t)
@@ -82,7 +68,7 @@ func TestLogin_ValidCredentials(t *testing.T) {
 // of the response clearing the cookies, they should not work for
 // secured endpoints.
 func TestLogout_BlacklistsTokens(t *testing.T) {
-	srv := requireSharedThea(t)
+	srv := helpers.RequireDefaultThea(t)
 	t.Parallel()
 
 	_, authedClient := srv.NewClientWithRandomUser(t)
@@ -107,7 +93,7 @@ func TestLogout_BlacklistsTokens(t *testing.T) {
 // when 'LogoutAll' is called. Other users active on Thea should
 // not be impacted by this.
 func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
-	srv := requireSharedThea(t)
+	srv := helpers.RequireDefaultThea(t)
 	t.Parallel()
 
 	assertClientState := func(t *testing.T, client *gen.ClientWithResponses, expectedUser *helpers.TestUser) {

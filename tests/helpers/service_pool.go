@@ -6,57 +6,6 @@ import (
 	"testing"
 )
 
-// TheaServiceRequest encapsulates information required to
-// spawn a Thea service inside of a docker container.
-type TheaServiceRequest struct {
-	// databaseName defines the name of the PostgreSQL database
-	// which this Thea container is expected to connect to. Provisioning
-	// of this database will be handled automatically if needed.
-	databaseName string
-
-	// ingestDirectory defines an optional directory on the
-	// host file system which will be mapped in to the /ingests
-	// path inside of the container.
-	ingestDirectory string
-
-	// environmentVariables can optionally be provided to
-	// the request to augment the mandatory API_HOST_ADDR and DB_NAME
-	// values that are provided. Note that overriding these values
-	// inside of the environmentVariables will have no effect.
-	environmentVariables map[string]string
-}
-
-func NewTheaContainerRequest() TheaServiceRequest {
-	return TheaServiceRequest{
-		databaseName:         MasterDBName,
-		ingestDirectory:      "",
-		environmentVariables: make(map[string]string, 0),
-	}
-}
-
-func (req TheaServiceRequest) Key() string {
-	return fmt.Sprintf("thea-%s-%s", req.databaseName, req.ingestDirectory)
-}
-
-func (req TheaServiceRequest) String() string {
-	return fmt.Sprintf("Request{db=%s ingestDir=%s}", req.databaseName, req.ingestDirectory)
-}
-
-func (req TheaServiceRequest) WithDatabaseName(databaseName string) TheaServiceRequest {
-	req.databaseName = databaseName
-	return req
-}
-
-func (req TheaServiceRequest) WithIngestDirectory(ingestPath string) TheaServiceRequest {
-	req.ingestDirectory = ingestPath
-	return req
-}
-
-func (req TheaServiceRequest) WithEnvironmentVariable(key, value string) TheaServiceRequest {
-	req.environmentVariables[key] = value
-	return req
-}
-
 type TestServicePool struct {
 	*sync.Mutex
 	databaseManager *databaseManager
@@ -73,7 +22,18 @@ func newTestServicePool() *TestServicePool {
 	}
 }
 
-var ServicePool *TestServicePool = newTestServicePool()
+var (
+	servicePool           *TestServicePool = newTestServicePool()
+	defaultServiceRequest                  = NewTheaContainerRequest().WithDatabaseName("integration_test")
+)
+
+func RequireDefaultThea(t *testing.T) *TestService {
+	return servicePool.requireThea(t, defaultServiceRequest)
+}
+
+func RequireThea(t *testing.T, request TheaServiceRequest) *TestService {
+	return servicePool.requireThea(t, request)
+}
 
 // RequireThea will return a TestService back to the caller based on the request provided.
 // If the request matches a previously seen request (note that the environment variables inside
@@ -81,7 +41,7 @@ var ServicePool *TestServicePool = newTestServicePool()
 // may be returned to the caller. If no existing service can satisfy the request, then a new instance
 // of Thea will be started inside of a Docker container, pointing to a new database (if specified), and
 // running on a unique port number. Cleanup of services is automatic via the testing.T Cleanup functionality.
-func (pool *TestServicePool) RequireThea(t *testing.T, request TheaServiceRequest) *TestService {
+func (pool *TestServicePool) requireThea(t *testing.T, request TheaServiceRequest) *TestService {
 	pool.Lock()
 	defer pool.Unlock()
 
@@ -134,4 +94,55 @@ func (pool *TestServicePool) getOrCreate(t *testing.T, request TheaServiceReques
 	t.Logf("Request for Thea service '%s' has NO matching existing service. Spawning...", request)
 	pool.databaseManager.provisionDB(t, request.databaseName)
 	return spawnThea(t, request)
+}
+
+// TheaServiceRequest encapsulates information required to
+// request a Thea service from the service pool.
+type TheaServiceRequest struct {
+	// databaseName defines the name of the PostgreSQL database
+	// which this Thea container is expected to connect to. Provisioning
+	// of this database will be handled automatically if needed.
+	databaseName string
+
+	// ingestDirectory defines an optional directory on the
+	// host file system which will be mapped in to the /ingests
+	// path inside of the container.
+	ingestDirectory string
+
+	// environmentVariables can optionally be provided to
+	// the request to augment the mandatory API_HOST_ADDR and DB_NAME
+	// values that are provided. Note that overriding these values
+	// inside of the environmentVariables will have no effect.
+	environmentVariables map[string]string
+}
+
+func NewTheaContainerRequest() TheaServiceRequest {
+	return TheaServiceRequest{
+		databaseName:         MasterDBName,
+		ingestDirectory:      "",
+		environmentVariables: make(map[string]string, 0),
+	}
+}
+
+func (req TheaServiceRequest) Key() string {
+	return fmt.Sprintf("thea-%s-%s", req.databaseName, req.ingestDirectory)
+}
+
+func (req TheaServiceRequest) String() string {
+	return fmt.Sprintf("Request{db=%s ingestDir=%s}", req.databaseName, req.ingestDirectory)
+}
+
+func (req TheaServiceRequest) WithDatabaseName(databaseName string) TheaServiceRequest {
+	req.databaseName = databaseName
+	return req
+}
+
+func (req TheaServiceRequest) WithIngestDirectory(ingestPath string) TheaServiceRequest {
+	req.ingestDirectory = ingestPath
+	return req
+}
+
+func (req TheaServiceRequest) WithEnvironmentVariable(key, value string) TheaServiceRequest {
+	req.environmentVariables[key] = value
+	return req
 }

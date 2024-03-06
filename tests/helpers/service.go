@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/hbomb79/Thea/internal/user/permissions"
 	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/labstack/gommon/random"
@@ -15,8 +18,9 @@ import (
 )
 
 const (
-	ServerBasePathTemplate = "http://localhost:%d/api/thea/v1/"
+	ServerBasePathTemplate = "%s://localhost:%d/api/thea/v1/"
 	LoginCookiesCount      = 2
+	ActivityPath           = "activity/ws"
 )
 
 var (
@@ -57,7 +61,26 @@ type TestService struct {
 }
 
 func (service *TestService) GetServerBasePath() string {
-	return fmt.Sprintf(ServerBasePathTemplate, service.Port)
+	return fmt.Sprintf(ServerBasePathTemplate, "http", service.Port)
+}
+
+func (service *TestService) GetActivityURL() string {
+	return fmt.Sprintf("%s%s", fmt.Sprintf(ServerBasePathTemplate, "ws", service.Port), ActivityPath)
+}
+
+func (service *TestService) ConnectToActivitySocket(t *testing.T) *websocket.Conn {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("failed to connect to activity socket: failed to create cookie jar: %s", err)
+	}
+
+	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second, Jar: jar}
+	ws, resp, err := dialer.Dial(service.GetActivityURL(), make(map[string][]string))
+	if err != nil {
+		t.Fatalf("failed to connect to activity socket: %s", err)
+	}
+	t.Logf("Connected: %v [%v]", ws, resp)
+	return ws
 }
 
 func (service *TestService) String() string {
@@ -70,6 +93,7 @@ func (service *TestService) String() string {
 type TestUser struct {
 	User     gen.User
 	Password string
+	Cookies  []*http.Cookie
 }
 
 func (service *TestService) NewClient(t *testing.T) *gen.ClientWithResponses {
@@ -102,7 +126,7 @@ func (service *TestService) NewClientWithCredentials(t *testing.T, username stri
 
 	authClient, err := gen.NewClientWithResponses(service.GetServerBasePath(), gen.WithRequestEditorFn(WithCookies(cookies)))
 	assert.Nil(t, err)
-	return TestUser{User: *resp.JSON200, Password: password}, authClient
+	return TestUser{User: *resp.JSON200, Password: password, Cookies: cookies}, authClient
 }
 
 // NewClientWithRandomUser creates a new user using a default API client,

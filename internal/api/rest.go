@@ -116,16 +116,20 @@ func NewRestGateway(
 		middleware.LoggerWithConfig(middleware.LoggerConfig{
 			Format: "[Request] ${time_rfc3339} :: ${method} ${uri} -> ${status} ${error} {ip=${remote_ip}, user_agent=${user_agent}}\n",
 		}),
-		middleware.CORSWithConfig(middleware.CORSConfig{
-			AllowOrigins: []string{"*"},
-			// AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAccessControlAllowOrigin},
-			// AllowMethods: []string{echo.OPTIONS, echo.GET, echo.HEAD, echo.PUT, echo.PATCH, echo.POST, echo.DELETE},
-		}),
-		authProvider.GetSecurityValidatorMiddleware(apiBasePath),
+		// middleware.CORSWithConfig(middleware.CORSConfig{
+		// 	AllowOrigins: []string{"*"},
+		// AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAccessControlAllowOrigin},
+		// AllowMethods: []string{echo.OPTIONS, echo.GET, echo.HEAD, echo.PUT, echo.PATCH, echo.POST, echo.DELETE},
+		// }),
 	)
 
 	// -- Setup gateway --
 	socket := websocket.New()
+	ec.GET(apiBasePath+"/activity/ws", func(c echo.Context) error {
+		// TODO authentication things here pls
+		socket.UpgradeToSocket(c.Response(), c.Request())
+		return nil
+	})
 	gateway := &RestGateway{
 		broadcaster: newBroadcaster(socket, ingestService, transcodeService, store),
 		config:      config,
@@ -143,7 +147,8 @@ func NewRestGateway(
 		workflows.New(store),
 	}, []gen.StrictMiddlewareFunc{requestBodyValidatorMiddleware})
 
-	gen.RegisterHandlersWithBaseURL(ec, serverImpl, apiBasePath)
+	authenticatedGroup := ec.Group(apiBasePath, authProvider.GetSecurityValidatorMiddleware(apiBasePath))
+	gen.RegisterHandlers(authenticatedGroup, serverImpl)
 	return gateway
 }
 

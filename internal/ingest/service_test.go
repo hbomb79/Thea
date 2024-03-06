@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"sync"
 	"testing"
@@ -23,6 +22,7 @@ import (
 	mocks "github.com/hbomb79/Thea/internal/ingest/mocks"
 	"github.com/hbomb79/Thea/internal/media"
 	"github.com/hbomb79/Thea/pkg/logger"
+	"github.com/hbomb79/Thea/tests/helpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -79,30 +79,9 @@ func startService(t *testing.T, config ingest.Config, searcherMock *mocks.MockSe
 	return startServiceWithBus(t, config, searcherMock, scraperMock, storeMock, defaultEventBus)
 }
 
-func tempDir(t *testing.T) string {
-	tempDir, err := os.MkdirTemp("", "thea_ingest_test")
-	assert.Nil(t, err, "failed to create temporary dir")
-	t.Cleanup(func() { os.RemoveAll(tempDir) })
-
-	return tempDir
-}
-
-func tempDirWithFiles(t *testing.T, files []string) (string, []string) {
-	dirPath := tempDir(t)
-	filePaths := make([]string, 0, len(files))
-	for _, filename := range files {
-		fileName, err := os.CreateTemp(dirPath, filename)
-		assert.Nil(t, err, "failed to create temporary file in temporary dir")
-		filePaths = append(filePaths, fileName.Name())
-	}
-
-	assert.Len(t, filePaths, len(files), "Expected file paths recorded to match length of requested files")
-	return dirPath, filePaths
-}
-
 func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
 	t.Parallel()
-	tempDir, files := tempDirWithFiles(t, []string{"episode"})
+	tempDir, files := helpers.TempDirWithFiles(t, []string{"episode"})
 
 	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)
@@ -201,7 +180,7 @@ func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
 
 func Test_MovieImports_CorrectlySaved(t *testing.T) {
 	t.Parallel()
-	tempDir, files := tempDirWithFiles(t, []string{"movie"})
+	tempDir, files := helpers.TempDirWithFiles(t, []string{"movie"})
 
 	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)
@@ -285,7 +264,7 @@ func Test_MovieImports_CorrectlySaved(t *testing.T) {
 
 func Test_NewFile_IgnoredIfAlreadyImported(t *testing.T) {
 	t.Parallel()
-	tempDir, files := tempDirWithFiles(t, []string{"anynameworks"})
+	tempDir, files := helpers.TempDirWithFiles(t, []string{"anynameworks"})
 
 	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, RequiredModTimeAgeSeconds: 2, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)
@@ -305,7 +284,7 @@ func Test_NewFile_CorrectlyHeld(t *testing.T) {
 	t.Parallel()
 	// Construct a new ingest service with the import delay set to a low value
 	// and noop mocks for the dependencies.
-	tempDir, files := tempDirWithFiles(t, []string{"anynameworks"})
+	tempDir, files := helpers.TempDirWithFiles(t, []string{"anynameworks"})
 
 	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, RequiredModTimeAgeSeconds: 2, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)
@@ -347,7 +326,7 @@ func Test_NewFile_CorrectlyHeld(t *testing.T) {
 
 func Test_PollsFilesystemPeriodically(t *testing.T) {
 	t.Parallel()
-	tempDir := tempDir(t)
+	tempDir := t.TempDir()
 
 	cfg := ingest.Config{ForceSyncSeconds: 1, IngestPath: tempDir, RequiredModTimeAgeSeconds: 2, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)

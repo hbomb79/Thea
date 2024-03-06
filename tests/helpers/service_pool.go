@@ -6,80 +6,132 @@ import (
 	"testing"
 )
 
+// TheaServiceRequest encapsulates information required to
+// spawn a Thea service inside of a docker container.
+type TheaServiceRequest struct {
+	// databaseName defines the name of the PostgreSQL database
+	// which this Thea container is expected to connect to. Provisioning
+	// of this database will be handled automatically if needed.
+	databaseName string
+
+	// ingestDirectory defines an optional directory on the
+	// host file system which will be mapped in to the /ingests
+	// path inside of the container.
+	ingestDirectory string
+
+	// environmentVariables can optionally be provided to
+	// the request to augment the mandatory API_HOST_ADDR and DB_NAME
+	// values that are provided. Note that overriding these values
+	// inside of the environmentVariables will have no effect.
+	environmentVariables map[string]string
+}
+
+func NewTheaContainerRequest() TheaServiceRequest {
+	return TheaServiceRequest{
+		databaseName:         MasterDBName,
+		ingestDirectory:      "",
+		environmentVariables: make(map[string]string, 0),
+	}
+}
+
+func (req TheaServiceRequest) Key() string {
+	return fmt.Sprintf("thea-%s-%s", req.databaseName, req.ingestDirectory)
+}
+
+func (req TheaServiceRequest) String() string {
+	return fmt.Sprintf("Request{db=%s ingestDir=%s}", req.databaseName, req.ingestDirectory)
+}
+
+func (req TheaServiceRequest) WithDatabaseName(databaseName string) TheaServiceRequest {
+	req.databaseName = databaseName
+	return req
+}
+
+func (req TheaServiceRequest) WithIngestDirectory(ingestPath string) TheaServiceRequest {
+	req.ingestDirectory = ingestPath
+	return req
+}
+
+func (req TheaServiceRequest) WithEnvironmentVariable(key, value string) TheaServiceRequest {
+	req.environmentVariables[key] = value
+	return req
+}
+
 type TestServicePool struct {
 	*sync.Mutex
-	services map[string]*TestService
-	counts   map[string]int
+	databaseManager *databaseManager
+	services        map[string]*TestService
+	counts          map[string]int
 }
 
-func (pool *TestServicePool) RequireThea(t *testing.T, databaseName string) *TestService {
-	fmt.Printf("Test %s is requesting a Thea instance with DB %s...\n", t.Name(), databaseName)
-
-	service := pool.GetOrCreate(databaseName)
-	pool.markInUse(t, databaseName)
-	return service
+func newTestServicePool() *TestServicePool {
+	return &TestServicePool{
+		Mutex:           &sync.Mutex{},
+		databaseManager: newDatabaseManager(MasterDBName),
+		services:        make(map[string]*TestService),
+		counts:          make(map[string]int),
+	}
 }
 
-func (pool *TestServicePool) markInUse(t *testing.T, databaseName string) {
+var ServicePool *TestServicePool = newTestServicePool()
+
+// RequireThea will return a TestService back to the caller based on the request provided.
+// If the request matches a previously seen request (note that the environment variables inside
+// the request are NOT considered when checking for matching requests) then an existing TestService
+// may be returned to the caller. If no existing service can satisfy the request, then a new instance
+// of Thea will be started inside of a Docker container, pointing to a new database (if specified), and
+// running on a unique port number. Cleanup of services is automatic via the testing.T Cleanup functionality.
+func (pool *TestServicePool) RequireThea(t *testing.T, request TheaServiceRequest) *TestService {
 	pool.Lock()
 	defer pool.Unlock()
-	pool.counts[databaseName]++
-	t.Cleanup(func() { pool.markComplete(t, databaseName) })
+
+	t.Logf("Test %s requesting Thea service: %s", t.Name(), request)
+
+	srv := pool.getOrCreate(t, request)
+	pool.services[request.Key()] = srv
+	pool.counts[request.Key()]++
+
+	t.Cleanup(func() { pool.markComplete(t, request) })
+
+	return srv
 }
 
-func (pool *TestServicePool) markComplete(t *testing.T, databaseName string) {
+func (pool *TestServicePool) markComplete(t *testing.T, request TheaServiceRequest) {
 	pool.Lock()
 	defer pool.Unlock()
 
-	pool.counts[databaseName]--
-	fmt.Printf("Test %s finished with Thea service (for DB %s)\n", t.Name(), databaseName)
-	if pool.counts[databaseName] == 0 {
-		fmt.Printf("All consumers have finished using Thea service (for DB %s), shutting down...\n", databaseName)
+	reqKey := request.Key()
+	pool.counts[reqKey]--
+
+	t.Logf("Test %s finished using Thea service (for request %s)\n", t.Name(), request)
+	if pool.counts[reqKey] == 0 {
+		t.Logf("All consumers have finished using Thea service (for request %s), shutting down...\n", request)
 		// Clear groups and teardown service
-		delete(pool.counts, databaseName)
-		if serv, ok := pool.services[databaseName]; ok {
-			serv.cleanup()
-			delete(pool.services, databaseName)
+		delete(pool.counts, reqKey)
+		if serv, ok := pool.services[reqKey]; ok {
+			serv.cleanup(t)
+			delete(pool.services, reqKey)
 		} else {
-			fmt.Printf("[WARNING] Service for DB %s not found, but it's WaitGroup was still being tracked...\n", databaseName)
+			t.Logf("[WARNING] Service associated with request %s not found, but it was still being tracked...\n", request)
 		}
 
 		if len(pool.services) == 0 {
-			fmt.Printf("No services provisioned, cleaning up Postgres container...\n")
-			dbManager.cleanup()
+			t.Log("No services provisioned, cleaning up Postgres container...\n")
+			pool.databaseManager.disconnect(t)
 		}
 	}
 }
 
-// GetOrCreate will either return an existing Thea service which uses
+// getOrCreate will either return an existing Thea service which uses
 // the database name specified, or will spawn a new instance of the service
 // and provision the database specified.
-func (pool *TestServicePool) GetOrCreate(databaseName string) *TestService {
-	pool.Lock()
-	defer pool.Unlock()
-
-	if existing, ok := pool.services[databaseName]; ok {
-		fmt.Printf("Request for Thea service with DB '%s' satisfiable by existing service\n", databaseName)
+func (pool *TestServicePool) getOrCreate(t *testing.T, request TheaServiceRequest) *TestService {
+	if existing, ok := pool.services[request.Key()]; ok {
+		t.Logf("Request '%s' satisfiable by existing service %s", request, existing)
 		return existing
 	}
 
-	fmt.Printf("Request for Thea service with DB '%s' has NO matching existing service. Spawning...\n", databaseName)
-	service := SpawnTheaManualCleanup(databaseName)
-	pool.services[databaseName] = service
-
-	return service
-}
-
-func NewTestServicePool() *TestServicePool {
-	return &TestServicePool{
-		Mutex:    &sync.Mutex{},
-		services: make(map[string]*TestService),
-		counts:   make(map[string]int),
-	}
-}
-
-var ServicePool *TestServicePool
-
-func init() {
-	ServicePool = NewTestServicePool()
+	t.Logf("Request for Thea service '%s' has NO matching existing service. Spawning...", request)
+	pool.databaseManager.provisionDB(t, request.databaseName)
+	return spawnThea(t, request)
 }

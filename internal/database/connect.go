@@ -120,7 +120,7 @@ func (db *manager) Connect(config DatabaseConfig) error {
 // dir in this package) and runs them against the current DB instance.
 //
 // Note that this method must only be called following a successful DB connection. If the connection
-// is not yet established, then this method panics.
+// is not yet established, then this method will return error.
 func (db *manager) executeMigrations() error {
 	rawDB := db.rawDB
 	if rawDB == nil {

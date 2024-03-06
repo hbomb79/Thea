@@ -11,9 +11,13 @@ import (
 	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/labstack/gommon/random"
 	"github.com/stretchr/testify/assert"
+	"github.com/testcontainers/testcontainers-go"
 )
 
-const ServerBasePathTemplate = "http://localhost:%d/api/thea/v1/"
+const (
+	ServerBasePathTemplate = "http://localhost:%d/api/thea/v1/"
+	LoginCookiesCount      = 2
+)
 
 var (
 	ctx = context.Background()
@@ -29,8 +33,6 @@ func EnvVarOrDefault(key string, def string) string {
 		return def
 	}
 }
-
-const LoginCookiesCount = 2
 
 func WithCookies(cookies []*http.Cookie) gen.RequestEditorFn {
 	return func(_ context.Context, req *http.Request) error {
@@ -50,11 +52,16 @@ type TestService struct {
 	Port         int
 	DatabaseName string
 
-	cleanup func()
+	container testcontainers.Container
+	cleanup   func(t *testing.T)
 }
 
 func (service *TestService) GetServerBasePath() string {
 	return fmt.Sprintf(ServerBasePathTemplate, service.Port)
+}
+
+func (service *TestService) String() string {
+	return fmt.Sprintf("TestContainer{port=%d database=%s}", service.Port, service.DatabaseName)
 }
 
 // Defines common functions which assist tests with

@@ -2,11 +2,13 @@ package helpers
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
+	"sync"
+	"testing"
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/testcontainers/testcontainers-go"
 )
 
 const (
@@ -19,50 +21,76 @@ const (
 	Port                = "5432"
 )
 
-var dbManager = DatabaseTemplateManager{}
+// databaseManager is an internal test helper which facilitates
+// the templating of a single 'master' database in a shared postgresql
+// docker instance. This allows tests to use individual databases without
+// needing to create multiple instances of docker. This manager will:
+//   - automatically spawn the container,
+//   - migrate the database (using an emphemeral Thea instance),
+//   - mark the master database as a template, and,
+//   - facilitate provisioning of new databases based off that master database.
+type databaseManager struct {
+	*sync.Mutex
+	masterDatabaseName string
+	pgContainer        testcontainers.Container
+	connection         *sql.DB
+}
 
-func init() {
-	fmt.Printf("initialising postgres schema management")
-	if err := dbManager.InitialiseMasterSchema(); err != nil {
-		panic(err)
+func newDatabaseManager(databaseName string) *databaseManager {
+	return &databaseManager{
+		Mutex:              &sync.Mutex{},
+		masterDatabaseName: databaseName,
 	}
 }
 
-type DatabaseTemplateManager struct {
-	masterTemplate string
-	cleanup        func()
-	dbConn         *sql.DB
+func (manager *databaseManager) provisionDB(t *testing.T, databaseName string) {
+	manager.Lock()
+	defer manager.Unlock()
+
+	if databaseName == MasterDBName {
+		t.Logf("WARNING: ignoring request to provision database '%s' as this DB is the master database, and cannot be provisioned", databaseName)
+		return
+	}
+
+	if manager.connection == nil {
+		t.Log("Database provisioning request received but manager not started yet. Initializing database management...")
+		manager.connect(t)
+		manager.markMasterDB(t)
+		t.Log("Database management initialised!")
+	}
+
+	_, err := manager.connection.Exec(fmt.Sprintf(`CREATE DATABASE "%s" TEMPLATE "%s"`, databaseName, manager.masterDatabaseName))
+	if err != nil {
+		t.Logf("WARNING: failed to create provision database '%s' based on template database '%s': (%T) %s", databaseName, manager.masterDatabaseName, err, err)
+	}
 }
 
-// InitialiseMasterSchema should be called before any
-// integration tests run. It is responsible for spawning the
-// global postgres instance, and a temporary Thea instance which
-// will migrate the schema of the database to match the expected
-// state, before the database is marked as a template. After this, the
-// Thea instance is terminated, and all future integration tests
-// should make a copy of this templated database for each test.
-func (manager *DatabaseTemplateManager) InitialiseMasterSchema() error {
-	manager.cleanup = SpawnPostgres()
+func (manager *databaseManager) connect(t *testing.T) {
+	if manager.connection != nil {
+		t.Log("WARNING: ignoring request to connect database manager, connection already open")
+		return
+	}
 
-	service := SpawnTheaManualCleanup(MasterDBName)
-	service.cleanup() // Thea has started up and migrated the schema for us, we don't need it anymore
+	if manager.pgContainer == nil {
+		manager.spawnPostgres(t)
+	} else if !manager.pgContainer.IsRunning() {
+		t.Fatalf("failed to connect database manager, container exists but not running")
+	}
 
 	// Connect to the database, mark the current DB as the master template.
 	dsn := fmt.Sprintf(SQLConnectionString, Host, User, Password, MasterDBName, Port)
 	db, err := sql.Open(SQLDialect, dsn)
 	if err != nil {
-		return fmt.Errorf("failed to open postgres connection: %w", err)
+		t.Fatalf("failed to open postgres connection: %s", err)
 	}
 
-	attempt := 1
-	for {
+	for attempt := range 3 {
 		err := db.Ping()
 		if err != nil {
-			if attempt >= 3 {
-				return errors.New("all database connection attempts FAILED")
+			if attempt == 3 {
+				t.Fatalf("all database connection attempts FAILED")
 			} else {
 				fmt.Printf("DB connection attempt (%v/5) failed... Retrying in 3s\n", attempt)
-				attempt++
 				time.Sleep(3 * time.Second)
 				continue
 			}
@@ -71,29 +99,60 @@ func (manager *DatabaseTemplateManager) InitialiseMasterSchema() error {
 		break
 	}
 
-	fmt.Println("Database connection established!")
-
-	// Mark the current database as the master template
-	_, err = db.Exec(fmt.Sprintf(`ALTER DATABASE "%s" WITH is_template TRUE`, MasterDBName))
-	if err != nil {
-		return fmt.Errorf("failed to mark master database as template: %w", err)
-	}
-
-	fmt.Printf("Setting DB connection %T and master DB %s\n", db, MasterDBName)
-	manager.dbConn = db
-	manager.masterTemplate = MasterDBName
-	return nil
+	t.Log("Database connection established!")
+	manager.connection = db
 }
 
-// SeedNewDatabase allows a specific test (or a selection of subtests) to
-// create a new database within the postgres instance based off of a master template.
-func (manager *DatabaseTemplateManager) SeedNewDatabase(databaseName string) {
-	if databaseName == MasterDBName {
+func (manager *databaseManager) markMasterDB(t *testing.T) {
+	if manager.connection == nil {
+		t.Fatalf("cannot mark master database as template: db connection not established")
 		return
 	}
 
-	_, err := manager.dbConn.Exec(fmt.Sprintf(`CREATE DATABASE "%s" TEMPLATE "%s"`, databaseName, MasterDBName))
-	if err != nil {
-		fmt.Printf("Failed to create new database %s based on template %s: %v", databaseName, MasterDBName, err)
+	t.Log("Spawning Thea instance to migrate master database...")
+	thea := spawnThea(t, NewTheaContainerRequest().WithDatabaseName(manager.masterDatabaseName))
+	t.Log("Master DB migrated, closing Thea...")
+	thea.cleanup(t)
+	t.Log("Thea closed, marking master database as template...")
+
+	if _, err := manager.connection.Exec(fmt.Sprintf(`ALTER DATABASE "%s" WITH is_template TRUE`, manager.masterDatabaseName)); err != nil {
+		t.Fatalf("failed to mark master database (%s) as template: %s", manager.masterDatabaseName, err)
+	}
+}
+
+func (manager *databaseManager) spawnPostgres(t *testing.T) {
+	if manager.pgContainer != nil && manager.pgContainer.IsRunning() {
+		t.Log("WARNING: ignoring request to spawn PG container, container already running")
+		return
+	}
+
+	manager.pgContainer = spawnPostgres(t)
+}
+
+func (manager *databaseManager) teardownPostgres(t *testing.T) {
+	if manager.pgContainer == nil || !manager.pgContainer.IsRunning() {
+		t.Logf("WARNING: ignoring request to teardown postgres container, container not running")
+	}
+
+	t.Log("Tearing down Postgres container...")
+	timeout := 5 * time.Second
+	if err := manager.pgContainer.Stop(ctx, &timeout); err != nil {
+		t.Logf("WARNING: failed to stop Postgres container: %s", err)
+	}
+}
+
+func (manager *databaseManager) disconnect(t *testing.T) {
+	manager.Lock()
+	defer manager.Unlock()
+
+	t.Logf("Disconnecting database management...")
+	if manager.connection != nil {
+		_ = manager.connection.Close()
+		manager.connection = nil
+	}
+
+	if manager.pgContainer.IsRunning() {
+		manager.teardownPostgres(t)
+		manager.pgContainer = nil
 	}
 }

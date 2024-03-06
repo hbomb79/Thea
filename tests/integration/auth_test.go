@@ -10,7 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var ctx = context.Background()
+var (
+	ctx                     = context.Background()
+	defaultContainerRequest = helpers.NewTheaContainerRequest().WithDatabaseName("integration_test")
+)
 
 // requireSharedThea requests a Thea service from the service
 // pool using the same DB name each time, meaning that the
@@ -20,7 +23,7 @@ var ctx = context.Background()
 // AFTER a requireSharedThea call, as otherwise
 // the pool may mistakenly consider a service finished with.
 func requireSharedThea(t *testing.T) *helpers.TestService {
-	return helpers.ServicePool.RequireThea(t, "integration_test")
+	return helpers.ServicePool.RequireThea(t, defaultContainerRequest)
 }
 
 // This package performs HTTP REST API testing against

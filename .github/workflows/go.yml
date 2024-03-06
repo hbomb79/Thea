@@ -6,12 +6,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4.1.1
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5.0.0
       with:
-        go-version: '1.21.6'
+        go-version: '1.22.0'
 
     - name: Verify Go Mod
       run: go mod verify
@@ -26,7 +26,7 @@ jobs:
       run: go run honnef.co/go/tools/cmd/staticcheck@latest -f stylish -checks=all,-ST1000,-U1000 ./...
      
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v3.7.0
+      uses: golangci/golangci-lint-action@v4.0.0
       with:
         # during the golangci-lint execution, many files are extracted
         # which conflict with those which are cached by the go setup

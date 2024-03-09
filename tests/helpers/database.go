@@ -8,8 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
 	"github.com/lib/pq"
 	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 const (
@@ -135,7 +138,23 @@ func (manager *databaseManager) spawnPostgres(t *testing.T) {
 		return
 	}
 
-	manager.pgContainer = spawnPostgres(t)
+	postgresC, err := postgres.RunContainer(ctx,
+		testcontainers.WithImage("docker.io/postgres:14.1-alpine"),
+		postgres.WithDatabase(MasterDBName),
+		postgres.WithUsername(User),
+		postgres.WithPassword(Password),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(5*time.Second)),
+		testcontainers.WithHostConfigModifier(func(hostConfig *container.HostConfig) { hostConfig.NetworkMode = "host" }),
+	)
+	if err != nil {
+		t.Fatalf("failed to start container: %s", err)
+		return
+	}
+
+	manager.pgContainer = postgresC
 }
 
 func (manager *databaseManager) teardownPostgres(t *testing.T) {

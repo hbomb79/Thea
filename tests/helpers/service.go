@@ -14,7 +14,6 @@ import (
 	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/labstack/gommon/random"
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
 )
 
 const (
@@ -56,8 +55,8 @@ type TestService struct {
 	Port         int
 	DatabaseName string
 
-	container testcontainers.Container
-	cleanup   func(t *testing.T)
+	// container testcontainers.Container
+	cleanup func(t *testing.T)
 }
 
 func (service *TestService) GetServerBasePath() string {

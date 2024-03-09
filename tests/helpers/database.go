@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	_ "github.com/lib/pq"
 	"github.com/testcontainers/testcontainers-go"
 )
 

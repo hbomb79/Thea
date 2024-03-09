@@ -44,7 +44,7 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 	t.Logf("Spawning Thea process on port %d for request %s\n", port, req)
 	databaseName := req.databaseName
 
-	theaCmd := exec.Command("../../.bin/thea", "-config", "../test-config.toml")
+	theaCmd := exec.Command("../../.bin/thea", "-config", "../test-config.toml", "-log-level", "VERBOSE")
 	theaCmd.Env = os.Environ()
 	for k, v := range req.environmentVariables {
 		theaCmd.Env = append(theaCmd.Env, keyValueToEnv(k, v))

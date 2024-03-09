@@ -50,6 +50,9 @@ audit: tidy
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	go test -buildvcs -vet=off ./...
 
+.PHONY: test
+test: build
+	go test --count=1 -p=1 -v ./...
 
 # ==================================================================================== #
 # DEVELOPMENT

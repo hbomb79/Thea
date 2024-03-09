@@ -12,7 +12,7 @@ import (
 // these ingestions should see the same error return.
 func TestIngestion_FailsToMetadataScrape(t *testing.T) {
 	tempDir, _ := helpers.TempDirWithFiles(t, []string{"thisisnotavalidfile.mp4"})
-	srvReq := helpers.NewTheaContainerRequest().WithDatabaseName(t.Name()).WithIngestDirectory(tempDir)
+	srvReq := helpers.NewTheaServiceRequest().WithDatabaseName(t.Name()).WithIngestDirectory(tempDir)
 	srv := helpers.RequireThea(t, srvReq)
 
 	// Connect to the websocket

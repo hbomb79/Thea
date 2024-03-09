@@ -2,11 +2,13 @@ package helpers
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 	"github.com/testcontainers/testcontainers-go"
 )
@@ -61,7 +63,15 @@ func (manager *databaseManager) provisionDB(t *testing.T, databaseName string) {
 
 	_, err := manager.connection.Exec(fmt.Sprintf(`CREATE DATABASE "%s" TEMPLATE "%s"`, databaseName, manager.masterDatabaseName))
 	if err != nil {
-		t.Logf("WARNING: failed to create provision database '%s' based on template database '%s': (%T) %s", databaseName, manager.masterDatabaseName, err, err)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			if pqErr.Code == "42P04" {
+				t.Logf("Database '%s' already provisioned. Reusing database", databaseName)
+				return
+			}
+		}
+
+		t.Fatalf("failed to create provision database '%s' based on template database '%s': (%T) %s", databaseName, manager.masterDatabaseName, err, err)
 	}
 }
 
@@ -110,7 +120,7 @@ func (manager *databaseManager) markMasterDB(t *testing.T) {
 	}
 
 	t.Log("Spawning Thea instance to migrate master database...")
-	thea := spawnThea(t, NewTheaContainerRequest().WithDatabaseName(manager.masterDatabaseName))
+	thea := spawnTheaProc(t, NewTheaServiceRequest().WithDatabaseName(manager.masterDatabaseName))
 	t.Log("Master DB migrated, closing Thea...")
 	thea.cleanup(t)
 	t.Log("Thea closed, marking master database as template...")

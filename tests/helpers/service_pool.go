@@ -24,7 +24,7 @@ func newTestServicePool() *TestServicePool {
 
 var (
 	servicePool           *TestServicePool = newTestServicePool()
-	defaultServiceRequest                  = NewTheaContainerRequest().WithDatabaseName("integration_test")
+	defaultServiceRequest                  = NewTheaServiceRequest().WithDatabaseName("integration_test")
 )
 
 func RequireDefaultThea(t *testing.T) *TestService {
@@ -93,20 +93,21 @@ func (pool *TestServicePool) getOrCreate(t *testing.T, request TheaServiceReques
 
 	t.Logf("Request for Thea service '%s' has NO matching existing service. Spawning...", request)
 	pool.databaseManager.provisionDB(t, request.databaseName)
-	return spawnThea(t, request)
+	return spawnTheaProc(t, request)
+	// return spawnThea(t, request)
 }
 
 // TheaServiceRequest encapsulates information required to
 // request a Thea service from the service pool.
 type TheaServiceRequest struct {
 	// databaseName defines the name of the PostgreSQL database
-	// which this Thea container is expected to connect to. Provisioning
+	// which this Thea service is expected to connect to. Provisioning
 	// of this database will be handled automatically if needed.
 	databaseName string
 
 	// ingestDirectory defines an optional directory on the
-	// host file system which will be mapped in to the /ingests
-	// path inside of the container.
+	// file system which will be set as the ingest directory
+	// for the spawned service instance.
 	ingestDirectory string
 
 	// environmentVariables can optionally be provided to
@@ -116,7 +117,7 @@ type TheaServiceRequest struct {
 	environmentVariables map[string]string
 }
 
-func NewTheaContainerRequest() TheaServiceRequest {
+func NewTheaServiceRequest() TheaServiceRequest {
 	return TheaServiceRequest{
 		databaseName:         MasterDBName,
 		ingestDirectory:      "",

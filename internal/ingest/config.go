@@ -17,7 +17,7 @@ type Config struct {
 
 	// The path to the directory the service should monitor
 	// for new files
-	IngestPath string `toml:"dir_path" env-required:"true"`
+	IngestPath string `toml:"dir_path" env:"INGEST_DIR" env-required:"true"`
 
 	// An array of regular expressions that can be used to RESTRICT
 	// the files processed by this service. If any expression match

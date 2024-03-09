@@ -152,7 +152,7 @@ func (service *TestService) WaitForHealthy(t *testing.T, pollFrequency time.Dura
 	client := service.NewClient(t)
 	attempts := timeout.Milliseconds() / pollFrequency.Milliseconds()
 	for attempt := range attempts {
-		_, err := client.Login(ctx, gen.LoginJSONRequestBody{Username: "", Password: ""})
+		_, err := client.GetCurrentUser(ctx)
 		if err != nil {
 			if attempt == attempts-1 {
 				return err

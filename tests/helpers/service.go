@@ -147,3 +147,23 @@ func (service *TestService) NewClientWithRandomUser(t *testing.T) (TestUser, *ge
 	// Login as newly created user to get the cookies
 	return service.NewClientWithCredentials(t, usernameAndPassword, usernameAndPassword)
 }
+
+func (service *TestService) WaitForHealthy(t *testing.T, pollFrequency time.Duration, timeout time.Duration) error {
+	client := service.NewClient(t)
+	attempts := timeout.Milliseconds() / pollFrequency.Milliseconds()
+	for attempt := range attempts {
+		_, err := client.Login(ctx, gen.LoginJSONRequestBody{Username: "", Password: ""})
+		if err != nil {
+			if attempt == attempts-1 {
+				return err
+			}
+
+			time.Sleep(pollFrequency)
+			continue
+		}
+
+		break
+	}
+
+	return nil
+}

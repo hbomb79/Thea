@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -59,18 +58,18 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 
 	stdout, err := theaCmd.StdoutPipe()
 	if err != nil {
-		t.Fatalf("failed to execute Thea instance: could not establish stdout pipe: %s", err)
+		t.Fatalf("failed to provision Thea instance: could not establish stdout pipe: %s", err)
 		return nil
 	}
 	stderr, err := theaCmd.StderrPipe()
 	if err != nil {
-		t.Fatalf("failed to execute Thea instance: could not establish stdout pipe: %s", err)
+		t.Fatalf("failed to provision Thea instance: could not establish stdout pipe: %s", err)
 		return nil
 	}
 
 	err = theaCmd.Start()
 	if err != nil {
-		t.Fatalf("failed to execute Thea instance: could not run cmd: %s", err)
+		t.Fatalf("failed to provision Thea instance: could not run cmd: %s", err)
 		return nil
 	}
 
@@ -85,41 +84,24 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 		_ = theaCmd.Wait()
 	}
 
-	isReady := make(chan struct{})
 	go func() {
-		defer close(isReady)
-
-		alreadySeen := false
-		out := io.MultiReader(stdout, stderr)
-		scanner := bufio.NewScanner(out)
+		scanner := bufio.NewScanner(io.MultiReader(stdout, stderr))
 		for scanner.Scan() {
 			text := scanner.Text()
 			log.Printf("[Thea pid=%d port=%d db=%s] -> %s", theaCmd.Process.Pid, port, databaseName, text)
-
-			if !alreadySeen && strings.Contains(text, "Thea services spawned") {
-				isReady <- struct{}{}
-			}
 		}
 
 		fmt.Printf("Thea process (%d) for (%s) has closed it's output pipes\n", theaCmd.Process.Pid, req)
 	}()
 
 	t.Logf("Waiting for Thea process to become healthy (5s timeout)...")
-	select {
-	case _, ok := <-isReady:
-		if !ok {
-			defer cleanup(t)
-
-			t.Fatalf("failed to provision Thea instance: service closed prematurely")
-			return nil
-		}
-
-		t.Logf("Thea process healthy!")
-		return &TestService{Port: port, DatabaseName: databaseName, cleanup: cleanup}
-	case <-time.NewTimer(5 * time.Second).C:
+	srv := &TestService{Port: port, DatabaseName: databaseName, cleanup: cleanup}
+	if err := srv.WaitForHealthy(t, 100*time.Millisecond, 5*time.Second); err != nil {
 		defer cleanup(t)
-
-		t.Fatalf("failed to provision Thea instance: service did not become healthy before timeout")
+		t.Fatalf("failed to provision Thea instance: service did not become healthy before timeout (last error %+v)", err)
 		return nil
 	}
+
+	t.Logf("Thea process (pid %d, port %d) became healthy", theaCmd.Process.Pid, port)
+	return srv
 }

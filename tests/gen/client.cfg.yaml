@@ -1,0 +1,4 @@
+package: gen
+generate:
+  client: true
+output: client.gen.go

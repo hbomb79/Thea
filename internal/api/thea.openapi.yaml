@@ -48,6 +48,10 @@ paths:
             Set-Cookie:
               schema:
                 type: string
+        # "401":
+        #   $ref: "#/components/responses/Unauthorized"
+        # "403":
+        #   $ref: "#/components/responses/Forbidden"
   /auth/current-user:
     get:
       summary: Current User
@@ -123,6 +127,26 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/User"
+    post:
+      summary: Create New User
+      description: Creates a new user
+      operationId: createUser
+      tags:
+        - Users
+      security:
+        - permissionAuth: [user:access, user:modify, user:create]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "200":
+          description: User DTO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
   /users/{id}:
     get:
       summary: Get Users
@@ -737,6 +761,19 @@ components:
       in: cookie
       name: auth-token
 
+  # responses:
+  #   Forbidden:
+  #     description: The specified resource was not found
+  #     content:
+  #       application/json:
+  #         schema:
+  #           $ref: '#/components/schemas/Error'
+  #   Unauthorized:
+  #     description: Unauthorized
+  #     content:
+  #       application/json:
+  #         schema:
+  #           $ref: '#/components/schemas/Error'
   parameters:
     ID:
       in: path
@@ -747,6 +784,18 @@ components:
         format: uuid
 
   schemas:
+    # # Re-usable error DTO
+    # Error:
+    #   type: object
+    #   required:
+    #     - message
+    #     - code
+    #   properties:
+    #     message:
+    #       type: string
+    #     code:
+    #       type: string
+
     # Auth Controller DTOs
     LoginRequest:
       type: object
@@ -767,6 +816,22 @@ components:
       required:
         - permissions
       properties:
+        permissions:
+          type: array
+          items:
+            type: string
+
+    CreateUserRequest:
+      type: object
+      required:
+        - username
+        - password
+        - permissions
+      properties:
+        username:
+          type: string
+        password:
+          type: string
         permissions:
           type: array
           items:

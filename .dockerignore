@@ -1,0 +1,5 @@
+tests/
+mocks/
+.*
+
+!tests/test-config.toml

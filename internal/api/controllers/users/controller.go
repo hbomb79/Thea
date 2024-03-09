@@ -16,6 +16,7 @@ type (
 		ListUsers() ([]*user.User, error)
 		GetUserWithID(userID uuid.UUID) (*user.User, error)
 		UpdateUserPermissions(userID uuid.UUID, newPermissions []string) error
+		CreateUser(username []byte, password []byte, permissions ...string) (*user.User, error)
 	}
 
 	UserController struct{ store Store }
@@ -23,6 +24,15 @@ type (
 
 func NewController(store Store) *UserController {
 	return &UserController{store: store}
+}
+
+func (controller *UserController) CreateUser(ec echo.Context, request gen.CreateUserRequestObject) (gen.CreateUserResponseObject, error) {
+	user, err := controller.store.CreateUser([]byte(request.Body.Username), []byte(request.Body.Password), request.Body.Permissions...)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	return gen.CreateUser200JSONResponse(userToDto(user)), nil
 }
 
 func (controller *UserController) ListUsers(ec echo.Context, _ gen.ListUsersRequestObject) (gen.ListUsersResponseObject, error) {

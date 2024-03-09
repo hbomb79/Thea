@@ -35,6 +35,10 @@ fix: build
 	go mod tidy -v
 	golangci-lint run --fix
 
+.PHONY: lint
+lint:
+	golangci-lint run
+
 ## audit: run quality control checks
 .PHONY: audit
 audit: tidy
@@ -44,8 +48,11 @@ audit: tidy
 	golangci-lint run
 	go run honnef.co/go/tools/cmd/staticcheck@latest -f stylish -checks=all,-ST1000,-U1000 ./...
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-	# go test -race -buildvcs -vet=off ./...
+	go test -buildvcs -vet=off ./...
 
+.PHONY: test
+test: build
+	go test --count=1 -p=1 -v ./...
 
 # ==================================================================================== #
 # DEVELOPMENT

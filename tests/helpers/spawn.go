@@ -96,7 +96,7 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 
 	t.Logf("Waiting for Thea process to become healthy (5s timeout)...")
 	srv := &TestService{Port: port, DatabaseName: databaseName, cleanup: cleanup}
-	if err := srv.WaitForHealthy(t, 100*time.Millisecond, 5*time.Second); err != nil {
+	if err := srv.waitForHealthy(t, 100*time.Millisecond, 5*time.Second); err != nil {
 		defer cleanup(t)
 		t.Fatalf("failed to provision Thea instance: service did not become healthy before timeout (last error %+v)", err)
 		return nil

@@ -46,6 +46,12 @@ func WithCookies(cookies []*http.Cookie) gen.RequestEditorFn {
 	}
 }
 
+type TestUser struct {
+	User     gen.User
+	Password string
+	Cookies  []*http.Cookie
+}
+
 // TestService holds information about a
 // provisioned (or reused) Thea service
 // which a test can request resources from (typically
@@ -55,7 +61,6 @@ type TestService struct {
 	Port         int
 	DatabaseName string
 
-	// container testcontainers.Container
 	cleanup func(t *testing.T)
 }
 
@@ -83,16 +88,7 @@ func (service *TestService) ConnectToActivitySocket(t *testing.T) *websocket.Con
 }
 
 func (service *TestService) String() string {
-	return fmt.Sprintf("TestContainer{port=%d database=%s}", service.Port, service.DatabaseName)
-}
-
-// Defines common functions which assist tests with
-// creating test users and authenticated test clients
-
-type TestUser struct {
-	User     gen.User
-	Password string
-	Cookies  []*http.Cookie
+	return fmt.Sprintf("TestService{port=%d database=%s}", service.Port, service.DatabaseName)
 }
 
 func (service *TestService) NewClient(t *testing.T) *gen.ClientWithResponses {
@@ -148,7 +144,11 @@ func (service *TestService) NewClientWithRandomUser(t *testing.T) (TestUser, *ge
 	return service.NewClientWithCredentials(t, usernameAndPassword, usernameAndPassword)
 }
 
-func (service *TestService) WaitForHealthy(t *testing.T, pollFrequency time.Duration, timeout time.Duration) error {
+// waitForHealthy will ping the service (every pollFrequency) until the timeout is reached.
+// If no successful request has been made when the timeout is reached, then the most
+// recent error is returned to the caller, indicating that the service failed to become
+// healthy (i.e. the service is not accepting HTTP connections).
+func (service *TestService) waitForHealthy(t *testing.T, pollFrequency time.Duration, timeout time.Duration) error {
 	client := service.NewClient(t)
 	attempts := timeout.Milliseconds() / pollFrequency.Milliseconds()
 	for attempt := range attempts {

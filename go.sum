@@ -102,6 +102,8 @@ github.com/gorilla/websocket v1.5.0 h1:PPwGk2jz7EePpoHN/+ClbZu8SPxiqlu12wZP/3sWm
 github.com/gorilla/websocket v1.5.0/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0 h1:YBftPWNWd4WwGqtY2yeZL2ef8rHAxPBD8KFhJpmcqms=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0/go.mod h1:YN5jB8ie0yfIUg6VvR9Kz84aCaG7AsGZnLjhHbUqwPg=
+github.com/hbomb79/go-chanassert v0.1.0 h1:lOiXhgMMJplxYMmpxVvU28felwqNoyMQOWI9YT7WFPo=
+github.com/hbomb79/go-chanassert v0.1.0/go.mod h1:r47M3hPoBQDFtVaC/H/fD7yBysVtg/ksRdgrQnWZ44E=
 github.com/hbomb79/transcoder v1.1.2-0.20230606091455-01e3816a02ae h1:0Xd1ZkyLvGXgWpLGJ6AgIsiLnFnxWiBnDXZrZYP/Rwc=
 github.com/hbomb79/transcoder v1.1.2-0.20230606091455-01e3816a02ae/go.mod h1:lT+f8NEGaHP6AVeYLicas0EI0+TforD+DRuLziJg6bY=
 github.com/ilyakaznacheev/cleanenv v1.4.2 h1:nRqiriLMAC7tz7GzjzUTBHfzdzw6SQ7XvTagkFqe/zU=

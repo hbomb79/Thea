@@ -1,6 +1,6 @@
 module github.com/hbomb79/Thea
 
-go 1.22.1
+go 1.22.2
 
 require (
 	github.com/deepmap/oapi-codegen/v2 v2.0.0
@@ -82,7 +82,10 @@ require (
 	github.com/perimeterx/marshmallow v1.1.4 // indirect
 )
 
-require github.com/golang-jwt/jwt/v5 v5.0.0
+require (
+	github.com/golang-jwt/jwt/v5 v5.0.0
+	github.com/hbomb79/go-chanassert v0.1.0
+)
 
 require (
 	github.com/adrg/strutil v0.3.0

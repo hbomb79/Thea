@@ -69,7 +69,7 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 
 	err = theaCmd.Start()
 	if err != nil {
-		t.Fatalf("failed to provision Thea instance: could not run cmd: %s", err)
+		t.Fatalf("failed to provision Thea instance: could not run cmd: %s\n** Hint: have you run `make build`?", err)
 		return nil
 	}
 

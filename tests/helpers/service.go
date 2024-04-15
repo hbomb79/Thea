@@ -79,11 +79,10 @@ func (service *TestService) ConnectToActivitySocket(t *testing.T) *websocket.Con
 	}
 
 	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second, Jar: jar}
-	ws, resp, err := dialer.Dial(service.GetActivityURL(), make(map[string][]string))
+	ws, _, err := dialer.Dial(service.GetActivityURL(), make(map[string][]string))
 	if err != nil {
 		t.Fatalf("failed to connect to activity socket: %s", err)
 	}
-	t.Logf("Connected: %v [%v]", ws, resp)
 	return ws
 }
 

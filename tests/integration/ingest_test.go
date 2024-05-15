@@ -4,54 +4,45 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hbomb79/Thea/internal/http/websocket"
+	"github.com/hbomb79/Thea/internal/ingest"
+	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/hbomb79/Thea/tests/helpers"
 	"github.com/hbomb79/go-chanassert"
+	"github.com/stretchr/testify/assert"
 )
 
-// TestIngestion_FailsToMetadataScrape ensures that files
+// TestIngestion_MetadataFailure ensures that files
 // which are not valid media files correctly reports failure. Retrying
 // these ingestions should see the same error return.
-func TestIngestion_FailsToMetadataScrape(t *testing.T) {
-	tempDir, _ := helpers.TempDirWithFiles(t, []string{"thisisnotavalidfile.mp4"})
-	srvReq := helpers.NewTheaServiceRequest().WithDatabaseName(t.Name()).WithIngestDirectory(tempDir)
-	srv := helpers.RequireThea(t, srvReq)
+func TestIngestion_MetadataFailure(t *testing.T) {
+	tempDir, paths := helpers.TempDirWithFiles(t, []string{"thisisnotavalidfile.mp4"})
+	req := helpers.NewTheaServiceRequest().
+		WithDatabaseName(t.Name()).
+		WithIngestDirectory(tempDir).
+		WithEnvironmentVariable("INGEST_MODTIME_THRESHOLD_SECONDS", "0")
+	srv := helpers.RequireThea(t, req)
 
-	stream := ActivityStream(t, srv)
-	expecter := chanassert.NewChannelExpecter(stream).
-		Expect(chanassert.AllOf(chanassert.MatchStructPartial(
-			websocket.SocketMessage{Title: "CONNECTION_ESTABLISHED", Type: websocket.Welcome},
-		))).
-		Expect(chanassert.AllOf(chanassert.MatchStructPartial(
-			websocket.SocketMessage{Title: "INGEST_UPDATE", Body: map[string]interface{}{}, Type: websocket.Update},
-		)))
-	expecter.Listen()
-	defer expecter.AssertSatisfied(t, time.Second)
-}
+	exp := srv.ActivityExpecter(t).Expect(
+		chanassert.ExactlyNOf(2, helpers.MatchIngestUpdate(paths[0], ingest.Troubled)),
+	)
+	exp.Listen()
 
-// ActivityStream returns a channel which will deliver
-// messages received over Thea's activity stream socket. This socket
-// connection will automatically close when the test finishes/cleans up.
-func ActivityStream(t *testing.T, srv *helpers.TestService) chan websocket.SocketMessage {
-	socket := srv.ConnectToActivitySocket(t)
-	if err := socket.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		t.Fatalf("failed to set read deadline for activity socket connection: %s", err)
-	}
+	client := srv.NewClientWithDefaultAdminUser(t)
 
-	t.Cleanup(func() { socket.Close() })
+	ingestsResponse, err := client.ListIngestsWithResponse(ctx)
+	assert.NoError(t, err)
+	assert.NotNil(t, ingestsResponse.JSON200, "expected JSON response to be non-nil")
+	assert.Len(t, *ingestsResponse.JSON200, 1, "expected ingests to have length 1")
 
-	output := make(chan websocket.SocketMessage, 10)
-	go func(deliveryChan chan websocket.SocketMessage) {
-		for {
-			var dest websocket.SocketMessage
-			err := socket.ReadJSON(&dest)
-			if err != nil {
-				t.Logf("WARNING: activity stream read JSON error: %s", err)
-			}
+	ingestItem := (*ingestsResponse.JSON200)[0]
+	assert.Equal(t, gen.IngestStateTROUBLED, ingestItem.State)
+	assert.Contains(t, ingestItem.Trouble.AllowedResolutionTypes, gen.RETRY)
 
-			deliveryChan <- dest
-		}
-	}(output)
+	// Retry this item and observe that it will persistently fail. Sleep for the 'debounce' time
+	// of the WS messages to ensure we receive both
+	time.Sleep(time.Second * 2)
 
-	return output
+	_, err = client.ResolveIngestWithResponse(ctx, ingestItem.Id, gen.ResolveIngestJSONRequestBody{Method: gen.RETRY, Context: map[string]string{}})
+	assert.NoError(t, err)
+	exp.AssertSatisfied(t, time.Second*6)
 }

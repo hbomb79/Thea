@@ -94,7 +94,6 @@ func (pool *TestServicePool) getOrCreate(t *testing.T, request TheaServiceReques
 	t.Logf("Request for Thea service '%s' has NO matching existing service. Spawning...", request)
 	pool.databaseManager.provisionDB(t, request.databaseName)
 	return spawnTheaProc(t, request)
-	// return spawnThea(t, request)
 }
 
 // TheaServiceRequest encapsulates information required to
@@ -130,7 +129,7 @@ func (req TheaServiceRequest) Key() string {
 }
 
 func (req TheaServiceRequest) String() string {
-	return fmt.Sprintf("Request{db=%s ingestDir=%s}", req.databaseName, req.ingestDirectory)
+	return fmt.Sprintf("ProvisioningRequest{db=%s ingestDir=%s}", req.databaseName, req.ingestDirectory)
 }
 
 func (req TheaServiceRequest) WithDatabaseName(databaseName string) TheaServiceRequest {

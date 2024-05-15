@@ -84,7 +84,7 @@ require (
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.0.0
-	github.com/hbomb79/go-chanassert v0.1.0
+	github.com/hbomb79/go-chanassert v0.2.0
 )
 
 require (

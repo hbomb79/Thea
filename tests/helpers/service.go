@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	theaws "github.com/hbomb79/Thea/internal/http/websocket"
 	"github.com/hbomb79/Thea/internal/user/permissions"
 	"github.com/hbomb79/Thea/tests/gen"
+	"github.com/hbomb79/go-chanassert"
 	"github.com/labstack/gommon/random"
 	"github.com/stretchr/testify/assert"
 )
@@ -86,6 +88,51 @@ func (service *TestService) ConnectToActivitySocket(t *testing.T) *websocket.Con
 	return ws
 }
 
+// ActivityExpecter returns a chanassert expecter which will be setup
+// with a single layer which expects the [theaws.Welcome] message.
+//
+// Tests can add additional layers to the expecter before calling .Listen on it
+// to start the expecter.
+func (service *TestService) ActivityExpecter(t *testing.T) chanassert.Expecter[theaws.SocketMessage] {
+	activityChan := service.ActivityChannel(t)
+
+	return chanassert.
+		NewChannelExpecter(activityChan).
+		Debug().
+		ExpectTimeout(
+			time.Millisecond*500,
+			chanassert.OneOf(MatchSocketMessage("CONNECTION_ESTABLISHED", theaws.Welcome)),
+		)
+}
+
+func (service *TestService) ActivityChannel(t *testing.T) chan theaws.SocketMessage {
+	ws := service.ConnectToActivitySocket(t)
+	assert.NotNil(t, ws, "expected websocket connection to be non-nil")
+
+	output := make(chan theaws.SocketMessage, 5)
+	go func() {
+		for {
+			var message theaws.SocketMessage
+			err := ws.ReadJSON(&message)
+			if err == nil {
+				t.Logf("WS: received message: %+v\n", message)
+				output <- message
+				continue
+			}
+
+			if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
+				t.Logf("WS: warning: websocket connection abnormally closed (error %s). This is expected if the Thea instance was abruptly closed.", err)
+			} else {
+				t.Errorf("WS: unexpected error: %+v (%T)", err, err)
+			}
+
+			return
+		}
+	}()
+
+	return output
+}
+
 func (service *TestService) String() string {
 	return fmt.Sprintf("TestService{port=%d database=%s}", service.Port, service.DatabaseName)
 }
@@ -144,10 +191,13 @@ func (service *TestService) NewClientWithRandomUser(t *testing.T) (TestUser, *ge
 }
 
 // waitForHealthy will ping the service (every pollFrequency) until the timeout is reached.
+//
 // If no successful request has been made when the timeout is reached, then the most
 // recent error is returned to the caller, indicating that the service failed to become
 // healthy (i.e. the service is not accepting HTTP connections).
 func (service *TestService) waitForHealthy(t *testing.T, pollFrequency time.Duration, timeout time.Duration) error {
+	t.Logf("Waiting for Thea process to become healthy (poll every %s, timeout %s)...", pollFrequency, timeout)
+
 	client := service.NewClient(t)
 	attempts := timeout.Milliseconds() / pollFrequency.Milliseconds()
 	for attempt := range attempts {

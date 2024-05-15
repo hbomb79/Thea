@@ -52,9 +52,10 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 	theaCmd.Env = append(theaCmd.Env, keyValueToEnv("DB_NAME", databaseName))
 
 	// If no ingest directory was specified, then specify one automatically
-	if _, ok := req.environmentVariables["INGEST_DIR"]; !ok {
-		theaCmd.Env = append(theaCmd.Env, keyValueToEnv("INGEST_DIR", t.TempDir()))
+	if req.ingestDirectory == "" {
+		req.ingestDirectory = t.TempDir()
 	}
+	theaCmd.Env = append(theaCmd.Env, keyValueToEnv("INGEST_DIR", req.ingestDirectory))
 
 	stdout, err := theaCmd.StdoutPipe()
 	if err != nil {
@@ -63,13 +64,13 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 	}
 	stderr, err := theaCmd.StderrPipe()
 	if err != nil {
-		t.Fatalf("failed to provision Thea instance: could not establish stdout pipe: %s", err)
+		t.Fatalf("failed to provision Thea instance: could not establish stderr pipe: %s", err)
 		return nil
 	}
 
 	err = theaCmd.Start()
 	if err != nil {
-		t.Fatalf("failed to provision Thea instance: could not run cmd: %s\n** Hint: have you run `make build`?", err)
+		t.Fatalf("failed to provision Thea instance: could not start process: %s", err)
 		return nil
 	}
 
@@ -94,7 +95,6 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 		fmt.Printf("Thea process (%d) for (%s) has closed it's output pipes\n", theaCmd.Process.Pid, req)
 	}()
 
-	t.Logf("Waiting for Thea process to become healthy (5s timeout)...")
 	srv := &TestService{Port: port, DatabaseName: databaseName, cleanup: cleanup}
 	if err := srv.waitForHealthy(t, 100*time.Millisecond, 5*time.Second); err != nil {
 		defer cleanup(t)

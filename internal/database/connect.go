@@ -78,6 +78,16 @@ func New() *manager {
 	return &manager{}
 }
 
+// Connect will attempt to use the config provided to connect to
+// a running database. The [SQLDialect] dictates which type of
+// database we expect to reach.
+//
+// This method will try a number of times to Ping the database, before
+// giving up with an error if it's unable to successfully establish a connection.
+//
+// On a successful connection, the relevant internal state is modified to contain
+// instances to the newly-connected database, *and* any outstanding migrations
+// are run using [executeMigrations].
 func (db *manager) Connect(config DatabaseConfig) error {
 	dsn := fmt.Sprintf(SQLConnectionString, config.Host, config.User, config.Password, config.Name, config.Port)
 	sql, err := sql.Open(SQLDialect, dsn)
@@ -145,7 +155,7 @@ func (db *manager) executeMigrations() error {
 	return nil
 }
 
-// GetInstances returns the Goqu database connection if
+// GetSqlxDB returns the Goqu database connection if
 // one has been opened using 'Connect'. Otherwise, nil is returned.
 func (db *manager) GetSqlxDB() *sqlx.DB {
 	return db.db

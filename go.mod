@@ -1,6 +1,6 @@
 module github.com/hbomb79/Thea
 
-go 1.22.2
+go 1.22.3
 
 require (
 	github.com/deepmap/oapi-codegen/v2 v2.0.0

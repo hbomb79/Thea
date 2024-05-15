@@ -86,5 +86,6 @@ run/live:
 	--pattern '**/*.go' \
 	--pattern '**/*.yaml' \
 	--pattern '**/*.tmpl' \
-	--ignore 'internal/api/gen/*.gen.go' \
+	--ignore '**/*.gen.go' \
+	--ignore '**/mocks/*' \
 	-- make run

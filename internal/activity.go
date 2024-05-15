@@ -108,9 +108,11 @@ func (service *activityService) handleEvent(ev event.HandlerEvent) error {
 		fallthrough
 	case event.DownloadProgressEvent:
 		return nil
+	default:
+		return errors.New("unknown event type")
 	}
 
-	return errors.New("unknown event type")
+	return nil
 }
 
 func (service *activityService) scheduleEventBroadcast(resourceKey eventKey, handler broadcastHandler) {

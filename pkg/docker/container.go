@@ -9,8 +9,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	dCont "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/hbomb79/Thea/pkg/logger"
 )
@@ -119,7 +119,7 @@ func (container *dockerContainer) Start(ctx context.Context, cli client.APIClien
 		return fmt.Errorf("cannot start container %s based on image %v as status is invalid", container, container.imageID)
 	}
 
-	out, err := cli.ImagePull(ctx, container.imageID, types.ImagePullOptions{})
+	out, err := cli.ImagePull(ctx, container.imageID, image.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to pull image %v for container %s: %w", container.imageID, container, err)
 	}

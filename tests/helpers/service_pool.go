@@ -24,7 +24,7 @@ func newTestServicePool() *TestServicePool {
 
 var (
 	servicePool           *TestServicePool = newTestServicePool()
-	defaultServiceRequest                  = NewTheaServiceRequest().WithDatabaseName("integration_test")
+	defaultServiceRequest                  = NewTheaServiceRequest().WithDatabaseName("integration_test").WithNoTMDBKey()
 )
 
 func RequireDefaultThea(t *testing.T) *TestService {
@@ -46,6 +46,10 @@ func (pool *TestServicePool) requireThea(t *testing.T, request TheaServiceReques
 	defer pool.Unlock()
 
 	t.Logf("Test %s requesting Thea service: %s", t.Name(), request)
+	if request.databaseName == "" {
+		t.Logf("Request %s has no databaseName specified, defaulting to test name (%s)", &request, t.Name())
+		request.databaseName = t.Name()
+	}
 
 	srv := pool.getOrCreate(t, request)
 	pool.services[request.Key()] = srv
@@ -118,9 +122,9 @@ type TheaServiceRequest struct {
 
 func NewTheaServiceRequest() TheaServiceRequest {
 	return TheaServiceRequest{
-		databaseName:         MasterDBName,
+		databaseName:         "",
 		ingestDirectory:      "",
-		environmentVariables: make(map[string]string, 0),
+		environmentVariables: map[string]string{"INGEST_MODTIME_THRESHOLD_SECONDS": "0"},
 	}
 }
 
@@ -139,6 +143,16 @@ func (req TheaServiceRequest) WithDatabaseName(databaseName string) TheaServiceR
 
 func (req TheaServiceRequest) WithIngestDirectory(ingestPath string) TheaServiceRequest {
 	req.ingestDirectory = ingestPath
+	return req
+}
+
+func (req TheaServiceRequest) WithNoTMDBKey() TheaServiceRequest {
+	req.environmentVariables["OMDB_API_KEY"] = ""
+	return req
+}
+
+func (req TheaServiceRequest) WithTMDBKey(key string) TheaServiceRequest {
+	req.environmentVariables["OMDB_API_KEY"] = key
 	return req
 }
 

@@ -11,15 +11,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	activityDebounceTime time.Duration = time.Second * 2
+	activityMaxTime      time.Duration = time.Second * 6
+)
+
 // TestIngestion_MetadataFailure ensures that files
 // which are not valid media files correctly reports failure. Retrying
 // these ingestions should see the same error return.
 func TestIngestion_MetadataFailure(t *testing.T) {
-	tempDir, paths := helpers.TempDirWithFiles(t, []string{"thisisnotavalidfile.mp4"})
-	req := helpers.NewTheaServiceRequest().
-		WithDatabaseName(t.Name()).
-		WithIngestDirectory(tempDir).
-		WithEnvironmentVariable("INGEST_MODTIME_THRESHOLD_SECONDS", "0")
+	t.Parallel()
+
+	tempDir, paths := helpers.TempDirWithEmptyFiles(t, []string{"thisisnotavalidfile.mp4"})
+	req := helpers.NewTheaServiceRequest().WithIngestDirectory(tempDir)
 	srv := helpers.RequireThea(t, req)
 
 	exp := srv.ActivityExpecter(t).Expect(
@@ -28,21 +32,105 @@ func TestIngestion_MetadataFailure(t *testing.T) {
 	exp.Listen()
 
 	client := srv.NewClientWithDefaultAdminUser(t)
-
-	ingestsResponse, err := client.ListIngestsWithResponse(ctx)
-	assert.NoError(t, err)
-	assert.NotNil(t, ingestsResponse.JSON200, "expected JSON response to be non-nil")
-	assert.Len(t, *ingestsResponse.JSON200, 1, "expected ingests to have length 1")
-
-	ingestItem := (*ingestsResponse.JSON200)[0]
-	assert.Equal(t, gen.IngestStateTROUBLED, ingestItem.State)
-	assert.Contains(t, ingestItem.Trouble.AllowedResolutionTypes, gen.RETRY)
+	ingest := assertIngestEventually(t, client, func(c *assert.CollectT, ingest gen.Ingest) {
+		assert.Equal(c, gen.IngestStateTROUBLED, ingest.State, "Ingest state never became troubled")
+		if assert.NotNil(c, ingest.Trouble, "expected non-nil trouble") {
+			assert.Equal(c, gen.METADATAFAILURE, ingest.Trouble.Type, "Ingest trouble type never became correct")
+			assert.Contains(c, ingest.Trouble.AllowedResolutionTypes, gen.RETRY)
+			assert.Empty(c, ingest.Trouble.Context, "Expected Ingest trouble context to be empty")
+		}
+	})
+	if ingest == nil {
+		return
+	}
 
 	// Retry this item and observe that it will persistently fail. Sleep for the 'debounce' time
 	// of the WS messages to ensure we receive both
-	time.Sleep(time.Second * 2)
+	time.Sleep(activityDebounceTime)
 
-	_, err = client.ResolveIngestWithResponse(ctx, ingestItem.Id, gen.ResolveIngestJSONRequestBody{Method: gen.RETRY, Context: map[string]string{}})
+	_, err := client.ResolveIngestWithResponse(ctx, ingest.Id, gen.ResolveIngestJSONRequestBody{Method: gen.RETRY, Context: map[string]string{}})
 	assert.NoError(t, err)
-	exp.AssertSatisfied(t, time.Second*6)
+	exp.AssertSatisfied(t, activityMaxTime)
+}
+
+// TestIngestion_TMDB_NoMatches tests that a file which
+// contains valid media metadata but has no in TMDB.
+//
+//nolint:dupl
+func TestIngestion_TMDB_NoMatches(t *testing.T) {
+	t.Parallel()
+
+	ingestDir, files := helpers.TempDirWithFiles(t, map[string]string{
+		"./testdata/validmedia/short-sample.mkv": "notarealmoviesurely.S01E01.1920x1080.mkv",
+	})
+
+	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir)
+	srv := helpers.RequireThea(t, req)
+
+	exp := srv.ActivityExpecter(t).Expect(
+		chanassert.OneOf(helpers.MatchIngestUpdate(files[0], ingest.Troubled)),
+	)
+	exp.Listen()
+
+	client := srv.NewClientWithDefaultAdminUser(t)
+	assertIngestEventually(t, client, func(c *assert.CollectT, ingest gen.Ingest) {
+		assert.Equal(c, gen.IngestStateTROUBLED, ingest.State, "Ingest state never became troubled")
+		if assert.NotNil(c, ingest.Trouble, "expected non-nil trouble") {
+			assert.Equal(c, gen.TMDBFAILURENORESULT, ingest.Trouble.Type, "Ingest trouble type never became correct")
+			assert.Empty(c, ingest.Trouble.Context, "Expected Ingest trouble context to be empty")
+		}
+	})
+
+	exp.AssertSatisfied(t, activityMaxTime)
+}
+
+// TestIngestion_TMDB_MultipleMatches tests that a file which
+// contains valid media metadata but has multiple matches
+// in TMDB.
+//
+//nolint:dupl
+func TestIngestion_TMDB_MultipleMatches(t *testing.T) {
+	t.Parallel()
+
+	ingestDir, files := helpers.TempDirWithFiles(t, map[string]string{
+		"./testdata/validmedia/short-sample.mkv": "Sample.S01E01.1280x760.mkv",
+	})
+
+	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir)
+	srv := helpers.RequireThea(t, req)
+
+	exp := srv.ActivityExpecter(t).Expect(
+		chanassert.OneOf(helpers.MatchIngestUpdate(files[0], ingest.Troubled)),
+	)
+	exp.Listen()
+
+	client := srv.NewClientWithDefaultAdminUser(t)
+	assertIngestEventually(t, client, func(c *assert.CollectT, ingest gen.Ingest) {
+		assert.Equal(c, gen.IngestStateTROUBLED, ingest.State, "Ingest state never became troubled")
+		if assert.NotNil(c, ingest.Trouble, "expected non-nil trouble") {
+			assert.Equal(c, gen.TMDBFAILUREMULTIRESULT, ingest.Trouble.Type, "Ingest trouble type never became correct")
+			assert.NotEmpty(c, ingest.Trouble.Context, "Expected Ingest trouble context to be non-empty")
+		}
+	})
+
+	exp.AssertSatisfied(t, activityMaxTime)
+}
+
+func assertIngestEventually(t *testing.T, client gen.ClientWithResponsesInterface, cond func(c *assert.CollectT, i gen.Ingest)) *gen.Ingest {
+	var ingestItem gen.Ingest
+	if ok := assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		ingestsResponse, err := client.ListIngestsWithResponse(ctx)
+		assert.NoError(c, err)
+		assert.NotNil(c, ingestsResponse.JSON200, "expected JSON response to be non-nil")
+		if !assert.Len(c, *ingestsResponse.JSON200, 1, "expected ingests to have length 1") {
+			return // early return to prevent OOB error below
+		}
+
+		ingestItem = (*ingestsResponse.JSON200)[0]
+		cond(c, ingestItem)
+	}, 10*time.Second, 1*time.Second, "Ingestion state never became correct"); ok {
+		return &ingestItem
+	}
+
+	return nil
 }

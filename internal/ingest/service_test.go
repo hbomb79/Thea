@@ -81,7 +81,7 @@ func startService(t *testing.T, config ingest.Config, searcherMock *mocks.MockSe
 
 func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
 	t.Parallel()
-	tempDir, files := helpers.TempDirWithFiles(t, []string{"episode"})
+	tempDir, files := helpers.TempDirWithEmptyFiles(t, []string{"episode"})
 
 	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)
@@ -180,7 +180,7 @@ func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
 
 func Test_MovieImports_CorrectlySaved(t *testing.T) {
 	t.Parallel()
-	tempDir, files := helpers.TempDirWithFiles(t, []string{"movie"})
+	tempDir, files := helpers.TempDirWithEmptyFiles(t, []string{"movie"})
 
 	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)
@@ -264,7 +264,7 @@ func Test_MovieImports_CorrectlySaved(t *testing.T) {
 
 func Test_NewFile_IgnoredIfAlreadyImported(t *testing.T) {
 	t.Parallel()
-	tempDir, files := helpers.TempDirWithFiles(t, []string{"anynameworks"})
+	tempDir, files := helpers.TempDirWithEmptyFiles(t, []string{"anynameworks"})
 
 	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, RequiredModTimeAgeSeconds: 2, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)
@@ -284,7 +284,7 @@ func Test_NewFile_CorrectlyHeld(t *testing.T) {
 	t.Parallel()
 	// Construct a new ingest service with the import delay set to a low value
 	// and noop mocks for the dependencies.
-	tempDir, files := helpers.TempDirWithFiles(t, []string{"anynameworks"})
+	tempDir, files := helpers.TempDirWithEmptyFiles(t, []string{"anynameworks"})
 
 	cfg := ingest.Config{ForceSyncSeconds: 100, IngestPath: tempDir, RequiredModTimeAgeSeconds: 2, IngestionParallelism: 1}
 	searcherMock := mocks.NewMockSearcher(t)

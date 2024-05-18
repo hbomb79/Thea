@@ -62,7 +62,10 @@ func GetHTTPErrorHandler(fallbackHandler echo.HTTPErrorHandler) echo.HTTPErrorHa
 		// This is not an APIError, just let Echo handle it as it normally would
 		// TODO: Consider just 500'ing here, and enforcing that our routes MUST
 		// use the APIError if they want to expose error information.
-		logger.Warnf("%s request to %s caused error response, however the response does not satisfy the APIError interface. Falling back to default HTTP error handling\n", ctx.Request().Method, ctx.Request().RequestURI)
+		logger.Warnf(
+			"%s request to %s caused error response, however the response does not satisfy the APIError interface. Falling back to default HTTP error handling\n",
+			ctx.Request().Method, ctx.Request().RequestURI,
+		)
 		fallbackHandler(err, ctx)
 	}
 }

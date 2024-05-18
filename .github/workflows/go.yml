@@ -36,7 +36,13 @@ jobs:
         # https://github.com/golangci/golangci-lint-action/issues/807
         skip-cache: true
 
+    - name: Setup FFmpeg
+      id: setup_ffmpeg
+      uses: federicocarboni/setup-ffmpeg@v3.1
+
     - name: Test
       run: go test -v ./...
       env:
         OMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        FORMAT_FFMPEG_BINARY_PATH: ${{ steps.setup_ffmpeg.outputs.ffmpeg-path }}/ffmpeg
+        FORMAT_FFPROBE_BINARY_PATH: ${{ steps.setup_ffmpeg.outputs.ffmpeg-path }}/ffprobe

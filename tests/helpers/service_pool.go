@@ -46,9 +46,9 @@ func (pool *TestServicePool) requireThea(t *testing.T, request TheaServiceReques
 	defer pool.Unlock()
 
 	t.Logf("Test %s requesting Thea service: %s", t.Name(), request)
-	if request.databaseName == "" {
+	if request.environmentVariables[EnvDBName] == "" {
 		t.Logf("Request %s has no databaseName specified, defaulting to test name (%s)", &request, t.Name())
-		request.databaseName = t.Name()
+		request.environmentVariables[EnvDBName] = t.Name()
 	}
 
 	srv := pool.getOrCreate(t, request)
@@ -96,23 +96,13 @@ func (pool *TestServicePool) getOrCreate(t *testing.T, request TheaServiceReques
 	}
 
 	t.Logf("Request for Thea service '%s' has NO matching existing service. Spawning...", request)
-	pool.databaseManager.provisionDB(t, request.databaseName)
+	pool.databaseManager.provisionDB(t, request.environmentVariables[EnvDBName])
 	return spawnTheaProc(t, request)
 }
 
 // TheaServiceRequest encapsulates information required to
 // request a Thea service from the service pool.
 type TheaServiceRequest struct {
-	// databaseName defines the name of the PostgreSQL database
-	// which this Thea service is expected to connect to. Provisioning
-	// of this database will be handled automatically if needed.
-	databaseName string
-
-	// ingestDirectory defines an optional directory on the
-	// file system which will be set as the ingest directory
-	// for the spawned service instance.
-	ingestDirectory string
-
 	// environmentVariables can optionally be provided to
 	// the request to augment the mandatory API_HOST_ADDR and DB_NAME
 	// values that are provided. Note that overriding these values
@@ -122,37 +112,40 @@ type TheaServiceRequest struct {
 
 func NewTheaServiceRequest() TheaServiceRequest {
 	return TheaServiceRequest{
-		databaseName:         "",
-		ingestDirectory:      "",
-		environmentVariables: map[string]string{"INGEST_MODTIME_THRESHOLD_SECONDS": "0"},
+		environmentVariables: map[string]string{},
 	}
 }
 
 func (req TheaServiceRequest) Key() string {
-	return fmt.Sprintf("thea-%s-%s", req.databaseName, req.ingestDirectory)
+	return fmt.Sprintf("thea-%s-%s", req.environmentVariables[EnvDBName], req.environmentVariables[EnvIngestDir])
 }
 
 func (req TheaServiceRequest) String() string {
-	return fmt.Sprintf("ProvisioningRequest{db=%s ingestDir=%s}", req.databaseName, req.ingestDirectory)
+	return fmt.Sprintf("ProvisioningRequest{db=%s ingestDir=%s}", req.environmentVariables[EnvDBName], req.environmentVariables[EnvIngestDir])
 }
 
 func (req TheaServiceRequest) WithDatabaseName(databaseName string) TheaServiceRequest {
-	req.databaseName = databaseName
+	req.environmentVariables[EnvDBName] = databaseName
 	return req
 }
 
 func (req TheaServiceRequest) WithIngestDirectory(ingestPath string) TheaServiceRequest {
-	req.ingestDirectory = ingestPath
+	req.environmentVariables[EnvIngestDir] = ingestPath
+	return req
+}
+
+func (req TheaServiceRequest) WithDefaultOutputDirectory(path string) TheaServiceRequest {
+	req.environmentVariables[EnvDefaultOutputDir] = path
 	return req
 }
 
 func (req TheaServiceRequest) WithNoTMDBKey() TheaServiceRequest {
-	req.environmentVariables["OMDB_API_KEY"] = ""
+	req.environmentVariables[EnvTMDBKey] = ""
 	return req
 }
 
 func (req TheaServiceRequest) WithTMDBKey(key string) TheaServiceRequest {
-	req.environmentVariables["OMDB_API_KEY"] = key
+	req.environmentVariables[EnvTMDBKey] = key
 	return req
 }
 

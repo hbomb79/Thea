@@ -170,14 +170,15 @@ func (service *TestService) NewClientWithCredentials(t *testing.T, username stri
 	return TestUser{User: *resp.JSON200, Password: password, Cookies: cookies}, authClient
 }
 
-// NewClientWithRandomUser creates a new user using a default API client,
-// and returns back a new client which has request editors to automatically
-// inject the new users auth tokens in to requests made with the client.
+// NewClientWithRandomUserPermissions creates a new user with a random username
+// and password (both are the same), with the permissions specified. The user is returned
+// alongside an API client which will automatically inject the authentication tokens
+// for outgoing requests.
 // TODO: add cleanup task to testing context to delete user (t.Cleanup()).
-func (service *TestService) NewClientWithRandomUser(t *testing.T) (TestUser, *gen.ClientWithResponses) {
+func (service *TestService) NewClientWithRandomUserPermissions(t *testing.T, permissions []string) (TestUser, *gen.ClientWithResponses) {
 	usernameAndPassword := fmt.Sprintf("TestUser%s", random.String(16))
 	createResponse, err := service.NewClientWithDefaultAdminUser(t).CreateUserWithResponse(ctx, gen.CreateUserRequest{
-		Permissions: permissions.All(), // TODO allow specifying permissions
+		Permissions: permissions,
 		Password:    usernameAndPassword,
 		Username:    usernameAndPassword,
 	})
@@ -188,6 +189,13 @@ func (service *TestService) NewClientWithRandomUser(t *testing.T) (TestUser, *ge
 
 	// Login as newly created user to get the cookies
 	return service.NewClientWithCredentials(t, usernameAndPassword, usernameAndPassword)
+}
+
+// NewClientWithRandomUser creates a new user which has a random username/password,
+// and has *all* permissions. The user is returned alongside an API client which
+// will automatically inject the authentication tokens for outgoing requests.
+func (service *TestService) NewClientWithRandomUser(t *testing.T) (TestUser, *gen.ClientWithResponses) {
+	return service.NewClientWithRandomUserPermissions(t, permissions.All())
 }
 
 // waitForHealthy will ping the service (every pollFrequency) until the timeout is reached.

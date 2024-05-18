@@ -33,6 +33,15 @@ func keyValueToEnv(k, v string) string {
 	return fmt.Sprintf("%s=%s", k, v)
 }
 
+const (
+	EnvDBName                 = "DB_NAME"
+	EnvIngestDir              = "INGEST_DIR"
+	EnvDefaultOutputDir       = "FORMAT_DEFAULT_OUTPUT_DIR"
+	EnvAPIHostAddr            = "API_HOST_ADDR"
+	EnvTMDBKey                = "OMDB_API_KEY"
+	EnvIngestModtimeThreshold = "INGEST_MODTIME_THRESHOLD_SECONDS"
+)
+
 // spawnTheaProc will spawn a new Thea service instance on the host system. The container
 // will have it's environment variables set as per the request provided. This function
 // will BLOCK until the Thea instance logs indicate it's ready to receive HTTP requests (or,
@@ -40,40 +49,43 @@ func keyValueToEnv(k, v string) string {
 //
 //nolint:funlen
 func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
-	if req.databaseName == "" {
+	port := getNextPort()
+	t.Logf("Spawning Thea process on port %d for request %s\n", port, req)
+
+	databaseName, ok := req.environmentVariables[EnvDBName]
+	if !ok || databaseName == "" {
 		t.Fatalf("cannot satisfy Thea service request %#v as no databaseName is specified. Implicit fallback to master DB is disallowed, explicit database must be provided", req)
 		return nil
 	}
 
-	port := getNextPort()
-	t.Logf("Spawning Thea process on port %d for request %s\n", port, req)
-	databaseName := req.databaseName
+	// Set defaults for certain env vars
+	if _, ok := req.environmentVariables[EnvIngestDir]; !ok {
+		req.environmentVariables[EnvIngestDir] = t.TempDir()
+	}
+	if _, ok := req.environmentVariables[EnvAPIHostAddr]; !ok {
+		req.environmentVariables[EnvAPIHostAddr] = fmt.Sprintf("0.0.0.0:%d", port)
+	}
+	if _, ok := req.environmentVariables[EnvIngestModtimeThreshold]; !ok {
+		req.environmentVariables[EnvIngestModtimeThreshold] = "0"
+	}
 
 	theaCmd := exec.Command("../../.bin/thea", "-config", "../test-config.toml", "-log-level", "VERBOSE")
-	theaCmd.Env = os.Environ()
 
+	// Populate command environment with the variables stored inside the service request
+	theaCmd.Env = os.Environ()
 	for k, v := range req.environmentVariables {
 		theaCmd.Env = append(theaCmd.Env, keyValueToEnv(k, v))
 	}
 
-	// If the TMDB API key was not specified manually AND it's
-	// not present in the environment, then raise a failure.
-	if _, ok := req.environmentVariables["OMDB_API_KEY"]; !ok {
-		if _, found := os.LookupEnv("OMDB_API_KEY"); !found {
-			t.Fatalf("Request %s from %s did NOT specify a TMDB API key and there is not one present in the environment!"+
-				"To suppress, use .WithNoTMDBKey, or provide a key using .WithTMDBKey or the OS environment",
-				req, t.Name())
-		}
-	}
-
-	theaCmd.Env = append(theaCmd.Env, keyValueToEnv("API_HOST_ADDR", fmt.Sprintf("0.0.0.0:%d", port)))
-	theaCmd.Env = append(theaCmd.Env, keyValueToEnv("DB_NAME", databaseName))
-
-	// If no ingest directory was specified, then specify one automatically
-	if req.ingestDirectory == "" {
-		req.ingestDirectory = t.TempDir()
-	}
-	theaCmd.Env = append(theaCmd.Env, keyValueToEnv("INGEST_DIR", req.ingestDirectory))
+	// // If the TMDB API key was not specified manually AND it's
+	// // not present in the environment, then raise a failure.
+	// if _, ok := req.environmentVariables[EnvTMDBKey]; !ok {
+	// 	if _, found := os.LookupEnv(EnvTMDBKey); !found {
+	// 		t.Fatalf("Request %s from %s did NOT specify a TMDB API key and there is not one present in the environment!"+
+	// 			"To suppress, use .WithNoTMDBKey, or provide a key using .WithTMDBKey or the OS environment",
+	// 			req, t.Name())
+	// 	}
+	// }
 
 	stdout, err := theaCmd.StdoutPipe()
 	if err != nil {

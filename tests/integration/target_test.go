@@ -74,8 +74,101 @@ func TestTarget_Complete(t *testing.T) {
 }
 
 func TestTarget_Creation(t *testing.T) {
-	t.SkipNow()
 	t.Parallel()
+
+	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
+	_, client := srv.NewClientWithRandomUser(t)
+
+	tests := []struct {
+		Summary       string
+		Args          gen.CreateTargetRequest
+		ShouldSucceed bool
+	}{
+		{
+			Summary:       "Valid creation of a target",
+			ShouldSucceed: true,
+			Args: gen.CreateTargetRequest{
+				Extension: "mp4",
+				Label:     "Hello World",
+				FfmpegOptions: map[string]any{
+					"Threads": 5,
+				},
+			},
+		},
+		{
+			Summary:       "Invalid label (not whitespace trimmed)",
+			ShouldSucceed: false,
+			Args: gen.CreateTargetRequest{
+				Extension:     "mp4",
+				Label:         "  this aint trimmed  ",
+				FfmpegOptions: map[string]any{},
+			},
+		},
+		{
+			Summary:       "Invalid label (non alphanumeric)",
+			ShouldSucceed: false,
+			Args: gen.CreateTargetRequest{
+				Extension:     "mp4",
+				Label:         "not&*#valid ",
+				FfmpegOptions: map[string]any{},
+			},
+		},
+		{
+			Summary:       "Invalid extension",
+			ShouldSucceed: false,
+			Args: gen.CreateTargetRequest{
+				Extension:     ".mp4",
+				Label:         "Hello World",
+				FfmpegOptions: map[string]any{},
+			},
+		},
+		{
+			Summary:       "Invalid ffmpeg options",
+			ShouldSucceed: false,
+			Args: gen.CreateTargetRequest{
+				Extension: "mp4",
+				Label:     "Hello World",
+				FfmpegOptions: map[string]any{
+					"Threads": "notanumberhuh",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Summary, func(t *testing.T) {
+			t.Parallel()
+			if test.ShouldSucceed {
+				resp, err := client.CreateTargetWithResponse(ctx, test.Args)
+				assert.NoError(t, err, "failed to create target %s: %v", test.Args.Label, err)
+				assert.NotNil(t, resp, "failed to create target %s: HTTP response was nil", test.Args.Label)
+				assert.Equal(t, http.StatusCreated, resp.StatusCode(), "failed to create target %s: HTTP response status code was not as expected", test.Args.Label)
+				assert.NotNil(t, resp.JSON201, "failed to create target %s: JSON201 body nil", test.Args.Label)
+
+				// Check that the values match what we asked them to be
+				assert.Equal(t, test.Args.Label, resp.JSON201.Label)
+				assert.Equal(t, test.Args.Extension, resp.JSON201.Extension)
+				for k, actual := range resp.JSON201.FfmpegOptions {
+					if expected, ok := test.Args.FfmpegOptions[k]; ok {
+						assert.EqualValuesf(t, expected, actual, "ffmpeg options key '%s' failed: expected value %v, but actual was %v", k, expected, actual)
+					} else {
+						assert.Nilf(t, actual, "ffmpeg options key '%s' failed: expected 'nil', but actual was %v", k, actual)
+					}
+				}
+
+				// Ensure the respose we got from 'create' is the same as a subsequent fetch
+				fetchedTarget := getTarget(t, client, resp.JSON201.Id)
+				assert.Equal(t, *resp.JSON201, fetchedTarget)
+			} else {
+				resp, err := client.CreateTargetWithResponse(ctx, test.Args)
+				assert.NoError(t, err, "failed to create target %s: %v", test.Args.Label, err)
+				assert.NotNil(t, resp, "failed to create target %s: HTTP response was nil", test.Args.Label)
+
+				assert.Equal(t, http.StatusBadRequest, resp.StatusCode(), "failed to create target %s: HTTP response status code was not as expected", test.Args.Label)
+				assert.Nil(t, resp.JSON201, "failed to create target %s: JSON201 body was non-nil when it was expected to be nil", test.Args.Label)
+			}
+		})
+	}
 }
 
 //nolint:gocognit

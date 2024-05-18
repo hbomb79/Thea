@@ -23,7 +23,7 @@ func TempDirWithEmptyFiles(t *testing.T, files []string) (string, []string) {
 }
 
 // TempDirWithFiles will attempt to create a temp directory
-// using the testing data, and populate it with *existing files
+// using the testing.T instance, and populate it with *existing files
 // from the host FS*.
 //
 // The input 'files' map is a mapping from the *host filepath* TO the

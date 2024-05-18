@@ -61,3 +61,6 @@ linters-settings:
     case:
       rules:
         json: snake
+  gosec:
+    excludes:
+      - G601

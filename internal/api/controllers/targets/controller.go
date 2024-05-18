@@ -39,7 +39,7 @@ func (controller *TargetController) CreateTarget(ec echo.Context, request gen.Cr
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
 	}
 
-	return gen.CreateTarget201JSONResponse{}, nil
+	return gen.CreateTarget201JSONResponse(NewDto(&newTarget)), nil
 }
 
 func (controller *TargetController) ListTargets(ec echo.Context, request gen.ListTargetsRequestObject) (gen.ListTargetsResponseObject, error) {
@@ -66,10 +66,10 @@ func (controller *TargetController) UpdateTarget(ec echo.Context, request gen.Up
 		model.Label = *request.Body.Label
 	}
 	if request.Body.FfmpegOptions != nil {
-		if opts, err := ffmpegOptsToModel(*request.Body.FfmpegOptions); err != nil {
+		if opts, err := ffmpegOptsToModel(*request.Body.FfmpegOptions); err == nil {
 			model.FfmpegOptions = opts
 		} else {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, err)
+			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to parse provided FFmpegOptions: %v", err))
 		}
 	}
 

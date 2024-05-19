@@ -5,6 +5,10 @@ BINARY_NAME := thea
 # HELPERS
 # ==================================================================================== #
 
+.PHONY: configure-hooks
+configure-hooks:
+	@git config --local core.hooksPath .githooks/
+
 ## help: print this help message
 .PHONY: help
 help:
@@ -70,7 +74,7 @@ clean:
 
 ## build: build the application
 .PHONY: build
-build: 
+build: configure-hooks
 	go generate ./...
 	go build -o=.bin/${BINARY_NAME}
 

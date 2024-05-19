@@ -38,7 +38,7 @@ const (
 	EnvIngestDir              = "INGEST_DIR"
 	EnvDefaultOutputDir       = "FORMAT_DEFAULT_OUTPUT_DIR"
 	EnvAPIHostAddr            = "API_HOST_ADDR"
-	EnvTMDBKey                = "OMDB_API_KEY"
+	EnvTMDBKey                = "TMDB_API_KEY"
 	EnvIngestModtimeThreshold = "INGEST_MODTIME_THRESHOLD_SECONDS"
 )
 
@@ -67,6 +67,15 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 	}
 	if _, ok := req.environmentVariables[EnvIngestModtimeThreshold]; !ok {
 		req.environmentVariables[EnvIngestModtimeThreshold] = "0"
+	}
+
+	if req.requiresTMDB {
+		_, man := req.environmentVariables[EnvTMDBKey]
+		_, fromEnv := os.LookupEnv(EnvTMDBKey)
+		if !man && !fromEnv {
+			t.Fatalf("ABORTING: Test '%s' has marked itself as requiring access to TMDB, however no TMDB key was found in the environment (env key TMDB_API_KEY)!\n\n"+
+				"**HINT**: you can specify the TMDB_API_KEY env var using .env file in the project root or in the 'tests/' directory.\n\n", t.Name())
+		}
 	}
 
 	theaCmd := exec.Command("../../.bin/thea", "-config", "../test-config.toml", "-log-level", "VERBOSE")
@@ -114,8 +123,8 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 		t.Log("Waiting for Thea process to finish...")
 		_ = theaCmd.Wait()
 
-		if t.Failed() {
-			t.Log("HINT: supply the 'OUTPUT_THEA_LOGS' environment variable to see the logs from the spawned Thea instance")
+		if t.Failed() && !shouldOutputTheaLogs {
+			t.Log("\n**HINT: Supply the 'OUTPUT_THEA_LOGS' environment variable to see the logs from spawned Thea instances")
 		}
 	}
 

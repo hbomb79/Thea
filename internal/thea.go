@@ -133,7 +133,7 @@ func (thea *theaImpl) Run(parent context.Context) error {
 		return fmt.Errorf("failed to create initial user: %w", err)
 	}
 
-	searcher := tmdb.NewSearcher(tmdb.Config{APIKey: thea.config.OmdbKey})
+	searcher := tmdb.NewSearcher(tmdb.Config{APIKey: thea.config.TmdbKey})
 	scraper := media.NewScraper(media.ScraperConfig{FfprobeBinPath: thea.config.Format.FfprobeBinaryPath})
 	if serv, err := ingest.New(thea.config.IngestService, searcher, scraper, thea.storeOrchestrator, thea.eventBus); err == nil {
 		thea.ingestService = serv

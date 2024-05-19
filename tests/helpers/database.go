@@ -122,7 +122,7 @@ func (manager *databaseManager) markMasterDB(t *testing.T) {
 	}
 
 	t.Log("Spawning Thea instance to migrate master database...")
-	thea := spawnTheaProc(t, NewTheaServiceRequest().WithDatabaseName(manager.masterDatabaseName).WithNoTMDBKey())
+	thea := spawnTheaProc(t, NewTheaServiceRequest().WithDatabaseName(manager.masterDatabaseName))
 	t.Log("Master DB migrated, closing Thea...")
 	thea.cleanup(t)
 	t.Log("Thea closed, marking master database as template...")

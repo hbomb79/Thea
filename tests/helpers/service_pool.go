@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/joho/godotenv"
 )
 
 type TestServicePool struct {
@@ -14,6 +16,9 @@ type TestServicePool struct {
 }
 
 func newTestServicePool() *TestServicePool {
+	// Optionally load .env files in both the project root, and the /tests dir
+	_ = godotenv.Load("../../.env", "../.env")
+
 	return &TestServicePool{
 		Mutex:           &sync.Mutex{},
 		databaseManager: newDatabaseManager(MasterDBName),
@@ -24,7 +29,7 @@ func newTestServicePool() *TestServicePool {
 
 var (
 	servicePool           *TestServicePool = newTestServicePool()
-	defaultServiceRequest                  = NewTheaServiceRequest().WithDatabaseName("integration_test").WithNoTMDBKey()
+	defaultServiceRequest                  = NewTheaServiceRequest().WithDatabaseName("integration_test")
 )
 
 func RequireDefaultThea(t *testing.T) *TestService {
@@ -108,6 +113,8 @@ type TheaServiceRequest struct {
 	// values that are provided. Note that overriding these values
 	// inside of the environmentVariables will have no effect.
 	environmentVariables map[string]string
+
+	requiresTMDB bool
 }
 
 func NewTheaServiceRequest() TheaServiceRequest {
@@ -139,12 +146,13 @@ func (req TheaServiceRequest) WithDefaultOutputDirectory(path string) TheaServic
 	return req
 }
 
-func (req TheaServiceRequest) WithNoTMDBKey() TheaServiceRequest {
-	req.environmentVariables[EnvTMDBKey] = ""
+func (req TheaServiceRequest) RequiresTMDB() TheaServiceRequest {
+	req.requiresTMDB = true
 	return req
 }
 
 func (req TheaServiceRequest) WithTMDBKey(key string) TheaServiceRequest {
+	req.requiresTMDB = true
 	req.environmentVariables[EnvTMDBKey] = key
 	return req
 }

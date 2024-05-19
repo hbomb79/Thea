@@ -81,8 +81,119 @@ func TestWorkflow_CRUD(t *testing.T) {
 }
 
 func TestWorkflow_Creation(t *testing.T) {
-	t.SkipNow()
-	// TODO
+	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
+	_, client := srv.NewClientWithRandomUser(t)
+	tests := []struct {
+		Summary       string
+		ShouldSucceed bool
+		Label         string
+		Enabled       bool
+		Criteria      []gen.WorkflowCriteria
+		TargetIDs     []uuid.UUID
+	}{
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+		{
+			Summary:       "",
+			ShouldSucceed: false,
+			Label:         "",
+			Enabled:       false,
+			Criteria:      []gen.WorkflowCriteria{},
+			TargetIDs:     []uuid.UUID{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Summary, func(t *testing.T) {
+			t.Parallel()
+
+			if test.ShouldSucceed {
+				wkflw := createWorkflow(t, client, test.Criteria, test.Enabled, test.Label, test.TargetIDs)
+				assert.Equalf(t, test.Label, wkflw.Label, "creation of workflow failed: expected 'Label' to be '%v' but found '%v'", test.Label, wkflw.Label)
+				assert.Equalf(t, test.Enabled, wkflw.Enabled, "creation of workflow failed: expected 'Enabled' to be '%v' but found '%v'", test.Enabled, wkflw.Enabled)
+				assert.Equalf(t, test.TargetIDs, wkflw.TargetIds, "creation of workflow failed: expected 'TargetIds' to be '%v' but found '%v'", test.TargetIDs, wkflw.TargetIds)
+				assert.Equalf(t, test.Criteria, wkflw.Criteria, "creation of workflow failed: expected 'Criteria' to be '%v' but found '%v'", test.Criteria, wkflw.Criteria)
+			} else {
+				resp, err := client.CreateWorkflowWithResponse(
+					ctx,
+					gen.CreateWorkflowRequest{Criteria: test.Criteria, Enabled: test.Enabled, Label: test.Label, TargetIds: test.TargetIDs},
+				)
+				assert.NoError(t, err, "creation of workflow unexectedly failed")
+				assert.Nil(t, resp.JSON201, "creation of workflow unexpectedly succeeded: expected JSON201 body to be nil")
+				assert.Equal(t, http.StatusBadRequest, resp.StatusCode(), "creation of workflow unexpectedly succeeded: status code incorrect")
+			}
+		})
+	}
 }
 
 func TestWorkflow_Update(t *testing.T) {

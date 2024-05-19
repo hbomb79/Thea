@@ -21,7 +21,7 @@ const (
 // these ingestions should see the same error return.
 func TestIngestion_MetadataFailure(t *testing.T) {
 	tempDir, paths := helpers.TempDirWithEmptyFiles(t, []string{"thisisnotavalidfile.mp4"})
-	req := helpers.NewTheaServiceRequest().WithIngestDirectory(tempDir)
+	req := helpers.NewTheaServiceRequest().WithIngestDirectory(tempDir).RequiresTMDB()
 	srv := helpers.RequireThea(t, req)
 
 	t.Parallel()
@@ -62,7 +62,7 @@ func TestIngestion_TMDB_NoMatches(t *testing.T) {
 		"./testdata/validmedia/short-sample.mkv": "notarealmoviesurely.S01E01.1920x1080.mkv",
 	})
 
-	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir)
+	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir).RequiresTMDB()
 	srv := helpers.RequireThea(t, req)
 
 	t.Parallel()
@@ -94,7 +94,7 @@ func TestIngestion_TMDB_MultipleMatches(t *testing.T) {
 		"./testdata/validmedia/short-sample.mkv": "Sample.S01E01.1280x760.mkv",
 	})
 
-	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir)
+	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir).RequiresTMDB()
 	srv := helpers.RequireThea(t, req)
 
 	t.Parallel()

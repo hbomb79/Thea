@@ -1,4 +1,4 @@
-omdb_api_key = "redacted"
+tmdb_api_key = "redacted"
 
 [database]
 username = "postgres"

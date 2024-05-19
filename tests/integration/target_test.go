@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/hbomb79/Thea/tests/helpers"
+	"github.com/labstack/gommon/random"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -296,6 +297,29 @@ func createTarget(t *testing.T, client gen.ClientWithResponsesInterface, label, 
 	assert.NotNil(t, resp.JSON201, "failed to create target %s: JSON201 body nil", label)
 
 	return *resp.JSON201
+}
+
+type Targets []gen.Target
+
+func (ts Targets) IDs() []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(ts))
+	for _, t := range ts {
+		ids = append(ids, t.Id)
+	}
+
+	return ids
+}
+
+func createRandomTargets(t *testing.T, client gen.ClientWithResponsesInterface, num int) Targets {
+	targets := make([]gen.Target, 0, num)
+	for range num {
+		target := createTarget(t, client, random.String(24, random.Alphanumeric), "mp4", map[string]any{})
+		targets = append(targets, target)
+
+		t.Cleanup(func() { deleteTarget(t, client, target.Id) })
+	}
+
+	return targets
 }
 
 func updateTarget(t *testing.T, client gen.ClientWithResponsesInterface, targetID uuid.UUID, label, extension string, ffmpegOpts map[string]any) gen.Target {

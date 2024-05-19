@@ -1246,13 +1246,13 @@ components:
         label:
           type: string
           x-oapi-codegen-extra-tags:
-            validate: alphaNumericWhitespaceTrimmed
+            validate: omitempty,alphaNumericWhitespaceTrimmed
         enabled:
           type: boolean
         target_ids:
           type: array
           x-oapi-codegen-extra-tags:
-            validate: min=1
+            validate: omitempty,min=1
           items:
             type: string
             format: uuid

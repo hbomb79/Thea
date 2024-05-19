@@ -30,11 +30,12 @@ func New(store Store) *WorkflowController {
 
 func (controller *WorkflowController) CreateWorkflow(ec echo.Context, request gen.CreateWorkflowRequestObject) (gen.CreateWorkflowResponseObject, error) {
 	criteria := util.ApplyConversion(request.Body.Criteria, criteriaToModel)
-	if _, err := controller.store.CreateWorkflow(uuid.New(), request.Body.Label, criteria, request.Body.TargetIds, request.Body.Enabled); err != nil {
+	workflow, err := controller.store.CreateWorkflow(uuid.New(), request.Body.Label, criteria, request.Body.TargetIds, request.Body.Enabled)
+	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create new workflow: %v", err))
 	}
 
-	return gen.CreateWorkflow201Response{}, nil
+	return gen.CreateWorkflow201JSONResponse(workflowToDto(workflow)), nil
 }
 
 func (controller *WorkflowController) ListWorkflows(ec echo.Context, request gen.ListWorkflowsRequestObject) (gen.ListWorkflowsResponseObject, error) {

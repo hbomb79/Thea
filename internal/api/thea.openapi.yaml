@@ -597,7 +597,11 @@ paths:
               $ref: "#/components/schemas/CreateWorkflowRequest"
       responses:
         "201":
-          description: Creation successful
+          description: The created workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
   /transcode-workflows/{id}:
     get:
       summary: Get Workflow

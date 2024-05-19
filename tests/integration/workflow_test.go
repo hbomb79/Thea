@@ -14,10 +14,11 @@ import (
 // TestWorkflow_CRUD performs some basic CRUD requests
 // on the workflow resource.
 func TestWorkflow_CRUD(t *testing.T) {
-	srv := helpers.RequireDefaultThea(t)
+	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
+	t.Parallel()
+
 	_, client := srv.NewClientWithRandomUser(t)
 	initialTargets := createRandomTargets(t, client, 3)
-
 	workflow := createWorkflow(t, client, []gen.WorkflowCriteria{
 		{CombineType: gen.OR, Key: gen.RESOLUTION, Type: gen.NOTEQUALS, Value: "10"},
 	}, true, random.String(64), initialTargets.IDs())

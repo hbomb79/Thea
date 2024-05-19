@@ -14,12 +14,11 @@ import (
 // TestTarget_Complete tests the basic CRUD actions
 // for the target resource all in one run.
 func TestTarget_Complete(t *testing.T) {
+	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
 	t.Parallel()
 
-	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
-	_, client := srv.NewClientWithRandomUser(t)
-
 	// Create a target
+	_, client := srv.NewClientWithRandomUser(t)
 	target := createTarget(t, client, "CRUD Target", "mp4", map[string]any{"Threads": 5})
 
 	// Check creation DTO is correct compared to a subsequent fetch
@@ -75,11 +74,10 @@ func TestTarget_Complete(t *testing.T) {
 }
 
 func TestTarget_Creation(t *testing.T) {
+	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
 	t.Parallel()
 
-	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
 	_, client := srv.NewClientWithRandomUser(t)
-
 	tests := []struct {
 		Summary       string
 		Args          gen.CreateTargetRequest
@@ -138,7 +136,6 @@ func TestTarget_Creation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Summary, func(t *testing.T) {
-			t.Parallel()
 			if test.ShouldSucceed {
 				resp, err := client.CreateTargetWithResponse(ctx, test.Args)
 				assert.NoError(t, err, "failed to create target %s: %v", test.Args.Label, err)
@@ -174,12 +171,11 @@ func TestTarget_Creation(t *testing.T) {
 
 //nolint:gocognit
 func TestTarget_Update(t *testing.T) {
+	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
 	t.Parallel()
 
-	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
-	_, client := srv.NewClientWithRandomUser(t)
-
 	// Create a target
+	_, client := srv.NewClientWithRandomUser(t)
 	targetID := createTarget(t, client, "FooBar", "mp4", map[string]any{}).Id
 
 	// Try and run some updates by it

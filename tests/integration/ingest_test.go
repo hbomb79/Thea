@@ -20,11 +20,11 @@ const (
 // which are not valid media files correctly reports failure. Retrying
 // these ingestions should see the same error return.
 func TestIngestion_MetadataFailure(t *testing.T) {
-	t.Parallel()
-
 	tempDir, paths := helpers.TempDirWithEmptyFiles(t, []string{"thisisnotavalidfile.mp4"})
 	req := helpers.NewTheaServiceRequest().WithIngestDirectory(tempDir)
 	srv := helpers.RequireThea(t, req)
+
+	t.Parallel()
 
 	exp := srv.ActivityExpecter(t).Expect(
 		chanassert.ExactlyNOf(2, helpers.MatchIngestUpdate(paths[0], ingest.Troubled)),
@@ -58,14 +58,14 @@ func TestIngestion_MetadataFailure(t *testing.T) {
 //
 //nolint:dupl
 func TestIngestion_TMDB_NoMatches(t *testing.T) {
-	t.Parallel()
-
 	ingestDir, files := helpers.TempDirWithFiles(t, map[string]string{
 		"./testdata/validmedia/short-sample.mkv": "notarealmoviesurely.S01E01.1920x1080.mkv",
 	})
 
 	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir)
 	srv := helpers.RequireThea(t, req)
+
+	t.Parallel()
 
 	exp := srv.ActivityExpecter(t).Expect(
 		chanassert.OneOf(helpers.MatchIngestUpdate(files[0], ingest.Troubled)),
@@ -90,14 +90,14 @@ func TestIngestion_TMDB_NoMatches(t *testing.T) {
 //
 //nolint:dupl
 func TestIngestion_TMDB_MultipleMatches(t *testing.T) {
-	t.Parallel()
-
 	ingestDir, files := helpers.TempDirWithFiles(t, map[string]string{
 		"./testdata/validmedia/short-sample.mkv": "Sample.S01E01.1280x760.mkv",
 	})
 
 	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir)
 	srv := helpers.RequireThea(t, req)
+
+	t.Parallel()
 
 	exp := srv.ActivityExpecter(t).Expect(
 		chanassert.OneOf(helpers.MatchIngestUpdate(files[0], ingest.Troubled)),

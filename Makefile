@@ -44,7 +44,7 @@ lint:
 
 ## audit: run quality control checks (tidy, lints, builds, checks for dep vulns and runs tests)
 .PHONY: audit
-audit: tidy lint build
+audit: build tidy lint
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	go test -buildvcs -vet=off ./...
 

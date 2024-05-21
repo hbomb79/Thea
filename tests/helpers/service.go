@@ -137,27 +137,27 @@ func (service *TestService) String() string {
 	return fmt.Sprintf("TestService{port=%d database=%s}", service.Port, service.DatabaseName)
 }
 
-func (service *TestService) NewClient(t *testing.T) *gen.ClientWithResponses {
+func (service *TestService) NewClient(t *testing.T) *APIClient {
 	client, err := gen.NewClientWithResponses(service.GetServerBasePath())
 	assert.Nil(t, err)
 
-	return client
+	return &APIClient{client}
 }
 
-func (service *TestService) NewClientWithDefaultAdminUser(t *testing.T) *gen.ClientWithResponses {
+func (service *TestService) NewClientWithDefaultAdminUser(t *testing.T) *APIClient {
 	adminUser, client := service.NewClientWithCredentials(t, DefaultAdminUsername, DefaultAdminPassword)
 	assert.Subset(t, adminUser.User.Permissions, permissions.All(), "Default admin user must contain all permissions")
 
-	return client
+	return &APIClient{client}
 }
 
 // NewClientWithUser creates a new test client with the provided user authenticated.
-func (service *TestService) NewClientWithUser(t *testing.T, user TestUser) *gen.ClientWithResponses {
+func (service *TestService) NewClientWithUser(t *testing.T, user TestUser) *APIClient {
 	_, client := service.NewClientWithCredentials(t, user.User.Username, user.Password)
-	return client
+	return &APIClient{client}
 }
 
-func (service *TestService) NewClientWithCredentials(t *testing.T, username string, password string) (TestUser, *gen.ClientWithResponses) {
+func (service *TestService) NewClientWithCredentials(t *testing.T, username string, password string) (TestUser, *APIClient) {
 	resp, err := service.NewClient(t).LoginWithResponse(ctx, gen.LoginRequest{Username: username, Password: password})
 	assert.Nil(t, err, "Failed to perform login request")
 	assert.NotNil(t, resp.JSON200)
@@ -167,7 +167,7 @@ func (service *TestService) NewClientWithCredentials(t *testing.T, username stri
 
 	authClient, err := gen.NewClientWithResponses(service.GetServerBasePath(), gen.WithRequestEditorFn(WithCookies(cookies)))
 	assert.Nil(t, err)
-	return TestUser{User: *resp.JSON200, Password: password, Cookies: cookies}, authClient
+	return TestUser{User: *resp.JSON200, Password: password, Cookies: cookies}, &APIClient{authClient}
 }
 
 // NewClientWithRandomUserPermissions creates a new user with a random username
@@ -175,7 +175,7 @@ func (service *TestService) NewClientWithCredentials(t *testing.T, username stri
 // alongside an API client which will automatically inject the authentication tokens
 // for outgoing requests.
 // TODO: add cleanup task to testing context to delete user (t.Cleanup()).
-func (service *TestService) NewClientWithRandomUserPermissions(t *testing.T, permissions []string) (TestUser, *gen.ClientWithResponses) {
+func (service *TestService) NewClientWithRandomUserPermissions(t *testing.T, permissions []string) (TestUser, *APIClient) {
 	usernameAndPassword := fmt.Sprintf("TestUser%s", random.String(16))
 	createResponse, err := service.NewClientWithDefaultAdminUser(t).CreateUserWithResponse(ctx, gen.CreateUserRequest{
 		Permissions: permissions,
@@ -194,7 +194,7 @@ func (service *TestService) NewClientWithRandomUserPermissions(t *testing.T, per
 // NewClientWithRandomUser creates a new user which has a random username/password,
 // and has *all* permissions. The user is returned alongside an API client which
 // will automatically inject the authentication tokens for outgoing requests.
-func (service *TestService) NewClientWithRandomUser(t *testing.T) (TestUser, *gen.ClientWithResponses) {
+func (service *TestService) NewClientWithRandomUser(t *testing.T) (TestUser, *APIClient) {
 	return service.NewClientWithRandomUserPermissions(t, permissions.All())
 }
 
@@ -209,7 +209,7 @@ func (service *TestService) waitForHealthy(t *testing.T, pollFrequency time.Dura
 	client := service.NewClient(t)
 	attempts := timeout.Milliseconds() / pollFrequency.Milliseconds()
 	for attempt := range attempts {
-		_, err := client.GetCurrentUser(ctx)
+		_, err := client.GetCurrentUserWithResponse(ctx)
 		if err != nil {
 			if attempt == attempts-1 {
 				return err

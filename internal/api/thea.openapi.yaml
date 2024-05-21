@@ -1217,8 +1217,6 @@ components:
       required:
         - label
         - enabled
-        - target_ids
-        - criteria
       properties:
         label:
           type: string
@@ -1229,14 +1227,14 @@ components:
         target_ids:
           type: array
           x-oapi-codegen-extra-tags:
-            validate: required,min=1
+            validate: omitempty,min=1
           items:
             type: string
             format: uuid
         criteria:
           type: array
           x-oapi-codegen-extra-tags:
-            validate: required
+            validate: omitempty,min=1
           items:
             $ref: "#/components/schemas/WorkflowCriteria"
 

@@ -18,24 +18,24 @@ func TestWorkflow_CRUD(t *testing.T) {
 	t.Parallel()
 
 	_, client := srv.NewClientWithRandomUser(t)
-	initialTargets := createRandomTargets(t, client, 3)
-	workflow := createWorkflow(t, client, []gen.WorkflowCriteria{
+	initialTargets := client.CreateRandomTargets(t, 3).IDs()
+	workflow := client.CreateWorkflow(t, &[]gen.WorkflowCriteria{
 		{CombineType: gen.OR, Key: gen.RESOLUTION, Type: gen.NOTEQUALS, Value: "10"},
-	}, true, random.String(64), initialTargets.IDs())
+	}, true, random.String(64), &initialTargets)
 
 	// Check creation DTO is correct compared to a subsequent fetch
 	{
-		list := listWorkflows(t, client)
+		list := client.ListWorkflows(t)
 		assert.Len(t, list, 1)
 		assert.Equal(t, workflow, list[0], "Single entry in listed workflows does not equal created workflow")
 
-		fetchedWorkflow := getWorkflow(t, client, workflow.Id)
+		fetchedWorkflow := client.GetWorkflow(t, workflow.Id)
 		assert.Equal(t, workflow, fetchedWorkflow, "Fetched workflow does not equal created workflow")
 	}
 
 	// Partial update
 	{
-		updatedWorkflow := updateWorkflow(t, client, workflow.Id, nil, nil, "thiswasrenamedusingpartialupdating", nil)
+		updatedWorkflow := client.UpdateWorkflow(t, workflow.Id, nil, nil, "thiswasrenamedusingpartialupdating", nil)
 
 		assert.NotEqual(t, workflow.Label, updatedWorkflow.Label, "Expected label of workflow to be updated")
 
@@ -45,16 +45,26 @@ func TestWorkflow_CRUD(t *testing.T) {
 		assert.Equal(t, workflow.Enabled, updatedWorkflow.Enabled, "Expected 'enabled' of workflow to not change during partial update of label")
 
 		// Ensure response from UPDATE is the same as a subsequent GET
-		assert.Equal(t, updatedWorkflow, getWorkflow(t, client, workflow.Id), "Updated workflow does not match that same workflow after fetching")
+		assert.Equal(t, updatedWorkflow, client.GetWorkflow(t, workflow.Id), "Updated workflow does not match that same workflow after fetching")
+	}
+
+	{
+		// Delete one of the targets currently associated with this workflow
+		// and ensure the target is dropped by the workflow without problem.
+		client.DeleteTarget(t, initialTargets[0])
+
+		wrkflw := client.GetWorkflow(t, workflow.Id)
+		assert.Len(t, wrkflw.TargetIds, 2, "expected workflow targets to be one less following deletion of associated target")
+		assert.ElementsMatchf(t, initialTargets[1:], wrkflw.TargetIds, "expected workflow targets to be missing deleted target")
 	}
 
 	// Fully update workflow
 	{
-		newTargets := createRandomTargets(t, client, 3)
+		newTargets := client.CreateRandomTargets(t, 3)
 		targetIDs := newTargets.IDs()
-		updatedWorkflow := updateWorkflow(t, client, workflow.Id, &[]gen.WorkflowCriteria{
+		updatedWorkflow := client.UpdateWorkflow(t, workflow.Id, &[]gen.WorkflowCriteria{
 			{CombineType: gen.AND, Key: gen.TITLE, Type: gen.EQUALS, Value: "atitle"},
-		}, &optionalBool{false}, random.String(64), &targetIDs)
+		}, &helpers.Boolean{}, random.String(64), &targetIDs)
 
 		assert.Equal(t, workflow.Id, updatedWorkflow.Id, "ID of workflow changed after update")
 		assert.NotEqual(t, workflow.Label, updatedWorkflow.Label, "Expected label of workflow to be updated")
@@ -63,14 +73,14 @@ func TestWorkflow_CRUD(t *testing.T) {
 		assert.NotEqual(t, workflow.Enabled, updatedWorkflow.Enabled, "Expected 'enabled' of workflow to change during full update")
 
 		// Ensure response from UPDATE is the same as a subsequent GET
-		assert.Equal(t, updatedWorkflow, getWorkflow(t, client, workflow.Id), "Updated workflow does not match that same workflow after fetching")
+		assert.Equal(t, updatedWorkflow, client.GetWorkflow(t, workflow.Id), "Updated workflow does not match that same workflow after fetching")
 	}
 
 	// Delete workflow
-	deleteWorkflow(t, client, workflow.Id)
+	client.DeleteWorkflow(t, workflow.Id)
 
 	// Ensure it's no longer listed
-	assert.Len(t, listWorkflows(t, client), 0)
+	assert.Len(t, client.ListWorkflows(t), 0)
 
 	// ... And that fetching is a 404
 	resp, err := client.GetWorkflowWithResponse(ctx, workflow.Id)
@@ -82,94 +92,74 @@ func TestWorkflow_CRUD(t *testing.T) {
 
 func TestWorkflow_Creation(t *testing.T) {
 	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
+	t.Parallel()
+
 	_, client := srv.NewClientWithRandomUser(t)
+
+	targetIDs := client.CreateRandomTargets(t, 4).IDs()
+	aIDs := targetIDs[:2]
+	bIDs := targetIDs[2:]
+
 	tests := []struct {
 		Summary       string
 		ShouldSucceed bool
 		Label         string
 		Enabled       bool
-		Criteria      []gen.WorkflowCriteria
-		TargetIDs     []uuid.UUID
+		Criteria      *[]gen.WorkflowCriteria
+		TargetIDs     *[]uuid.UUID
 	}{
 		{
-			Summary:       "",
-			ShouldSucceed: false,
-			Label:         "",
-			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
+			Summary:       "Valid workflow with no targets or criteria",
+			ShouldSucceed: true,
+			Label:         "ValidMinimal",
+			Enabled:       true,
 		},
 		{
-			Summary:       "",
-			ShouldSucceed: false,
-			Label:         "",
+			Summary:       "Valid workflow with all fields",
+			ShouldSucceed: true,
+			Label:         "ValidComplete",
 			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
+			Criteria: &[]gen.WorkflowCriteria{
+				{CombineType: gen.AND, Key: gen.TITLE, Type: gen.NOTEQUALS, Value: "FooBar"},
+			},
+			TargetIDs: &aIDs,
 		},
 		{
-			Summary:       "",
-			ShouldSucceed: false,
-			Label:         "",
-			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
+			Summary:       "Valid workflow with targets, no criteria",
+			ShouldSucceed: true,
+			Label:         "ValidNoCriteria",
+			Enabled:       true,
+			TargetIDs:     &bIDs,
 		},
 		{
-			Summary:       "",
-			ShouldSucceed: false,
-			Label:         "",
+			Summary:       "Valid workflow with criteria, no targets",
+			ShouldSucceed: true,
+			Label:         "ValidNoTargets",
 			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
+			Criteria: &[]gen.WorkflowCriteria{
+				{CombineType: gen.AND, Key: gen.TITLE, Type: gen.EQUALS, Value: "FooBar"},
+			},
 		},
 		{
-			Summary:       "",
+			Summary:       "Invalid targets",
 			ShouldSucceed: false,
-			Label:         "",
-			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
+			Label:         "InvalidTarget",
+			Enabled:       true,
+			TargetIDs:     &[]uuid.UUID{uuid.New(), uuid.New()},
 		},
 		{
-			Summary:       "",
+			Summary:       "Invalid criteria",
 			ShouldSucceed: false,
-			Label:         "",
-			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
-		},
-		{
-			Summary:       "",
-			ShouldSucceed: false,
-			Label:         "",
-			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
-		},
-		{
-			Summary:       "",
-			ShouldSucceed: false,
-			Label:         "",
-			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
-		},
-		{
-			Summary:       "",
-			ShouldSucceed: false,
-			Label:         "",
-			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
-		},
-		{
-			Summary:       "",
-			ShouldSucceed: false,
-			Label:         "",
-			Enabled:       false,
-			Criteria:      []gen.WorkflowCriteria{},
-			TargetIDs:     []uuid.UUID{},
+			Label:         "InvalidCriteria",
+			Enabled:       true,
+			Criteria: &[]gen.WorkflowCriteria{
+				{
+					CombineType: "NOR",
+					Key:         "SOME",
+					Type:        "NOTATYPE",
+					Value:       "helloworld",
+				},
+			},
 		},
 	}
 
@@ -178,11 +168,25 @@ func TestWorkflow_Creation(t *testing.T) {
 			t.Parallel()
 
 			if test.ShouldSucceed {
-				wkflw := createWorkflow(t, client, test.Criteria, test.Enabled, test.Label, test.TargetIDs)
+				wkflw := client.CreateWorkflow(t, test.Criteria, test.Enabled, test.Label, test.TargetIDs)
 				assert.Equalf(t, test.Label, wkflw.Label, "creation of workflow failed: expected 'Label' to be '%v' but found '%v'", test.Label, wkflw.Label)
 				assert.Equalf(t, test.Enabled, wkflw.Enabled, "creation of workflow failed: expected 'Enabled' to be '%v' but found '%v'", test.Enabled, wkflw.Enabled)
-				assert.Equalf(t, test.TargetIDs, wkflw.TargetIds, "creation of workflow failed: expected 'TargetIds' to be '%v' but found '%v'", test.TargetIDs, wkflw.TargetIds)
-				assert.Equalf(t, test.Criteria, wkflw.Criteria, "creation of workflow failed: expected 'Criteria' to be '%v' but found '%v'", test.Criteria, wkflw.Criteria)
+
+				// When creating a workflow, the targets are optional in the request body, however
+				// an empty array will be returned when fetching the workflow.
+				if test.TargetIDs == nil {
+					assert.Emptyf(t, wkflw.TargetIds, "creation of workflow failed: expected 'TargetIds' to be EMPTY (nil) but found '%v'", wkflw.TargetIds)
+				} else {
+					assert.ElementsMatchf(t, *test.TargetIDs, wkflw.TargetIds, "creation of workflow failed: expected 'TargetIds' to be '%v' but found '%v'", test.TargetIDs, wkflw.TargetIds)
+				}
+
+				// Same as targets above, criteria is an optional field in the create request,
+				// but will be automatically set to an empty array and so we must account for that here.
+				if test.Criteria == nil {
+					assert.Emptyf(t, wkflw.Criteria, "creation of workflow failed: expected 'Criteria' to be EMPTY (nil) but found '%v'", wkflw.Criteria)
+				} else {
+					assert.ElementsMatchf(t, *test.Criteria, wkflw.Criteria, "creation of workflow failed: expected 'Criteria' to be '%v' but found '%v'", test.Criteria, wkflw.Criteria)
+				}
 			} else {
 				resp, err := client.CreateWorkflowWithResponse(
 					ctx,
@@ -196,85 +200,95 @@ func TestWorkflow_Creation(t *testing.T) {
 	}
 }
 
+// TestWorkflow_Update tests the updating of existing workflows with
+// arbitrary updates of varying correctness.
 func TestWorkflow_Update(t *testing.T) {
 	t.SkipNow()
-	// TODO
+	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
+	t.Parallel()
+
+	_, client := srv.NewClientWithRandomUser(t)
+	initialTargetIDs := client.CreateRandomTargets(t, 3).IDs()
+
+	_ = client.CreateWorkflow(t, nil, true, "UpdateME", &initialTargetIDs)
+
+	tests := []struct {
+		Summary   string
+		Label     *helpers.String
+		Enabled   *helpers.Boolean
+		Criteria  *[]gen.WorkflowCriteria
+		TargetIDs *[]uuid.UUID
+	}{
+		{
+			Summary:   "Valid update all fields",
+			Label:     &helpers.String{String: "UpdatedME"},
+			Enabled:   &helpers.Boolean{},
+			Criteria:  &[]gen.WorkflowCriteria{},
+			TargetIDs: &[]uuid.UUID{},
+		},
+		{
+			Summary:   "Valid update label",
+			Label:     &helpers.String{String: "UpdatedME"},
+			Enabled:   &helpers.Boolean{},
+			Criteria:  &[]gen.WorkflowCriteria{},
+			TargetIDs: &[]uuid.UUID{},
+		},
+		{
+			Summary:   "Valid update enabled",
+			Label:     &helpers.String{String: "UpdatedME"},
+			Enabled:   &helpers.Boolean{},
+			Criteria:  &[]gen.WorkflowCriteria{},
+			TargetIDs: &[]uuid.UUID{},
+		},
+		{
+			Summary:   "Valid update criteria",
+			Label:     &helpers.String{String: "UpdatedME"},
+			Enabled:   &helpers.Boolean{},
+			Criteria:  &[]gen.WorkflowCriteria{},
+			TargetIDs: &[]uuid.UUID{},
+		},
+		{
+			Summary:   "Valid update targets",
+			Label:     &helpers.String{String: "UpdatedME"},
+			Enabled:   &helpers.Boolean{},
+			Criteria:  &[]gen.WorkflowCriteria{},
+			TargetIDs: &[]uuid.UUID{},
+		},
+		{
+			Summary:   "Invalid update label",
+			Label:     &helpers.String{String: "UpdatedME"},
+			Enabled:   &helpers.Boolean{},
+			Criteria:  &[]gen.WorkflowCriteria{},
+			TargetIDs: &[]uuid.UUID{},
+		},
+		{
+			Summary:   "Invalid update criteria",
+			Label:     &helpers.String{String: "UpdatedME"},
+			Enabled:   &helpers.Boolean{},
+			Criteria:  &[]gen.WorkflowCriteria{},
+			TargetIDs: &[]uuid.UUID{},
+		},
+		{
+			Summary:   "Invalid update targets",
+			Label:     &helpers.String{},
+			Enabled:   &helpers.Boolean{},
+			Criteria:  &[]gen.WorkflowCriteria{},
+			TargetIDs: &[]uuid.UUID{},
+		},
+	}
+
+	for range tests {
+	}
 }
 
-func TestWorkflow_ManageTargets(t *testing.T) {
-	t.SkipNow()
-	// TODO
-}
-
-// TestWorkflow_Criteria tests that workflows with certain
+// TestWorkflow_Ingestion tests that workflows with certain
 // criteria set on them correctly automatically initiate transcoding tasks
-// for media which matches that criteria.
-func TestWorkflow_Criteria(t *testing.T) {
+// for newly ingested media which matches that criteria.
+func TestWorkflow_Ingestion(t *testing.T) {
 	t.SkipNow()
 	// TODO
 	// Enabled, Single criteria
 	// Enabled, Combined criteria (AND)
 	// Enabled, Combined criteria (OR)
 	// Disabled workflow has no effect
-}
-
-func createWorkflow(t *testing.T, client gen.ClientWithResponsesInterface, criteria []gen.WorkflowCriteria, enabled bool, label string, targetIDs []uuid.UUID) gen.Workflow {
-	resp, err := client.CreateWorkflowWithResponse(ctx, gen.CreateWorkflowRequest{Criteria: criteria, Enabled: enabled, Label: label, TargetIds: targetIDs})
-
-	assert.NoError(t, err, "failed to create workflow %s: %v", label, err)
-	assert.NotNil(t, resp, "failed to create workflow %s: HTTP response was nil", label)
-	assert.Equal(t, http.StatusCreated, resp.StatusCode(), "failed to create workflow %s: HTTP response status code was not as expected", label)
-	assert.NotNil(t, resp.JSON201, "failed to create workflow %s: JSON201 body nil", label)
-
-	return *resp.JSON201
-}
-
-type optionalBool struct{ bool bool }
-
-func updateWorkflow(t *testing.T, client gen.ClientWithResponsesInterface, workflowID uuid.UUID,
-	criteria *[]gen.WorkflowCriteria, enabled *optionalBool, label string, targetIDs *[]uuid.UUID,
-) gen.Workflow {
-	updateDto := gen.UpdateWorkflowRequest{Criteria: criteria, TargetIds: targetIDs}
-	if label != "" {
-		updateDto.Label = &label
-	}
-	if enabled != nil {
-		updateDto.Enabled = &enabled.bool
-	}
-
-	resp, err := client.UpdateWorkflowWithResponse(ctx, workflowID, updateDto)
-
-	assert.NoError(t, err, "failed to update workflow %s: %v", workflowID, err)
-	assert.NotNil(t, resp, "failed to update workflow %s: HTTP response was nil", workflowID)
-	assert.Equal(t, http.StatusOK, resp.StatusCode(), "failed to update workflow %s: HTTP response status code was not as expected", workflowID)
-	assert.NotNil(t, resp.JSON200, "failed to update workflow %s: JSON200 body nil", workflowID)
-
-	return *resp.JSON200
-}
-
-func listWorkflows(t *testing.T, client gen.ClientWithResponsesInterface) []gen.Workflow {
-	resp, err := client.ListWorkflowsWithResponse(ctx)
-	assert.NoError(t, err, "failed to list workflows: %v", err)
-	assert.NotNil(t, resp, "failed to list workflows: HTTP response was nil")
-	assert.Equal(t, http.StatusOK, resp.StatusCode(), "failed to list workflows: HTTP response status code was not as expected")
-	assert.NotNil(t, resp.JSON200, "failed to list workflows: JSON200 body nil")
-
-	return *resp.JSON200
-}
-
-func getWorkflow(t *testing.T, client gen.ClientWithResponsesInterface, workflowID uuid.UUID) gen.Workflow {
-	resp, err := client.GetWorkflowWithResponse(ctx, workflowID)
-	assert.NoError(t, err, "failed to get workflow %s: %v", workflowID, err)
-	assert.NotNil(t, resp, "failed to get workflow %s: HTTP response was nil", workflowID)
-	assert.Equal(t, http.StatusOK, resp.StatusCode(), "failed to get workflow %s: HTTP response status code was not as expected", workflowID)
-	assert.NotNil(t, resp.JSON200, "failed to get workflow %s: JSON200 body nil", workflowID)
-
-	return *resp.JSON200
-}
-
-func deleteWorkflow(t *testing.T, client gen.ClientWithResponsesInterface, workflowID uuid.UUID) {
-	resp, err := client.DeleteWorkflowWithResponse(ctx, workflowID)
-	assert.NoError(t, err, "failed to delete workflow %s: %v", workflowID, err)
-	assert.NotNil(t, resp, "failed to delete workflow %s: HTTP response was nil", workflowID)
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode(), "failed to delete workflow %s: HTTP response status code was not as expected")
 }

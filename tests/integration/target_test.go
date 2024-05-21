@@ -4,36 +4,34 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/hbomb79/Thea/tests/helpers"
-	"github.com/labstack/gommon/random"
 	"github.com/stretchr/testify/assert"
 )
 
 // TestTarget_Complete tests the basic CRUD actions
 // for the target resource all in one run.
-func TestTarget_Complete(t *testing.T) {
+func TestTarget_CRUD(t *testing.T) {
 	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
 	t.Parallel()
 
 	// Create a target
 	_, client := srv.NewClientWithRandomUser(t)
-	target := createTarget(t, client, "CRUD Target", "mp4", map[string]any{"Threads": 5})
+	target := client.CreateTarget(t, "CRUD Target", "mp4", map[string]any{"Threads": 5})
 
 	// Check creation DTO is correct compared to a subsequent fetch
 	{
-		list := listTargets(t, client)
+		list := client.ListTargets(t)
 		assert.Len(t, list, 1)
 		assert.Equal(t, target, list[0], "Single entry in listed targets does not equal created target")
 
-		fetchedTarget := getTarget(t, client, target.Id)
+		fetchedTarget := client.GetTarget(t, target.Id)
 		assert.Equal(t, target, fetchedTarget, "Fetched target does not equal created target")
 	}
 
 	// Partial update
 	{
-		updatedTarget := updateTarget(t, client, target.Id, "thiswasrenamedusingpartialupdating", "", nil)
+		updatedTarget := client.UpdateTarget(t, target.Id, "thiswasrenamedusingpartialupdating", "", nil)
 
 		assert.Equal(t, target.Id, updatedTarget.Id, "ID of target changed after update")
 		assert.NotEqual(t, target.Label, updatedTarget.Label, "Expected label of target to be updated")
@@ -41,12 +39,12 @@ func TestTarget_Complete(t *testing.T) {
 		assert.Equal(t, target.Extension, updatedTarget.Extension, "Expected extension of target to not change during partial update of label")
 
 		// Ensure response from UPDATE is the same as a subsequent GET
-		assert.Equal(t, updatedTarget, getTarget(t, client, target.Id), "Updated target does not match that same target after fetching")
+		assert.Equal(t, updatedTarget, client.GetTarget(t, target.Id), "Updated target does not match that same target after fetching")
 	}
 
 	// Fully update target
 	{
-		updatedTarget := updateTarget(t, client, target.Id, "thistargethasbeenrenamed", "mp5", map[string]any{
+		updatedTarget := client.UpdateTarget(t, target.Id, "thistargethasbeenrenamed", "mp5", map[string]any{
 			"threads": 1,
 		})
 
@@ -56,14 +54,14 @@ func TestTarget_Complete(t *testing.T) {
 		assert.NotEqual(t, target.Extension, updatedTarget.Extension)
 
 		// Ensure response from UPDATE is the same as a subsequent GET
-		assert.Equal(t, updatedTarget, getTarget(t, client, target.Id), "Updated target does not match that same target after fetching")
+		assert.Equal(t, updatedTarget, client.GetTarget(t, target.Id), "Updated target does not match that same target after fetching")
 	}
 
 	// Delete target
-	deleteTarget(t, client, target.Id)
+	client.DeleteTarget(t, target.Id)
 
 	// Ensure it's no longer listed
-	assert.Len(t, listTargets(t, client), 0)
+	assert.Len(t, client.ListTargets(t), 0)
 
 	// ... And that fetching is a 404
 	resp, err := client.GetTargetWithResponse(ctx, target.Id)
@@ -155,7 +153,7 @@ func TestTarget_Creation(t *testing.T) {
 				}
 
 				// Ensure the respose we got from 'create' is the same as a subsequent fetch
-				fetchedTarget := getTarget(t, client, resp.JSON201.Id)
+				fetchedTarget := client.GetTarget(t, resp.JSON201.Id)
 				assert.Equal(t, *resp.JSON201, fetchedTarget)
 			} else {
 				resp, err := client.CreateTargetWithResponse(ctx, test.Args)
@@ -176,7 +174,7 @@ func TestTarget_Update(t *testing.T) {
 
 	// Create a target
 	_, client := srv.NewClientWithRandomUser(t)
-	targetID := createTarget(t, client, "FooBar", "mp4", map[string]any{}).Id
+	targetID := client.CreateTarget(t, "FooBar", "mp4", map[string]any{}).Id
 
 	// Try and run some updates by it
 	tests := []struct {
@@ -261,10 +259,10 @@ func TestTarget_Update(t *testing.T) {
 				}
 
 				// Ensure the respose we got from 'update' is the same as a subsequent fetch
-				fetchedTarget := getTarget(t, client, targetID)
+				fetchedTarget := client.GetTarget(t, targetID)
 				assert.Equal(t, *resp.JSON200, fetchedTarget)
 			} else {
-				original := getTarget(t, client, targetID)
+				original := client.GetTarget(t, targetID)
 
 				resp, err := client.UpdateTargetWithResponse(ctx, targetID, updateDto)
 				assert.NoError(t, err, "failed to update target %s: %v", targetID, err)
@@ -274,95 +272,8 @@ func TestTarget_Update(t *testing.T) {
 				assert.Nil(t, resp.JSON200, "failed to update target %s: JSON200 body was non-nil when it was expected to be nil", targetID)
 
 				// Ensure this 'failed' update didn't mess with anything
-				assert.Equal(t, original, getTarget(t, client, targetID))
+				assert.Equal(t, original, client.GetTarget(t, targetID))
 			}
 		})
 	}
-}
-
-func createTarget(t *testing.T, client gen.ClientWithResponsesInterface, label, extension string, ffmpegOpts map[string]any) gen.Target {
-	resp, err := client.CreateTargetWithResponse(ctx, gen.CreateTargetRequest{
-		Label:         label,
-		Extension:     extension,
-		FfmpegOptions: ffmpegOpts,
-	})
-
-	assert.NoError(t, err, "failed to create target %s: %v", label, err)
-	assert.NotNil(t, resp, "failed to create target %s: HTTP response was nil", label)
-	assert.Equal(t, http.StatusCreated, resp.StatusCode(), "failed to create target %s: HTTP response status code was not as expected", label)
-	assert.NotNil(t, resp.JSON201, "failed to create target %s: JSON201 body nil", label)
-
-	return *resp.JSON201
-}
-
-type Targets []gen.Target
-
-func (ts Targets) IDs() []uuid.UUID {
-	ids := make([]uuid.UUID, 0, len(ts))
-	for _, t := range ts {
-		ids = append(ids, t.Id)
-	}
-
-	return ids
-}
-
-func createRandomTargets(t *testing.T, client gen.ClientWithResponsesInterface, num int) Targets {
-	targets := make([]gen.Target, 0, num)
-	for range num {
-		target := createTarget(t, client, random.String(24, random.Alphanumeric), "mp4", map[string]any{})
-		targets = append(targets, target)
-
-		t.Cleanup(func() { deleteTarget(t, client, target.Id) })
-	}
-
-	return targets
-}
-
-func updateTarget(t *testing.T, client gen.ClientWithResponsesInterface, targetID uuid.UUID, label, extension string, ffmpegOpts map[string]any) gen.Target {
-	updateDto := gen.UpdateTargetRequest{}
-	if label != "" {
-		updateDto.Label = &label
-	}
-	if extension != "" {
-		updateDto.Extension = &extension
-	}
-	if ffmpegOpts != nil {
-		updateDto.FfmpegOptions = &ffmpegOpts
-	}
-
-	resp, err := client.UpdateTargetWithResponse(ctx, targetID, updateDto)
-
-	assert.NoError(t, err, "failed to update target %s: %v", targetID, err)
-	assert.NotNil(t, resp, "failed to update target %s: HTTP response was nil", targetID)
-	assert.Equal(t, http.StatusOK, resp.StatusCode(), "failed to update target %s: HTTP response status code was not as expected", targetID)
-	assert.NotNil(t, resp.JSON200, "failed to update target %s: JSON200 body nil", targetID)
-
-	return *resp.JSON200
-}
-
-func listTargets(t *testing.T, client gen.ClientWithResponsesInterface) []gen.Target {
-	resp, err := client.ListTargetsWithResponse(ctx)
-	assert.NoError(t, err, "failed to list targets: %v", err)
-	assert.NotNil(t, resp, "failed to list targets: HTTP response was nil")
-	assert.Equal(t, http.StatusOK, resp.StatusCode(), "failed to list targets: HTTP response status code was not as expected")
-	assert.NotNil(t, resp.JSON200, "failed to list targets: JSON200 body nil")
-
-	return *resp.JSON200
-}
-
-func getTarget(t *testing.T, client gen.ClientWithResponsesInterface, targetID uuid.UUID) gen.Target {
-	resp, err := client.GetTargetWithResponse(ctx, targetID)
-	assert.NoError(t, err, "failed to get target %s: %v", targetID, err)
-	assert.NotNil(t, resp, "failed to get target %s: HTTP response was nil", targetID)
-	assert.Equal(t, http.StatusOK, resp.StatusCode(), "failed to get target %s: HTTP response status code was not as expected", targetID)
-	assert.NotNil(t, resp.JSON200, "failed to get target %s: JSON200 body nil", targetID)
-
-	return *resp.JSON200
-}
-
-func deleteTarget(t *testing.T, client gen.ClientWithResponsesInterface, targetID uuid.UUID) {
-	resp, err := client.DeleteTargetWithResponse(ctx, targetID)
-	assert.NoError(t, err, "failed to delete target %s: %v", targetID, err)
-	assert.NotNil(t, resp, "failed to delete target %s: HTTP response was nil", targetID)
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode(), "failed to delete target %s: HTTP response status code was not as expected")
 }

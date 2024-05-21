@@ -96,7 +96,7 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 	srv := helpers.RequireDefaultThea(t)
 	t.Parallel()
 
-	assertClientState := func(t *testing.T, client *gen.ClientWithResponses, expectedUser *helpers.TestUser) {
+	assertClientState := func(t *testing.T, client *helpers.APIClient, expectedUser *helpers.TestUser) {
 		resp, err := client.GetCurrentUserWithResponse(ctx)
 		assert.Nil(t, err)
 
@@ -110,7 +110,7 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 
 	// Create a new testUser and login multiple times with the testUser
 	testUser, client := srv.NewClientWithRandomUser(t)
-	sameUserClients := make([]*gen.ClientWithResponses, 0, 3)
+	sameUserClients := make([]*helpers.APIClient, 0, 3)
 	sameUserClients = append(sameUserClients, client)
 	for i := 0; i < 2; i++ {
 		// Login as the same user again to get a new set of tokens
@@ -129,9 +129,9 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 	}
 
 	// Logout of all 'user' sessions
-	resp, err := client.LogoutAll(ctx)
+	resp, err := client.LogoutAllWithResponse(ctx)
 	assert.Nil(t, err)
-	assert.Equal(t, resp.StatusCode, http.StatusOK)
+	assert.Equal(t, http.StatusOK, resp.StatusCode())
 
 	// Ensure all clients authenticated against that user are now all revoked, but the other user is still valid
 	assertClientState(t, unrelatedClient, &otherTestUser)

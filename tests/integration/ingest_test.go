@@ -21,7 +21,7 @@ const (
 // these ingestions should see the same error return.
 func TestIngestion_MetadataFailure(t *testing.T) {
 	tempDir, paths := helpers.TempDirWithEmptyFiles(t, []string{"thisisnotavalidfile.mp4"})
-	req := helpers.NewTheaServiceRequest().WithIngestDirectory(tempDir).RequiresTMDB()
+	req := helpers.NewTheaServiceRequest().WithIngestDirectory(tempDir)
 	srv := helpers.RequireThea(t, req)
 
 	t.Parallel()

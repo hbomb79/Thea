@@ -19,8 +19,15 @@ type Workflow struct {
 }
 
 func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
+	// If the workflow is 'disabled', then it's not allowed to automatically
+	// run on new media. Currently, a disabled workflow can still be run against
+	// media manually.
+	if !workflow.Enabled {
+		return false
+	}
+
 	// Check that this item matches the conditions specified by the profile. If there
-	// are no conditions, we assume this profile has none and will return true
+	// are no conditions then just default to true
 	if len(workflow.Criteria) == 0 {
 		return true
 	}

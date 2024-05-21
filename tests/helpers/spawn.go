@@ -120,27 +120,26 @@ func spawnTheaProc(t *testing.T, req TheaServiceRequest) *TestService {
 			t.Logf("[WARNING] failed to cleanup Thea instance: sending process kill failed: %s", err)
 		}
 
-		t.Log("Waiting for Thea process to finish...")
+		t.Logf("Waiting for Thea process (PID %d) to finish...", theaCmd.Process.Pid)
 		_ = theaCmd.Wait()
+		t.Logf("Thea process (PID %d) finished...", theaCmd.Process.Pid)
 
 		if t.Failed() && !shouldOutputTheaLogs {
 			t.Log("\n**HINT: Supply the 'OUTPUT_THEA_LOGS' environment variable to see the logs from spawned Thea instances")
 		}
 	}
 
-	if shouldOutputTheaLogs {
-		go func() {
-			scanner := bufio.NewScanner(io.MultiReader(stdout, stderr))
-			for scanner.Scan() {
-				text := scanner.Text()
+	go func() {
+		scanner := bufio.NewScanner(io.MultiReader(stdout, stderr))
+		for scanner.Scan() {
+			text := scanner.Text()
+			if shouldOutputTheaLogs {
 				log.Printf("[Thea pid=%d port=%d db=%s] -> %s", theaCmd.Process.Pid, port, databaseName, text)
 			}
+		}
 
-			fmt.Printf("Thea process (%d) for (%s) has closed it's output pipes\n", theaCmd.Process.Pid, req)
-		}()
-	} else if databaseName != MasterDBName {
-		t.Logf("Not outputting Thea process logs for %s; 'OUTPUT_THEA_LOGS' env var not set", t.Name())
-	}
+		fmt.Printf("Thea process (%d) for (%s) has closed it's output pipes\n", theaCmd.Process.Pid, req)
+	}()
 
 	srv := &TestService{Port: port, DatabaseName: databaseName, cleanup: cleanup}
 	if err := srv.waitForHealthy(t, 100*time.Millisecond, 5*time.Second); err != nil {

@@ -137,8 +137,16 @@ func (service *TestService) String() string {
 	return fmt.Sprintf("TestService{port=%d database=%s}", service.Port, service.DatabaseName)
 }
 
+func makeClient(client *gen.Client) error {
+	client.Client = &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	return nil
+}
+
 func (service *TestService) NewClient(t *testing.T) *APIClient {
-	client, err := gen.NewClientWithResponses(service.GetServerBasePath())
+	client, err := gen.NewClientWithResponses(service.GetServerBasePath(), makeClient)
 	assert.Nil(t, err)
 
 	return &APIClient{client}
@@ -159,13 +167,13 @@ func (service *TestService) NewClientWithUser(t *testing.T, user TestUser) *APIC
 
 func (service *TestService) NewClientWithCredentials(t *testing.T, username string, password string) (TestUser, *APIClient) {
 	resp, err := service.NewClient(t).LoginWithResponse(ctx, gen.LoginRequest{Username: username, Password: password})
-	assert.Nil(t, err, "Failed to perform login request")
+	assert.NoError(t, err, "Failed to perform login request")
 	assert.NotNil(t, resp.JSON200)
 
 	cookies := resp.HTTPResponse.Cookies()
 	assert.Len(t, cookies, LoginCookiesCount)
 
-	authClient, err := gen.NewClientWithResponses(service.GetServerBasePath(), gen.WithRequestEditorFn(WithCookies(cookies)))
+	authClient, err := gen.NewClientWithResponses(service.GetServerBasePath(), makeClient, gen.WithRequestEditorFn(WithCookies(cookies)))
 	assert.Nil(t, err)
 	return TestUser{User: *resp.JSON200, Password: password, Cookies: cookies}, &APIClient{authClient}
 }

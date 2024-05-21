@@ -6,6 +6,7 @@ import (
 
 	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/hbomb79/Thea/tests/helpers"
+	"github.com/labstack/gommon/random"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -72,7 +73,7 @@ func TestTarget_CRUD(t *testing.T) {
 }
 
 func TestTarget_Creation(t *testing.T) {
-	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
+	srv := helpers.RequireDefaultThea(t)
 	t.Parallel()
 
 	_, client := srv.NewClientWithRandomUser(t)
@@ -169,12 +170,12 @@ func TestTarget_Creation(t *testing.T) {
 
 //nolint:gocognit
 func TestTarget_Update(t *testing.T) {
-	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
+	srv := helpers.RequireDefaultThea(t)
 	t.Parallel()
 
 	// Create a target
 	_, client := srv.NewClientWithRandomUser(t)
-	targetID := client.CreateTarget(t, "FooBar", "mp4", map[string]any{}).Id
+	targetID := client.CreateTarget(t, random.String(64, random.Alphanumeric), "mp4", map[string]any{}).Id
 
 	// Try and run some updates by it
 	tests := []struct {

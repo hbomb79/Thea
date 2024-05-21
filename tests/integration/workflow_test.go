@@ -91,7 +91,7 @@ func TestWorkflow_CRUD(t *testing.T) {
 }
 
 func TestWorkflow_Creation(t *testing.T) {
-	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
+	srv := helpers.RequireDefaultThea(t)
 	t.Parallel()
 
 	_, client := srv.NewClientWithRandomUser(t)
@@ -203,14 +203,13 @@ func TestWorkflow_Creation(t *testing.T) {
 // TestWorkflow_Update tests the updating of existing workflows with
 // arbitrary updates of varying correctness.
 func TestWorkflow_Update(t *testing.T) {
-	t.SkipNow()
-	srv := helpers.RequireThea(t, helpers.NewTheaServiceRequest())
+	srv := helpers.RequireDefaultThea(t)
 	t.Parallel()
 
 	_, client := srv.NewClientWithRandomUser(t)
 	initialTargetIDs := client.CreateRandomTargets(t, 3).IDs()
 
-	_ = client.CreateWorkflow(t, nil, true, "UpdateME", &initialTargetIDs)
+	_ = client.CreateWorkflow(t, nil, true, random.String(64, random.Alphanumeric), &initialTargetIDs)
 
 	tests := []struct {
 		Summary   string

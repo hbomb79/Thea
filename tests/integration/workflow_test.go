@@ -63,7 +63,7 @@ func TestWorkflow_CRUD(t *testing.T) {
 		newTargets := client.CreateRandomTargets(t, 3)
 		targetIDs := newTargets.IDs()
 		updatedWorkflow := client.UpdateWorkflow(t, workflow.Id, &[]gen.WorkflowCriteria{
-			{CombineType: gen.AND, Key: gen.TITLE, Type: gen.EQUALS, Value: "atitle"},
+			{CombineType: gen.AND, Key: gen.MEDIATITLE, Type: gen.EQUALS, Value: "atitle"},
 		}, &helpers.Boolean{}, random.String(64), &targetIDs)
 
 		assert.Equal(t, workflow.Id, updatedWorkflow.Id, "ID of workflow changed after update")
@@ -120,7 +120,7 @@ func TestWorkflow_Creation(t *testing.T) {
 			Label:         "ValidComplete",
 			Enabled:       false,
 			Criteria: &[]gen.WorkflowCriteria{
-				{CombineType: gen.AND, Key: gen.TITLE, Type: gen.NOTEQUALS, Value: "FooBar"},
+				{CombineType: gen.AND, Key: gen.MEDIATITLE, Type: gen.NOTEQUALS, Value: "FooBar"},
 			},
 			TargetIDs: &aIDs,
 		},
@@ -137,7 +137,7 @@ func TestWorkflow_Creation(t *testing.T) {
 			Label:         "ValidNoTargets",
 			Enabled:       false,
 			Criteria: &[]gen.WorkflowCriteria{
-				{CombineType: gen.AND, Key: gen.TITLE, Type: gen.EQUALS, Value: "FooBar"},
+				{CombineType: gen.AND, Key: gen.MEDIATITLE, Type: gen.EQUALS, Value: "FooBar"},
 			},
 		},
 		{

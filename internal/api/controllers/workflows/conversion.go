@@ -41,8 +41,12 @@ func criteriaCombineTypeToDto(combineType match.CombineType) gen.WorkflowCriteri
 
 func criteriaKeyToDto(key match.Key) gen.WorkflowCriteriaKey {
 	switch key {
-	case match.TitleKey:
-		return gen.TITLE
+	case match.MediaTitleKey:
+		return gen.MEDIATITLE
+	case match.SeasonTitleKey:
+		return gen.SEASONTITLE
+	case match.SeriesTitleKey:
+		return gen.SERIESTITLE
 	case match.ResolutionKey:
 		return gen.RESOLUTION
 	case match.SeasonNumberKey:
@@ -96,8 +100,12 @@ func criteriaCombineTypeToModel(combineType gen.WorkflowCriteriaCombineType) mat
 
 func criteriaKeyToModel(key gen.WorkflowCriteriaKey) match.Key {
 	switch key {
-	case gen.TITLE:
-		return match.TitleKey
+	case gen.MEDIATITLE:
+		return match.MediaTitleKey
+	case gen.SERIESTITLE:
+		return match.SeriesTitleKey
+	case gen.SEASONTITLE:
+		return match.SeasonTitleKey
 	case gen.RESOLUTION:
 		return match.ResolutionKey
 	case gen.SEASONNUMBER:

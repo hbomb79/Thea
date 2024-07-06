@@ -3,7 +3,21 @@ package match
 type Key int
 
 const (
-	TitleKey Key = iota
+	// MediaTitleKey will match against the title of
+	// the media directly. Either the episode title (for
+	// episode types), or the movie title (for movie types).
+	MediaTitleKey Key = iota
+
+	// SeriesTitleKey matches against the title of the series
+	// that the container contains. This will of course fail
+	// if the media being matched against is a movie.
+	SeriesTitleKey
+
+	// SeasonTitleKey matches against the title of the season that
+	// the container contains. This will fail if the media being
+	// matched against is a movie.
+	SeasonTitleKey
+
 	ResolutionKey
 	SeasonNumberKey
 	EpisodeNumberKey
@@ -13,7 +27,11 @@ const (
 )
 
 func (e Key) Values() []string {
-	return []string{"TITLE", "RESOLUTION", "SEASON_NUMBER", "EPISODE_NUMBER", "SOURCE_PATH", "SOURCE_NAME", "SOURCE_EXTENSION"}
+	return []string{
+		"MEDIA_TITLE", "SERIES_TITLE", "SEASON_TITLE",
+		"RESOLUTION", "SEASON_NUMBER", "EPISODE_NUMBER",
+		"SOURCE_PATH", "SOURCE_NAME", "SOURCE_EXTENSION",
+	}
 }
 
 func (e Key) String() string {
@@ -48,7 +66,9 @@ func IsTypeAcceptable(key Key, t Type) bool {
 
 func keyAcceptableTypes() map[Key][]Type {
 	return map[Key][]Type{
-		TitleKey:           {Matches, DoesNotMatch, IsNotPresent, IsPresent},
+		MediaTitleKey:      {Matches, DoesNotMatch, IsNotPresent, IsPresent},
+		SeasonTitleKey:     {Matches, DoesNotMatch, IsNotPresent, IsPresent},
+		SeriesTitleKey:     {Matches, DoesNotMatch, IsNotPresent, IsPresent},
 		ResolutionKey:      {Matches, DoesNotMatch, IsNotPresent, IsPresent},
 		SeasonNumberKey:    {Equals, NotEquals, LessThan, GreaterThan, IsNotPresent, IsPresent},
 		EpisodeNumberKey:   {Equals, NotEquals, LessThan, GreaterThan, IsNotPresent, IsPresent},

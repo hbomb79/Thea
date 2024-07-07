@@ -34,7 +34,7 @@ func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
 
 	currentEval := true
 	skipToNextBlock := false
-	for _, condition := range workflow.Criteria {
+	for i, condition := range workflow.Criteria {
 		// If a previous block failed, keep going until we find the
 		// next 'or' block
 		if skipToNextBlock && condition.CombineType == match.AND {
@@ -44,31 +44,25 @@ func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
 
 		isMatch, err := condition.IsMediaAcceptable(media)
 		if err != nil {
-			log.Emit(logger.ERROR, "media %v is not eligible for workflow %v: %v\n", media, workflow, err)
-		}
-
-		if !isMatch {
-			skipToNextBlock = true
-			currentEval = true
-
-			continue
-		}
-
-		if currentEval {
-			currentEval = isMatch
+			log.Emit(logger.ERROR, "media %v is not eligible for criteria %v: %v\n", media, condition, err)
 		}
 
 		if condition.CombineType == match.OR {
-			// End of this block
 			if currentEval {
-				return true
-			} else {
-				currentEval = true
+				// End of this block, if the current block
+				// is satisfied, then we're done, no need to
+				// test the following conditions
+				break
 			}
+		} else if i < len(workflow.Criteria) {
+			// This condition is part of an unfinished block of conditions ANDed together.
+			// If this condition FAILED to match, then we can skip until the next OR condition (if any)
+			currentEval = isMatch
+			skipToNextBlock = !isMatch
 		}
 	}
 
-	return false
+	return currentEval
 }
 
 func (workflow *Workflow) SetCriteria(criteria []match.Criteria) error {

@@ -111,7 +111,7 @@ func runCommonMediaWorkflowTests(t *testing.T, container *media.Container) {
 		{
 			summary: "false || true",
 			workflow: createEmptyWorkflow([]match.Criteria{
-				{Key: match.SourceExtensionKey, Type: match.Matches, Value: "mkv", CombineType: match.OR},
+				{Key: match.SourceExtensionKey, Type: match.Matches, Value: ".mkv", CombineType: match.OR},
 				{Key: match.SourcePathKey, Type: match.Matches, Value: "/source/media/"},
 			}),
 			isEligible: true,
@@ -119,16 +119,16 @@ func runCommonMediaWorkflowTests(t *testing.T, container *media.Container) {
 		{
 			summary: "(true && true) || false",
 			workflow: createEmptyWorkflow([]match.Criteria{
-				{Key: match.SourceExtensionKey, Type: match.Matches, Value: "mp4", CombineType: match.AND},
+				{Key: match.SourceExtensionKey, Type: match.Matches, Value: ".mp4", CombineType: match.AND},
 				{Key: match.ResolutionKey, Type: match.Matches, Value: "1920x1080", CombineType: match.OR},
 				{Key: match.SourcePathKey, Type: match.Matches, Value: "suishfsjaf"},
 			}),
-			isEligible: false,
+			isEligible: true,
 		},
 		{
 			summary: "(false && false) || true",
 			workflow: createEmptyWorkflow([]match.Criteria{
-				{Key: match.SourceExtensionKey, Type: match.Matches, Value: "mkv", CombineType: match.AND},
+				{Key: match.SourceExtensionKey, Type: match.Matches, Value: ".mkv", CombineType: match.AND},
 				{Key: match.ResolutionKey, Type: match.Matches, Value: "720", CombineType: match.OR},
 				{Key: match.SourcePathKey, Type: match.Matches, Value: "/source/media/"},
 			}),
@@ -137,7 +137,7 @@ func runCommonMediaWorkflowTests(t *testing.T, container *media.Container) {
 		{
 			summary: "(false && false) || false",
 			workflow: createEmptyWorkflow([]match.Criteria{
-				{Key: match.SourceExtensionKey, Type: match.Matches, Value: "mkv", CombineType: match.AND},
+				{Key: match.SourceExtensionKey, Type: match.Matches, Value: ".mkv", CombineType: match.AND},
 				{Key: match.ResolutionKey, Type: match.Matches, Value: "720", CombineType: match.OR},
 				{Key: match.SourcePathKey, Type: match.Matches, Value: "/sauce/media/"},
 			}),
@@ -146,10 +146,10 @@ func runCommonMediaWorkflowTests(t *testing.T, container *media.Container) {
 		{
 			summary: "(false && false) || false || (true && false)",
 			workflow: createEmptyWorkflow([]match.Criteria{
-				{Key: match.SourceExtensionKey, Type: match.Matches, Value: "mkv", CombineType: match.AND},
+				{Key: match.SourceExtensionKey, Type: match.Matches, Value: ".mkv", CombineType: match.AND},
 				{Key: match.ResolutionKey, Type: match.Matches, Value: "720", CombineType: match.OR},
 				{Key: match.SourcePathKey, Type: match.Matches, Value: "/baz/", CombineType: match.OR},
-				{Key: match.SourceExtensionKey, Type: match.Matches, Value: "mp4", CombineType: match.AND},
+				{Key: match.SourceExtensionKey, Type: match.Matches, Value: ".mp4", CombineType: match.AND},
 				{Key: match.MediaTitleKey, Type: match.Matches, Value: "NotATitle"},
 			}),
 			isEligible: false,
@@ -157,10 +157,10 @@ func runCommonMediaWorkflowTests(t *testing.T, container *media.Container) {
 		{
 			summary: "(false && false) || false || true && false || true",
 			workflow: createEmptyWorkflow([]match.Criteria{
-				{Key: match.SourceExtensionKey, Type: match.Matches, Value: "mkv", CombineType: match.AND},
+				{Key: match.SourceExtensionKey, Type: match.Matches, Value: ".mkv", CombineType: match.AND},
 				{Key: match.ResolutionKey, Type: match.Matches, Value: "720", CombineType: match.OR},
 				{Key: match.SourcePathKey, Type: match.Matches, Value: "/baz/", CombineType: match.OR},
-				{Key: match.SourceExtensionKey, Type: match.Matches, Value: "mp4", CombineType: match.AND},
+				{Key: match.SourceExtensionKey, Type: match.Matches, Value: ".mp4", CombineType: match.AND},
 				{Key: match.MediaTitleKey, Type: match.Matches, Value: "NotATitle", CombineType: match.OR},
 				{Key: match.MediaTitleKey, Type: match.Matches, Value: "/Example/"},
 			}),

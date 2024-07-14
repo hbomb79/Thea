@@ -35,7 +35,7 @@ func TestWorkflow_CRUD(t *testing.T) {
 
 	// Partial update
 	{
-		updatedWorkflow := client.UpdateWorkflow(t, workflow.Id, nil, nil, "thiswasrenamedusingpartialupdating", nil)
+		updatedWorkflow := client.UpdateWorkflow(t, workflow.Id, nil, nil, &helpers.String{String: "thiswasrenamedusingpartialupdating"}, nil)
 
 		assert.NotEqual(t, workflow.Label, updatedWorkflow.Label, "Expected label of workflow to be updated")
 
@@ -64,7 +64,7 @@ func TestWorkflow_CRUD(t *testing.T) {
 		targetIDs := newTargets.IDs()
 		updatedWorkflow := client.UpdateWorkflow(t, workflow.Id, &[]gen.WorkflowCriteria{
 			{CombineType: gen.AND, Key: gen.MEDIATITLE, Type: gen.EQUALS, Value: "atitle"},
-		}, &helpers.Boolean{}, random.String(64), &targetIDs)
+		}, &helpers.Boolean{}, &helpers.String{String: random.String(64)}, &targetIDs)
 
 		assert.Equal(t, workflow.Id, updatedWorkflow.Id, "ID of workflow changed after update")
 		assert.NotEqual(t, workflow.Label, updatedWorkflow.Label, "Expected label of workflow to be updated")
@@ -148,7 +148,7 @@ func TestWorkflow_Creation(t *testing.T) {
 			TargetIDs:     &[]uuid.UUID{uuid.New(), uuid.New()},
 		},
 		{
-			Summary:       "Invalid criteria",
+			Summary:       "Invalid criteria (schema violation)",
 			ShouldSucceed: false,
 			Label:         "InvalidCriteria",
 			Enabled:       true,
@@ -209,74 +209,95 @@ func TestWorkflow_Update(t *testing.T) {
 	_, client := srv.NewClientWithRandomUser(t)
 	initialTargetIDs := client.CreateRandomTargets(t, 3).IDs()
 
-	_ = client.CreateWorkflow(t, nil, true, random.String(64, random.Alphanumeric), &initialTargetIDs)
+	workflow := client.CreateWorkflow(t, nil, true, random.String(64, random.Alphanumeric), &initialTargetIDs)
 
 	tests := []struct {
-		Summary   string
-		Label     *helpers.String
-		Enabled   *helpers.Boolean
-		Criteria  *[]gen.WorkflowCriteria
-		TargetIDs *[]uuid.UUID
+		Summary       string
+		Label         *helpers.String
+		Enabled       *helpers.Boolean
+		Criteria      *[]gen.WorkflowCriteria
+		TargetIDs     *[]uuid.UUID
+		ShouldSucceed bool
 	}{
 		{
-			Summary:   "Valid update all fields",
-			Label:     &helpers.String{String: "UpdatedME"},
-			Enabled:   &helpers.Boolean{},
-			Criteria:  &[]gen.WorkflowCriteria{},
+			Summary: "Valid update all fields",
+			Label:   &helpers.String{String: "UpdatedME"},
+			Enabled: &helpers.Boolean{Bool: false},
+			Criteria: &[]gen.WorkflowCriteria{
+				{CombineType: gen.AND, Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "foobar"},
+			},
+			TargetIDs:     &[]uuid.UUID{initialTargetIDs[0]},
+			ShouldSucceed: true,
+		},
+		{
+			Summary:       "Valid update label",
+			Label:         &helpers.String{String: "This is valid too"},
+			ShouldSucceed: true,
+		},
+		{
+			Summary:       "Valid update enabled",
+			Enabled:       &helpers.Boolean{Bool: false},
+			ShouldSucceed: true,
+		},
+		{
+			Summary:       "Valid update criteria",
+			Criteria:      &[]gen.WorkflowCriteria{},
+			ShouldSucceed: true,
+		},
+		{
+			Summary:       "Valid update targets",
+			TargetIDs:     &initialTargetIDs,
+			ShouldSucceed: true,
+		},
+		{
+			Summary: "Invalid update label",
+			Label:   &helpers.String{String: " not valid "},
+		},
+		{
+			Summary: "Invalid update criteria (schema violation)",
+			Criteria: &[]gen.WorkflowCriteria{
+				{CombineType: "NOTACOMBINETYPE", Key: gen.MEDIATITLE, Type: gen.EQUALS, Value: "foo"},
+			},
+		},
+		{
+			Summary:   "Invalid update targets (empty)",
 			TargetIDs: &[]uuid.UUID{},
 		},
 		{
-			Summary:   "Valid update label",
-			Label:     &helpers.String{String: "UpdatedME"},
-			Enabled:   &helpers.Boolean{},
-			Criteria:  &[]gen.WorkflowCriteria{},
-			TargetIDs: &[]uuid.UUID{},
-		},
-		{
-			Summary:   "Valid update enabled",
-			Label:     &helpers.String{String: "UpdatedME"},
-			Enabled:   &helpers.Boolean{},
-			Criteria:  &[]gen.WorkflowCriteria{},
-			TargetIDs: &[]uuid.UUID{},
-		},
-		{
-			Summary:   "Valid update criteria",
-			Label:     &helpers.String{String: "UpdatedME"},
-			Enabled:   &helpers.Boolean{},
-			Criteria:  &[]gen.WorkflowCriteria{},
-			TargetIDs: &[]uuid.UUID{},
-		},
-		{
-			Summary:   "Valid update targets",
-			Label:     &helpers.String{String: "UpdatedME"},
-			Enabled:   &helpers.Boolean{},
-			Criteria:  &[]gen.WorkflowCriteria{},
-			TargetIDs: &[]uuid.UUID{},
-		},
-		{
-			Summary:   "Invalid update label",
-			Label:     &helpers.String{String: "UpdatedME"},
-			Enabled:   &helpers.Boolean{},
-			Criteria:  &[]gen.WorkflowCriteria{},
-			TargetIDs: &[]uuid.UUID{},
-		},
-		{
-			Summary:   "Invalid update criteria",
-			Label:     &helpers.String{String: "UpdatedME"},
-			Enabled:   &helpers.Boolean{},
-			Criteria:  &[]gen.WorkflowCriteria{},
-			TargetIDs: &[]uuid.UUID{},
-		},
-		{
-			Summary:   "Invalid update targets",
-			Label:     &helpers.String{},
-			Enabled:   &helpers.Boolean{},
-			Criteria:  &[]gen.WorkflowCriteria{},
-			TargetIDs: &[]uuid.UUID{},
+			Summary:   "Invalid update targets (not found)",
+			TargetIDs: &[]uuid.UUID{uuid.New()},
 		},
 	}
 
-	for range tests {
+	for _, test := range tests {
+		t.Run(test.Summary, func(t *testing.T) {
+			if test.ShouldSucceed {
+				wkflw := client.UpdateWorkflow(t, workflow.Id, test.Criteria, test.Enabled, test.Label, test.TargetIDs)
+
+				// Ensure each field we intended to update, did get updated
+				if test.Label != nil {
+					assert.Equalf(t, test.Label.String, wkflw.Label, "update of workflow failed: expected 'Label' to be '%v' but found '%v'", test.Label, wkflw.Label)
+				}
+				if test.Enabled != nil {
+					assert.Equalf(t, test.Enabled.Bool, wkflw.Enabled, "update of workflow failed: expected 'Enabled' to be '%v' but found '%v'", test.Enabled, wkflw.Enabled)
+				}
+				if test.TargetIDs != nil {
+					assert.ElementsMatchf(t, *test.TargetIDs, wkflw.TargetIds, "update of workflow failed: expected 'TargetIds' to be '%v' but found '%v'", test.TargetIDs, wkflw.TargetIds)
+				}
+				if test.Criteria != nil {
+					assert.ElementsMatchf(t, *test.Criteria, wkflw.Criteria, "update of workflow failed: expected 'Criteria' to be '%v' but found '%v'", test.Criteria, wkflw.Criteria)
+				}
+			} else {
+				resp, err := client.UpdateWorkflowWithResponse(
+					ctx,
+					workflow.Id,
+					gen.UpdateWorkflowRequest{Criteria: test.Criteria, Enabled: test.Enabled.Value(), Label: test.Label.Value(), TargetIds: test.TargetIDs},
+				)
+				assert.NoError(t, err, "update of workflow unexectedly failed")
+				assert.Nil(t, resp.JSON200, "update of workflow unexpectedly succeeded: expected JSON200 body to be nil")
+				assert.Equal(t, http.StatusBadRequest, resp.StatusCode(), "update of workflow unexpectedly succeeded: status code incorrect")
+			}
+		})
 	}
 }
 

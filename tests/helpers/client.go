@@ -117,12 +117,26 @@ type (
 	String  struct{ String string }
 )
 
-func (client *APIClient) UpdateWorkflow(t *testing.T, workflowID uuid.UUID,
-	criteria *[]gen.WorkflowCriteria, enabled *Boolean, label string, targetIDs *[]uuid.UUID,
-) gen.Workflow {
+func (b *Boolean) Value() *bool {
+	if b == nil {
+		return nil
+	}
+
+	return &b.Bool
+}
+
+func (s *String) Value() *string {
+	if s == nil {
+		return nil
+	}
+
+	return &s.String
+}
+
+func (client *APIClient) UpdateWorkflow(t *testing.T, workflowID uuid.UUID, criteria *[]gen.WorkflowCriteria, enabled *Boolean, label *String, targetIDs *[]uuid.UUID) gen.Workflow {
 	updateDto := gen.UpdateWorkflowRequest{Criteria: criteria, TargetIds: targetIDs}
-	if label != "" {
-		updateDto.Label = &label
+	if label != nil {
+		updateDto.Label = &label.String
 	}
 	if enabled != nil {
 		updateDto.Enabled = &enabled.Bool

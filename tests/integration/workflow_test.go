@@ -2,7 +2,9 @@ package integration_test
 
 import (
 	"net/http"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/tests/gen"
@@ -304,11 +306,189 @@ func TestWorkflow_Update(t *testing.T) {
 // TestWorkflow_Ingestion tests that workflows with certain
 // criteria set on them correctly automatically initiate transcoding tasks
 // for newly ingested media which matches that criteria.
+//
+//nolint:funlen
 func TestWorkflow_Ingestion(t *testing.T) {
-	t.SkipNow()
-	// TODO
-	// Enabled, Single criteria
-	// Enabled, Combined criteria (AND)
-	// Enabled, Combined criteria (OR)
-	// Disabled workflow has no effect
+	// TODO: add activity stream assertions
+
+	// All tests below share a ingestion directory, however
+	// each test uses it's own Thea instance.
+	ingestDir, _ := helpers.TempDirWithFiles(t, map[string]string{
+		"./testdata/validmedia/short-sample.mkv": "Shaun.of.the.Dead.2004.mkv",
+	})
+
+	tests := []struct {
+		summary                 string
+		criteria                *[]gen.WorkflowCriteria
+		enabled                 bool
+		shouldInitiateTranscode bool
+	}{
+		{
+			summary:                 "Enabled with no criteria",
+			criteria:                nil,
+			enabled:                 true,
+			shouldInitiateTranscode: true,
+		},
+		{
+			summary: "Enabled with matching simple criteria",
+			criteria: &[]gen.WorkflowCriteria{
+				{Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "Shaun of the Dead", CombineType: gen.AND},
+			},
+			enabled:                 true,
+			shouldInitiateTranscode: true,
+		},
+		{
+			summary: "Enabled with matching complex criteria",
+			criteria: &[]gen.WorkflowCriteria{
+				{Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "SIMPLE", CombineType: gen.OR},             // false OR
+				{Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "Shaun of the Dead", CombineType: gen.AND}, // true AND
+				{Key: gen.RESOLUTION, Type: gen.MATCHES, Value: "1920x1080", CombineType: gen.OR},          // false OR
+				{Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "Shaun of the Dead", CombineType: gen.AND}, // true AND
+				{Key: gen.RESOLUTION, Type: gen.MATCHES, Value: "1280x760", CombineType: gen.AND},          // true
+			},
+			enabled:                 true,
+			shouldInitiateTranscode: true,
+		},
+		{
+			summary: "Enabled with non-matching criteria",
+			criteria: &[]gen.WorkflowCriteria{
+				{Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "SIMPLE", CombineType: gen.OR},             // false OR
+				{Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "Shaun of the Dead", CombineType: gen.AND}, // true AND
+				{Key: gen.RESOLUTION, Type: gen.MATCHES, Value: "1920x1080", CombineType: gen.OR},          // false OR
+				{Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "notthetitle", CombineType: gen.AND},       // false
+			},
+			enabled:                 true,
+			shouldInitiateTranscode: false,
+		},
+		{
+			summary:                 "Disabled with no criteria",
+			criteria:                nil,
+			enabled:                 false,
+			shouldInitiateTranscode: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.summary, func(t *testing.T) {
+			req := helpers.NewTheaServiceRequest().
+				WithIngestDirectory(ingestDir).
+				RequiresTMDB().
+				WithEnvironmentVariable("INGEST_MODTIME_THRESHOLD_SECONDS", "5").
+				WithEnvironmentVariable("FORMAT_DEFAULT_OUTPUT_DIR", t.TempDir()+"/out")
+
+			srv := helpers.RequireThea(t, req)
+			_, client := srv.NewClientWithRandomUser(t)
+			t.Parallel()
+
+			// Create 3 targets, assign first 2 to the workflow
+			const numTargetsToCreate = 3
+			targets := client.CreateRandomTargets(t, numTargetsToCreate)
+			targetIDs := targets.IDs()[:numTargetsToCreate-1]
+
+			// If this test expects the workflow we create to kickoff
+			// any transcodes, then set that expectation here
+			var expectedLen int
+			if test.shouldInitiateTranscode {
+				expectedLen = len(targetIDs)
+			}
+
+			_ = client.CreateWorkflow(t, test.criteria, test.enabled, random.String(16, random.Alphanumeric), &targetIDs)
+
+			// Ask ingest service to poll
+			{
+				resp, err := client.PollIngestsWithResponse(ctx)
+				assert.NoError(t, err)
+				assert.Equal(t, http.StatusOK, resp.StatusCode())
+			}
+
+			// Wait for the ingestion to appear (as pending or import hold)
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				ingestsResponse, err := client.ListIngestsWithResponse(ctx)
+				assert.NoError(c, err)
+				assert.NotNil(c, ingestsResponse.JSON200, "expected JSON response to be non-nil")
+				if !assert.Len(c, *ingestsResponse.JSON200, 1, "expected ingests to have length 1") {
+					return // early return to prevent OOB error below
+				}
+
+				ingestItem := (*ingestsResponse.JSON200)[0]
+				assert.Equalf(c, gen.IngestStateIMPORTHOLD, ingestItem.State, "ingest expected to appear on hold")
+			}, 5*time.Second, 500*time.Millisecond, "Ingestion state never became correct")
+
+			// Wait for the ingestion to be automatically removed,
+			// indicating success.
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				ingestsResponse, err := client.ListIngestsWithResponse(ctx)
+				assert.NoError(c, err)
+				assert.NotNil(c, ingestsResponse.JSON200, "expected JSON response to be non-nil")
+				assert.Len(c, *ingestsResponse.JSON200, 0, "expected successful ingest to be removed")
+			}, 5*time.Second, 1*time.Second, "Ingestion state never became correct")
+
+			// Get the media ID
+			list := client.ListMedia(t)
+			assert.Len(t, list, 1)
+			mediaID := list[0].Id
+
+			// Give Thea some time to kickoff the transcodes
+			time.Sleep(1 * time.Second)
+
+			// Check transcode service for matching transcodes
+			transcodes := client.ListActiveTranscodeTasks(t)
+			assert.Len(t, transcodes, expectedLen)
+
+			// Ensure each target has a transcode for our media
+			targetsExpected := make([]uuid.UUID, 0, len(transcodes))
+			for _, transcode := range transcodes {
+				targetsExpected = append(targetsExpected, transcode.TargetId)
+				assert.Equalf(t, mediaID, transcode.MediaId, "expected all transcodes to belong to the same media ID")
+			}
+
+			assert.ElementsMatchf(t, targetsExpected, targetIDs, "expected a transcode to be started for each of the specified target IDs")
+
+			// Poll the media endpoint for this transcode and ensure we see the correct watch target output
+			resp, err := client.GetMovieWithResponse(ctx, mediaID)
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			assert.NotNil(t, resp.JSON200)
+
+			episode := resp.JSON200
+			assert.Len(t, episode.WatchTargets, numTargetsToCreate+1) // +1 as we create a 'fake' watch target for 'direct streaming' of the content
+
+			seenDirect := false
+			for _, wt := range episode.WatchTargets {
+				assert.True(t, wt.Enabled)
+
+				//nolint:gocritic
+				if wt.TargetId == nil {
+					assert.False(t, seenDirect, "should only see one watch target with a nil target ID")
+					seenDirect = true
+
+					// In addition to each target, one other 'Direct' watch target will
+					// be present which allows streaming of the source media file directly
+					assert.Equal(t, "Direct", wt.DisplayName)
+					assert.Nil(t, wt.TargetId)
+					assert.True(t, wt.Ready)
+				} else if test.shouldInitiateTranscode && slices.Contains(targetIDs, *wt.TargetId) {
+					// Targets which were attached to a workflow which we expected
+					// to initiate transcodes should be marked as not-ready pretranscodes
+					assert.False(t, wt.Ready)
+					assert.Equal(t, gen.PRETRANSCODE, wt.Type)
+				} else if slices.Contains(targets.IDs(), *wt.TargetId) {
+					// All other targets should be ready live transcodes
+					assert.True(t, wt.Ready)
+					assert.Equal(t, gen.LIVETRANSCODE, wt.Type)
+				} else {
+					t.Errorf("unexpected watch target '%+v'", wt)
+				}
+			}
+
+			// Cancel the transcodes
+			for _, transcode := range transcodes {
+				t.Logf("Deleting (cancelling) transcode %v", transcode)
+				resp, err := client.DeleteTranscodeTaskWithResponse(ctx, transcode.Id)
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
+				assert.Equal(t, resp.StatusCode(), http.StatusNoContent)
+			}
+		})
+	}
 }

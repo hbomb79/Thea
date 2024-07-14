@@ -112,6 +112,35 @@ func (client *APIClient) CreateWorkflow(t *testing.T, criteria *[]gen.WorkflowCr
 	return *resp.JSON201
 }
 
+func (client *APIClient) ListActiveTranscodeTasks(t *testing.T) []gen.TranscodeTask {
+	resp, err := client.ListActiveTranscodeTasksWithResponse(ctx)
+	assert.NoError(t, err, "failed to list active transcodes: %v", err)
+	assert.NotNil(t, resp, "failed to list active transcodes: HTTP response was nil")
+	assert.Equal(t, http.StatusOK, resp.StatusCode(), "failed to list active transcodes: HTTP response status code was not as expected")
+	assert.NotNil(t, resp.JSON200, "failed to list active transcodes: JSON200 body nil")
+
+	return *resp.JSON200
+}
+
+func (client *APIClient) ListCompletedTranscodes(t *testing.T) []gen.TranscodeTask {
+	resp, err := client.ListCompletedTranscodeTasksWithResponse(ctx)
+	assert.NoError(t, err, "failed to list completed transcodes: %v", err)
+	assert.NotNil(t, resp, "failed to list completed transcodes: HTTP response was nil")
+	assert.Equal(t, http.StatusOK, resp.StatusCode(), "failed to list completed transcodes: HTTP response status code was not as expected")
+	assert.NotNil(t, resp.JSON200, "failed to list completed transcodes: JSON200 body nil")
+
+	return *resp.JSON200
+}
+
+func (client *APIClient) ListMedia(t *testing.T) []gen.MediaListItem {
+	resp, err := client.ListMediaWithResponse(ctx, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.NotNil(t, resp.JSON200)
+
+	return *resp.JSON200
+}
+
 type (
 	Boolean struct{ Bool bool }
 	String  struct{ String string }

@@ -267,9 +267,9 @@ func (controller *MediaController) getMediaWatchTargets(mediaID uuid.UUID) ([]ge
 	// 1. Add completed transcodes as valid pre-transcoded targets
 	targetsNotEligibleForLiveTranscode := make(map[uuid.UUID]struct{}, len(activeTranscodes))
 	watchTargets := make([]gen.MediaWatchTarget, 0, len(completedTranscodes))
-	for k, v := range completedTranscodes {
+	for _, v := range completedTranscodes {
 		targetsNotEligibleForLiveTranscode[v.TargetID] = struct{}{}
-		watchTargets[k] = newWatchTarget(findTarget(v.TargetID), gen.PRETRANSCODE, true)
+		watchTargets = append(watchTargets, newWatchTarget(findTarget(v.TargetID), gen.PRETRANSCODE, true))
 	}
 
 	// 2. Add in-progress transcodes (as not ready to watch)

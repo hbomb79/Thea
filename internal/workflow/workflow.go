@@ -1,6 +1,9 @@
 package workflow
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/ffmpeg"
 	"github.com/hbomb79/Thea/internal/media"
@@ -32,12 +35,23 @@ func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
 		return true
 	}
 
-	currentEval := true
+	currentEval := false
 	skipToNextBlock := false
+
+	// Builds a string during evaluation
+	// of the conditions which reads like
+	// false && SKIP || false || true && true ;
+	debugStr := &strings.Builder{}
+	defer func() {
+		log.Emit(logger.VERBOSE, "Workflow %s condition evaluation for media %s debug string: "+debugStr.String(), workflow, media)
+	}()
+
 	for i, condition := range workflow.Criteria {
+		fmt.Fprintf(debugStr, "(%d)", i)
 		// If a previous block failed, keep going until we find the
 		// next 'or' block
 		if skipToNextBlock && condition.CombineType == match.AND {
+			fmt.Fprintf(debugStr, "SKIP && ")
 			continue
 		}
 		skipToNextBlock = false
@@ -47,6 +61,7 @@ func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
 			log.Emit(logger.ERROR, "media %v is not eligible for criteria %v: %v\n", media, condition, err)
 		}
 
+		fmt.Fprintf(debugStr, "%v", isMatch)
 		if condition.CombineType == match.OR {
 			if currentEval {
 				// End of this block, if the current block
@@ -54,14 +69,19 @@ func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
 				// test the following conditions
 				break
 			}
-		} else if i < len(workflow.Criteria) {
+
+			fmt.Fprintf(debugStr, " || ")
+		} else {
 			// This condition is part of an unfinished block of conditions ANDed together.
 			// If this condition FAILED to match, then we can skip until the next OR condition (if any)
 			currentEval = isMatch
 			skipToNextBlock = !isMatch
+
+			fmt.Fprintf(debugStr, " && ")
 		}
 	}
 
+	fmt.Fprintf(debugStr, " -- DONE: %v;", currentEval)
 	return currentEval
 }
 

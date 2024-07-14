@@ -436,13 +436,17 @@ func TestWorkflow_Ingestion(t *testing.T) {
 			assert.Len(t, transcodes, expectedLen)
 
 			// Ensure each target has a transcode for our media
-			targetsExpected := make([]uuid.UUID, 0, len(transcodes))
-			for _, transcode := range transcodes {
-				targetsExpected = append(targetsExpected, transcode.TargetId)
-				assert.Equalf(t, mediaID, transcode.MediaId, "expected all transcodes to belong to the same media ID")
-			}
+			if test.shouldInitiateTranscode {
+				targetsExpected := make([]uuid.UUID, 0, len(transcodes))
+				for _, transcode := range transcodes {
+					targetsExpected = append(targetsExpected, transcode.TargetId)
+					assert.Equalf(t, mediaID, transcode.MediaId, "expected all transcodes to belong to the same media ID")
+				}
 
-			assert.ElementsMatchf(t, targetsExpected, targetIDs, "expected a transcode to be started for each of the specified target IDs")
+				assert.ElementsMatchf(t, targetsExpected, targetIDs, "expected a transcode to be started for each of the specified target IDs")
+			} else {
+				assert.Empty(t, transcodes, "expected no transcodes to be initiated by this workflow")
+			}
 
 			// Poll the media endpoint for this transcode and ensure we see the correct watch target output
 			resp, err := client.GetMovieWithResponse(ctx, mediaID)

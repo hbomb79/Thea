@@ -60,7 +60,9 @@ func (service *activityService) Run(ctx context.Context) error {
 	service.eventBus.RegisterHandlerChannel(messageChan,
 		event.IngestUpdateEvent, event.IngestCompleteEvent, event.TranscodeUpdateEvent,
 		event.TranscodeTaskProgressEvent, event.TranscodeCompleteEvent, event.WorkflowUpdateEvent,
-		event.DownloadUpdateEvent, event.DownloadCompleteEvent, event.DownloadProgressEvent)
+		event.DownloadUpdateEvent, event.DownloadCompleteEvent, event.DownloadProgressEvent,
+		event.NewMediaEvent, event.DeleteMediaEvent,
+	)
 
 	log.Emit(logger.NEW, "Activity service started\n")
 	for {

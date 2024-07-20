@@ -31,6 +31,25 @@ func MatchIngestUpdate(path string, state ingest.IngestItemState) chanassert.Mat
 	})
 }
 
+func MatchMovieEvent(path string) chanassert.Matcher[websocket.SocketMessage] {
+	return chanassert.MatchPredicate(func(message websocket.SocketMessage) bool {
+		if message.Title != "MEDIA_UPDATE" {
+			return false
+		}
+
+		movie, ok := message.Body["media"].(map[string]any)["Movie"].(map[string]any)
+		if !ok {
+			return false
+		}
+
+		return movie["SourcePath"] == path
+	})
+}
+
+func MatchMessageTitle(title string) chanassert.Matcher[websocket.SocketMessage] {
+	return chanassert.MatchStructPartial(websocket.SocketMessage{Title: title})
+}
+
 // type wrapMatcher[T any] struct {
 // 	matcher chanassert.Matcher[T]
 // 	latch   bool

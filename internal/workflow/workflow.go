@@ -63,7 +63,7 @@ func (workflow *Workflow) IsMediaEligible(media *media.Container) bool {
 
 		fmt.Fprintf(debugStr, "%v", isMatch)
 		if condition.CombineType == match.OR {
-			if currentEval {
+			if currentEval && isMatch {
 				// End of this block, if the current block
 				// is satisfied, then we're done, no need to
 				// test the following conditions

@@ -1,14 +1,17 @@
 package integration_test
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/http/websocket"
 	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/hbomb79/Thea/tests/helpers"
+	"github.com/hbomb79/go-chanassert"
 	"github.com/labstack/gommon/random"
 	"github.com/stretchr/testify/assert"
 )
@@ -227,6 +230,8 @@ func TestWorkflow_Update(t *testing.T) {
 			Enabled: &helpers.Boolean{Bool: false},
 			Criteria: &[]gen.WorkflowCriteria{
 				{CombineType: gen.AND, Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "foobar"},
+				{CombineType: gen.AND, Key: gen.RESOLUTION, Type: gen.MATCHES, Value: "1920x1080"},
+				{CombineType: gen.AND, Key: gen.SOURCEEXTENSION, Type: gen.MATCHES, Value: ".mp4"},
 			},
 			TargetIDs:     &[]uuid.UUID{initialTargetIDs[0]},
 			ShouldSucceed: true,
@@ -239,6 +244,15 @@ func TestWorkflow_Update(t *testing.T) {
 		{
 			Summary:       "Valid update enabled",
 			Enabled:       &helpers.Boolean{Bool: false},
+			ShouldSucceed: true,
+		},
+		{
+			Summary: "Valid update criteria (order)",
+			Criteria: &[]gen.WorkflowCriteria{
+				{CombineType: gen.AND, Key: gen.SOURCEEXTENSION, Type: gen.MATCHES, Value: ".mp4"},
+				{CombineType: gen.AND, Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "foobar"},
+				{CombineType: gen.AND, Key: gen.RESOLUTION, Type: gen.MATCHES, Value: "1920x1080"},
+			},
 			ShouldSucceed: true,
 		},
 		{
@@ -287,7 +301,7 @@ func TestWorkflow_Update(t *testing.T) {
 					assert.ElementsMatchf(t, *test.TargetIDs, wkflw.TargetIds, "update of workflow failed: expected 'TargetIds' to be '%v' but found '%v'", test.TargetIDs, wkflw.TargetIds)
 				}
 				if test.Criteria != nil {
-					assert.ElementsMatchf(t, *test.Criteria, wkflw.Criteria, "update of workflow failed: expected 'Criteria' to be '%v' but found '%v'", test.Criteria, wkflw.Criteria)
+					assert.Equalf(t, *test.Criteria, wkflw.Criteria, "update of workflow failed: expected 'Criteria' to be '%v' but found '%v'", test.Criteria, wkflw.Criteria)
 				}
 			} else {
 				resp, err := client.UpdateWorkflowWithResponse(
@@ -307,13 +321,11 @@ func TestWorkflow_Update(t *testing.T) {
 // criteria set on them correctly automatically initiate transcoding tasks
 // for newly ingested media which matches that criteria.
 //
-//nolint:funlen
+//nolint:funlen,gocognit
 func TestWorkflow_Ingestion(t *testing.T) {
-	// TODO: add activity stream assertions
-
 	// All tests below share a ingestion directory, however
 	// each test uses it's own Thea instance.
-	ingestDir, _ := helpers.TempDirWithFiles(t, map[string]string{
+	ingestDir, paths := helpers.TempDirWithFiles(t, map[string]string{
 		"./testdata/validmedia/short-sample.mkv": "Shaun.of.the.Dead.2004.mkv",
 	})
 
@@ -344,7 +356,7 @@ func TestWorkflow_Ingestion(t *testing.T) {
 				{Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "Shaun of the Dead", CombineType: gen.AND}, // true AND
 				{Key: gen.RESOLUTION, Type: gen.MATCHES, Value: "1920x1080", CombineType: gen.OR},          // false OR
 				{Key: gen.MEDIATITLE, Type: gen.MATCHES, Value: "Shaun of the Dead", CombineType: gen.AND}, // true AND
-				{Key: gen.RESOLUTION, Type: gen.MATCHES, Value: "1280x760", CombineType: gen.AND},          // true
+				{Key: gen.RESOLUTION, Type: gen.MATCHES, Value: "1280x720", CombineType: gen.AND},          // true
 			},
 			enabled:                 true,
 			shouldInitiateTranscode: true,
@@ -368,29 +380,51 @@ func TestWorkflow_Ingestion(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 		t.Run(test.summary, func(t *testing.T) {
+			t.Parallel()
+
 			req := helpers.NewTheaServiceRequest().
 				WithIngestDirectory(ingestDir).
 				RequiresTMDB().
 				WithEnvironmentVariable("INGEST_MODTIME_THRESHOLD_SECONDS", "5").
-				WithEnvironmentVariable("FORMAT_DEFAULT_OUTPUT_DIR", t.TempDir()+"/out")
+				WithEnvironmentVariable("FORMAT_DEFAULT_OUTPUT_DIR", t.TempDir()).
+				WithDatabaseName(fmt.Sprintf("workflow_ingestion_%d", i))
 
 			srv := helpers.RequireThea(t, req)
 			_, client := srv.NewClientWithRandomUser(t)
-			t.Parallel()
+
+			// Activity stream should see:
+			// - Welcome message (handled already)
+			// - Ingestion complete message
+			// - New media message
+			// - Transcode update (IF the test expects transcodes to be created)
+			combiners := []chanassert.Combiner[websocket.SocketMessage]{
+				// We expect duplicates here; one for the ingestion creation, and another for it's completion.
+				// However, due to debouncing of the events, by the time the first message is released, the ingestion
+				// is likely to have completed already
+				chanassert.AtLeastNOf(2, helpers.MatchMessageTitle("INGEST_UPDATE")),
+				// We only expect a single event for the media creation
+				chanassert.OneOf(helpers.MatchMovieEvent(paths[0])),
+			}
+
+			// Conditionally include transcode related combiners
+			// for the activity expecter
+			if test.shouldInitiateTranscode {
+				combiners = append(
+					combiners,
+					chanassert.AtLeastNOfEach(2, helpers.MatchMessageTitle("TRANSCODE_TASK_UPDATE")))
+			}
+
+			exp := srv.ActivityExpecter(t).
+				Ignore(helpers.MatchMessageTitle("TRANSCODE_TASK_PROGRESS_UPDATE")).
+				Expect(combiners...)
+			exp.Listen()
 
 			// Create 3 targets, assign first 2 to the workflow
 			const numTargetsToCreate = 3
 			targets := client.CreateRandomTargets(t, numTargetsToCreate)
 			targetIDs := targets.IDs()[:numTargetsToCreate-1]
-
-			// If this test expects the workflow we create to kickoff
-			// any transcodes, then set that expectation here
-			var expectedLen int
-			if test.shouldInitiateTranscode {
-				expectedLen = len(targetIDs)
-			}
 
 			_ = client.CreateWorkflow(t, test.criteria, test.enabled, random.String(16, random.Alphanumeric), &targetIDs)
 
@@ -401,42 +435,28 @@ func TestWorkflow_Ingestion(t *testing.T) {
 				assert.Equal(t, http.StatusOK, resp.StatusCode())
 			}
 
-			// Wait for the ingestion to appear (as pending or import hold)
-			assert.EventuallyWithT(t, func(c *assert.CollectT) {
-				ingestsResponse, err := client.ListIngestsWithResponse(ctx)
-				assert.NoError(c, err)
-				assert.NotNil(c, ingestsResponse.JSON200, "expected JSON response to be non-nil")
-				if !assert.Len(c, *ingestsResponse.JSON200, 1, "expected ingests to have length 1") {
-					return // early return to prevent OOB error below
+			var mediaID uuid.UUID
+			if !assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				// Get the media ID
+				list := client.ListMedia(t)
+				if !assert.Len(c, list, 1) {
+					return
 				}
 
-				ingestItem := (*ingestsResponse.JSON200)[0]
-				assert.Equalf(c, gen.IngestStateIMPORTHOLD, ingestItem.State, "ingest expected to appear on hold")
-			}, 5*time.Second, 500*time.Millisecond, "Ingestion state never became correct")
-
-			// Wait for the ingestion to be automatically removed,
-			// indicating success.
-			assert.EventuallyWithT(t, func(c *assert.CollectT) {
-				ingestsResponse, err := client.ListIngestsWithResponse(ctx)
-				assert.NoError(c, err)
-				assert.NotNil(c, ingestsResponse.JSON200, "expected JSON response to be non-nil")
-				assert.Len(c, *ingestsResponse.JSON200, 0, "expected successful ingest to be removed")
-			}, 5*time.Second, 1*time.Second, "Ingestion state never became correct")
-
-			// Get the media ID
-			list := client.ListMedia(t)
-			assert.Len(t, list, 1)
-			mediaID := list[0].Id
+				mediaID = list[0].Id
+			}, 10*time.Second, 500*time.Millisecond, "Media list never became populated with expected item") {
+				return
+			}
 
 			// Give Thea some time to kickoff the transcodes
 			time.Sleep(1 * time.Second)
 
 			// Check transcode service for matching transcodes
 			transcodes := client.ListActiveTranscodeTasks(t)
-			assert.Len(t, transcodes, expectedLen)
 
 			// Ensure each target has a transcode for our media
 			if test.shouldInitiateTranscode {
+				assert.Len(t, transcodes, len(targetIDs))
 				targetsExpected := make([]uuid.UUID, 0, len(transcodes))
 				for _, transcode := range transcodes {
 					targetsExpected = append(targetsExpected, transcode.TargetId)
@@ -493,6 +513,8 @@ func TestWorkflow_Ingestion(t *testing.T) {
 				assert.NotNil(t, resp)
 				assert.Equal(t, resp.StatusCode(), http.StatusNoContent)
 			}
+
+			exp.AssertSatisfied(t, time.Second*10)
 		})
 	}
 }

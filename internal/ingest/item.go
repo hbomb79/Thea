@@ -56,7 +56,7 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper Scraper,
 		} else if meta == nil {
 			return Trouble{error: errors.New("metadata scrape returned no error, but nil payload received"), tType: MetadataFailure}
 		} else {
-			log.Emit(logger.DEBUG, "Scraped metadata for item %s:\n%#v\n", item, meta)
+			log.Emit(logger.WARNING, "Scraped metadata for item %s:\n%s\n", item, meta)
 			item.ScrapedMetadata = meta
 		}
 	}

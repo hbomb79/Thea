@@ -84,13 +84,13 @@ func scrapedMetadataToDto(metadata *media.FileMediaMetadata) *gen.FileMetadata {
 	return &gen.FileMetadata{
 		EpisodeNumber: metadata.EpisodeNumber,
 		Episodic:      metadata.Episodic,
-		FrameHeight:   metadata.FrameH,
-		FrameWidth:    metadata.FrameW,
+		FrameHeight:   &metadata.FrameH,
+		FrameWidth:    &metadata.FrameW,
 		Path:          metadata.Path,
 		Runtime:       metadata.Runtime,
 		SeasonNumber:  metadata.SeasonNumber,
 		Title:         metadata.Title,
-		Year:          metadata.Year,
+		Year:          &metadata.Year,
 	}
 }
 

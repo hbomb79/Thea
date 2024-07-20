@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	activityDebounceTime time.Duration = time.Second * 2
-	activityMaxTime      time.Duration = time.Second * 6
+	activityDebounceTime time.Duration = time.Second * 5
+	activityMaxTime      time.Duration = time.Second * 20
 )
 
 // TestIngestion_MetadataFailure ensures that files
@@ -21,10 +21,14 @@ const (
 // these ingestions should see the same error return.
 func TestIngestion_MetadataFailure(t *testing.T) {
 	tempDir, paths := helpers.TempDirWithEmptyFiles(t, []string{"thisisnotavalidfile.mp4"})
+
+	// Caution: ensure this parallel call does not occur after the Thea service request. This is
+	// because it will start to poll the ingest directory immediately, and if the test is 'paused'
+	// before the expecter is setup, then it will miss the messages
+	t.Parallel()
+
 	req := helpers.NewTheaServiceRequest().WithIngestDirectory(tempDir)
 	srv := helpers.RequireThea(t, req)
-
-	t.Parallel()
 
 	exp := srv.ActivityExpecter(t).Expect(
 		chanassert.ExactlyNOf(2, helpers.MatchIngestUpdate(paths[0], ingest.Troubled)),
@@ -62,10 +66,13 @@ func TestIngestion_TMDB_NoMatches(t *testing.T) {
 		"./testdata/validmedia/short-sample.mkv": "notarealmoviesurely.S01E01.1920x1080.mkv",
 	})
 
+	// Caution: ensure this parallel call does not occur after the Thea service request. This is
+	// because it will start to poll the ingest directory immediately, and if the test is 'paused'
+	// before the expecter is setup, then it will miss the messages
+	t.Parallel()
+
 	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir).RequiresTMDB()
 	srv := helpers.RequireThea(t, req)
-
-	t.Parallel()
 
 	exp := srv.ActivityExpecter(t).Expect(
 		chanassert.OneOf(helpers.MatchIngestUpdate(files[0], ingest.Troubled)),
@@ -94,10 +101,13 @@ func TestIngestion_TMDB_MultipleMatches(t *testing.T) {
 		"./testdata/validmedia/short-sample.mkv": "Sample.S01E01.1280x760.mkv",
 	})
 
+	// Caution: ensure this parallel call does not occur after the Thea service request. This is
+	// because it will start to poll the ingest directory immediately, and if the test is 'paused'
+	// before the expecter is setup, then it will miss the messages
+	t.Parallel()
+
 	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir).RequiresTMDB()
 	srv := helpers.RequireThea(t, req)
-
-	t.Parallel()
 
 	exp := srv.ActivityExpecter(t).Expect(
 		chanassert.OneOf(helpers.MatchIngestUpdate(files[0], ingest.Troubled)),

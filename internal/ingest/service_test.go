@@ -99,9 +99,9 @@ func Test_EpisodeImports_CorrectlySaved(t *testing.T) {
 		SeasonNumber:  1,
 		EpisodeNumber: 1,
 		Runtime:       "69420",
-		Year:          &year,
-		FrameW:        &frameSize,
-		FrameH:        &frameSize,
+		Year:          year,
+		FrameW:        frameSize,
+		FrameH:        frameSize,
 		Path:          files[0],
 	}
 
@@ -194,9 +194,9 @@ func Test_MovieImports_CorrectlySaved(t *testing.T) {
 		Title:    "Test Movie",
 		Episodic: false,
 		Runtime:  "69420",
-		Year:     &year,
-		FrameW:   &frameSize,
-		FrameH:   &frameSize,
+		Year:     year,
+		FrameW:   frameSize,
+		FrameH:   frameSize,
 		Path:     files[0],
 	}
 

@@ -17,6 +17,7 @@ import (
 
 type (
 	Store interface {
+		GetMedia(mediaID uuid.UUID) *media.Container
 		GetMovie(movieID uuid.UUID) (*media.Movie, error)
 		GetEpisode(episodeID uuid.UUID) (*media.Episode, error)
 		GetInflatedSeries(seriesID uuid.UUID) (*media.InflatedSeries, error)

@@ -11,6 +11,7 @@ import (
 
 const (
 	TitleIngestUpdate            = "INGEST_UPDATE"
+	TitleMediaUpdate             = "MEDIA_UPDATE"
 	TitleTranscodeUpdate         = "TRANSCODE_TASK_UPDATE"
 	TitleTranscodeProgressUpdate = "TRANSCODE_TASK_PROGRESS_UPDATE"
 )
@@ -75,7 +76,13 @@ func (hub *broadcaster) BroadcastWorkflowUpdate(id uuid.UUID) error {
 }
 
 func (hub *broadcaster) BroadcastMediaUpdate(id uuid.UUID) error {
-	return errors.New("not yet implemented")
+	media := hub.store.GetMedia(id)
+	hub.broadcast(TitleMediaUpdate, map[string]interface{}{
+		"media_id": id,
+		"media":    media,
+	})
+
+	return nil
 }
 
 // nullsafeNewDto returns nil if the given model is nil, else it will call the

@@ -204,7 +204,7 @@ func (searcher *tmdbSearcher) GetSeason(seriesID string, seasonNumber int) (*Sea
 // to whittle them down to a singular result. To do so, the year and popularity
 // of the results is taken in to consideration.
 func (searcher *tmdbSearcher) handleSearchResults(results []SearchResultItem, metadata *media.FileMediaMetadata) (*SearchResultItem, error) {
-	if metadata.Year != nil {
+	if metadata.Year != 0 {
 		if metadata.Episodic {
 			filterResultsInPlace(&results, metadata, func(resultDate time.Time, metadataDate time.Time) bool {
 				return resultDate.Compare(metadataDate) >= 0
@@ -263,7 +263,7 @@ func filterResultsInPlace(results *[]SearchResultItem, metadata *media.FileMedia
 		return time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
 
-	yearFromMetadata := timeFromYear(*metadata.Year)
+	yearFromMetadata := timeFromYear(metadata.Year)
 	insertionIndex := 0
 	for _, v := range *results {
 		yearFromResult := timeFromYear(v.effectiveDate().Year())

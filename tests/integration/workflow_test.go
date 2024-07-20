@@ -323,12 +323,6 @@ func TestWorkflow_Update(t *testing.T) {
 //
 //nolint:funlen,gocognit
 func TestWorkflow_Ingestion(t *testing.T) {
-	// All tests below share a ingestion directory, however
-	// each test uses it's own Thea instance.
-	ingestDir, paths := helpers.TempDirWithFiles(t, map[string]string{
-		"./testdata/validmedia/short-sample.mkv": "Shaun.of.the.Dead.2004.mkv",
-	})
-
 	tests := []struct {
 		summary                 string
 		criteria                *[]gen.WorkflowCriteria
@@ -384,10 +378,16 @@ func TestWorkflow_Ingestion(t *testing.T) {
 		t.Run(test.summary, func(t *testing.T) {
 			t.Parallel()
 
+			// All tests below share a ingestion directory, however
+			// each test uses it's own Thea instance.
+			ingestDir, paths := helpers.TempDirWithFiles(t, map[string]string{
+				"./testdata/validmedia/short-sample.mkv": "Shaun.of.the.Dead.2004.mkv",
+			})
+
 			req := helpers.NewTheaServiceRequest().
 				WithIngestDirectory(ingestDir).
 				RequiresTMDB().
-				WithEnvironmentVariable("INGEST_MODTIME_THRESHOLD_SECONDS", "5").
+				WithEnvironmentVariable("INGEST_MODTIME_THRESHOLD_SECONDS", "3").
 				WithEnvironmentVariable("FORMAT_DEFAULT_OUTPUT_DIR", t.TempDir()).
 				WithDatabaseName(fmt.Sprintf("workflow_ingestion_%d", i))
 
@@ -448,24 +448,28 @@ func TestWorkflow_Ingestion(t *testing.T) {
 				return
 			}
 
-			// Give Thea some time to kickoff the transcodes
-			time.Sleep(1 * time.Second)
-
-			// Check transcode service for matching transcodes
-			transcodes := client.ListActiveTranscodeTasks(t)
-
-			// Ensure each target has a transcode for our media
 			if test.shouldInitiateTranscode {
-				assert.Len(t, transcodes, len(targetIDs))
-				targetsExpected := make([]uuid.UUID, 0, len(transcodes))
-				for _, transcode := range transcodes {
-					targetsExpected = append(targetsExpected, transcode.TargetId)
-					assert.Equalf(t, mediaID, transcode.MediaId, "expected all transcodes to belong to the same media ID")
-				}
+				if !assert.EventuallyWithT(t, func(c *assert.CollectT) {
+					// Check transcode service for matching transcodes
+					transcodes := client.ListActiveTranscodeTasks(t)
 
-				assert.ElementsMatchf(t, targetsExpected, targetIDs, "expected a transcode to be started for each of the specified target IDs")
+					// Ensure each target has a transcode for our media
+					assert.Len(c, transcodes, len(targetIDs))
+					targetsExpected := make([]uuid.UUID, 0, len(transcodes))
+					for _, transcode := range transcodes {
+						targetsExpected = append(targetsExpected, transcode.TargetId)
+						assert.Equalf(c, mediaID, transcode.MediaId, "expected all transcodes to belong to the same media ID")
+					}
+
+					assert.ElementsMatchf(c, targetsExpected, targetIDs, "expected a transcode to be started for each of the specified target IDs")
+				}, 5*time.Second, 1*time.Second, "Transcodes never started") {
+					return
+				}
 			} else {
-				assert.Empty(t, transcodes, "expected no transcodes to be initiated by this workflow")
+				// Ensure no transcodes start
+				assert.Never(t, func() bool {
+					return len(client.ListActiveTranscodeTasks(t)) > 0
+				}, time.Second*5, time.Second*1, "expected no transcodes to be initiated by this workflow")
 			}
 
 			// Poll the media endpoint for this transcode and ensure we see the correct watch target output
@@ -506,7 +510,7 @@ func TestWorkflow_Ingestion(t *testing.T) {
 			}
 
 			// Cancel the transcodes
-			for _, transcode := range transcodes {
+			for _, transcode := range client.ListActiveTranscodeTasks(t) {
 				t.Logf("Deleting (cancelling) transcode %v", transcode)
 				resp, err := client.DeleteTranscodeTaskWithResponse(ctx, transcode.Id)
 				assert.NoError(t, err)

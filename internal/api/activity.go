@@ -2,11 +2,14 @@ package api
 
 import (
 	"errors"
+	"slices"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/internal/api/controllers/ingests"
 	"github.com/hbomb79/Thea/internal/api/controllers/transcodes"
 	"github.com/hbomb79/Thea/internal/http/websocket"
+	"github.com/hbomb79/Thea/internal/user/permissions"
 )
 
 const (
@@ -21,6 +24,9 @@ type broadcaster struct {
 	ingestService    ingests.IngestService
 	transcodeService TranscodeService
 	store            Store
+
+	clientScopes map[authScope][]uuid.UUID
+	clientMutex  *sync.Mutex
 }
 
 func newBroadcaster(
@@ -29,12 +35,72 @@ func newBroadcaster(
 	transcodeService TranscodeService,
 	store Store,
 ) *broadcaster {
-	return &broadcaster{socketHub, ingestService, transcodeService, store}
+	return &broadcaster{socketHub, ingestService, transcodeService, store, make(map[authScope][]uuid.UUID, 0), &sync.Mutex{}}
+}
+
+type authScope int
+
+const (
+	mediaScope authScope = iota
+	transcodeScope
+	ingestScope
+)
+
+var scopePerms = map[authScope][]string{
+	mediaScope:     {permissions.AccessMediaPermission},
+	transcodeScope: {permissions.AccessTargetPermission},
+	ingestScope:    {permissions.AccessIngestsPermission},
+}
+
+// sliceContainsAll returns true if the slice 'a' contains
+// ALL the elements inside of 'b'.
+func sliceContainsAll[T comparable](a, b []T) bool {
+	for _, v := range b {
+		if !slices.Contains(a, v) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (hub *broadcaster) RegisterClient(clientID uuid.UUID, permissions []string) {
+	hub.clientMutex.Lock()
+	defer hub.clientMutex.Unlock()
+
+	for scope, requiredPerms := range scopePerms {
+		if sliceContainsAll(permissions, requiredPerms) {
+			hub.clientScopes[scope] = append(hub.clientScopes[scope], clientID)
+		}
+	}
+}
+
+func (hub *broadcaster) DeregisterClient(clientID uuid.UUID) {
+	hub.clientMutex.Lock()
+	defer hub.clientMutex.Unlock()
+
+	for k, clients := range hub.clientScopes {
+		hub.clientScopes[k] = slices.DeleteFunc(clients, func(id uuid.UUID) bool { return id == clientID })
+	}
+}
+
+func (hub *broadcaster) protectedSend(scope authScope, title string, body map[string]interface{}) {
+	clients := hub.clientScopes[scope]
+	for _, client := range clients {
+		// TODO: this could cause quite the number of messages to be sent. Probably fine for
+		// now, but maybe a queue + worker pool might make sense?
+		hub.socketHub.Send(&websocket.SocketMessage{
+			Target: &client,
+			Title:  title,
+			Body:   body,
+			Type:   websocket.Update,
+		})
+	}
 }
 
 func (hub *broadcaster) BroadcastTranscodeUpdate(id uuid.UUID) error {
 	item := hub.transcodeService.Task(id)
-	hub.broadcast(TitleTranscodeUpdate, map[string]interface{}{
+	hub.protectedSend(transcodeScope, TitleTranscodeUpdate, map[string]interface{}{
 		"id":        id,
 		"transcode": nullsafeNewDto(item, transcodes.NewDtoFromTask),
 	})
@@ -47,7 +113,7 @@ func (hub *broadcaster) BroadcastTaskProgressUpdate(id uuid.UUID) error {
 		return nil
 	}
 
-	hub.broadcast(TitleTranscodeProgressUpdate, map[string]interface{}{
+	hub.protectedSend(transcodeScope, TitleTranscodeProgressUpdate, map[string]interface{}{
 		"transcode_id": id,
 		"progress":     item.LastProgress(),
 	})
@@ -56,19 +122,11 @@ func (hub *broadcaster) BroadcastTaskProgressUpdate(id uuid.UUID) error {
 
 func (hub *broadcaster) BroadcastIngestUpdate(id uuid.UUID) error {
 	item := hub.ingestService.GetIngest(id)
-	hub.broadcast(TitleIngestUpdate, map[string]interface{}{
+	hub.protectedSend(ingestScope, TitleIngestUpdate, map[string]interface{}{
 		"ingest_id": id,
 		"ingest":    nullsafeNewDto(item, ingests.NewDto),
 	})
 	return nil
-}
-
-func (hub *broadcaster) broadcast(title string, update map[string]interface{}) {
-	hub.socketHub.Send(&websocket.SocketMessage{
-		Title: title,
-		Body:  update,
-		Type:  websocket.Update,
-	})
 }
 
 func (hub *broadcaster) BroadcastWorkflowUpdate(id uuid.UUID) error {
@@ -77,7 +135,7 @@ func (hub *broadcaster) BroadcastWorkflowUpdate(id uuid.UUID) error {
 
 func (hub *broadcaster) BroadcastMediaUpdate(id uuid.UUID) error {
 	media := hub.store.GetMedia(id)
-	hub.broadcast(TitleMediaUpdate, map[string]interface{}{
+	hub.protectedSend(mediaScope, TitleMediaUpdate, map[string]interface{}{
 		"media_id": id,
 		"media":    media,
 	})

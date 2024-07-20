@@ -116,7 +116,7 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 		// Login as the same user again to get a new set of tokens
 		// Sleep as JWT expiry is only accurate to the second, and so two logins in
 		// the same second generate the same payload (and therefore an identical token)
-		cl := srv.NewClientWithUser(t, testUser)
+		_, cl := srv.NewClientWithUser(t, testUser)
 		sameUserClients = append(sameUserClients, cl)
 	}
 
@@ -140,7 +140,7 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 	}
 
 	// Check that logging in again does not revert the previous revoking of the other sessions
-	loggedInClient := srv.NewClientWithUser(t, testUser)
+	_, loggedInClient := srv.NewClientWithUser(t, testUser)
 	assertClientState(t, unrelatedClient, &otherTestUser)
 	assertClientState(t, loggedInClient, &testUser)
 	for _, cl := range sameUserClients {

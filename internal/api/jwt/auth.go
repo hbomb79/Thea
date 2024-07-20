@@ -366,6 +366,49 @@ func (auth *jwtAuthProvider) validateTokenFromAuthInput(ctx context.Context, aut
 	return nil
 }
 
+// validateTokenFromRequest is a simpler version of validateTokenFromAuthInput,
+// which acts only on an HTTP request. This is useful in times where the request URI
+// is not documented by our OpenAPI spec, and as such poses a huge annoyance.
+//
+// This function behaves very similarly to the aforementioned counterpart, however
+// permission 'scope' validation is NOT performed, so endpoints utilizing this form
+// of manual authentication should consider checking this manually.
+func (auth *jwtAuthProvider) ValidateTokenFromRequest(ec echo.Context, request *http.Request) (*AuthenticatedUser, error) {
+	tokenCookie, err := request.Cookie(AuthTokenCookieName)
+	if err != nil {
+		return nil, ErrAuthTokenMissing
+	}
+
+	token, err := auth.validateJWT(tokenCookie.Value, auth.authTokenSecret)
+	if err != nil {
+		return nil, fmt.Errorf("validation of auth token failed: %w", err)
+	}
+
+	claims, ok := token.Claims.(*jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("failed to cast JWT claims to MapClaims")
+	}
+
+	// Extract user information (ID and permissions) from JWT
+	userID, err := auth.getUserIDFromClaims(*claims)
+	if err != nil {
+		return nil, err
+	}
+
+	// Grab user permissions so we can store them in the context
+	userPermissions, err := auth.getPermissionsFromClaims(*claims)
+	if err != nil {
+		return nil, err
+	}
+
+	// Insert user info inside of request context to allow for
+	// endpoint handlers to extract user information
+	authUser := &AuthenticatedUser{UserID: *userID, Permissions: userPermissions}
+	ec.Set("user", authUser)
+
+	return authUser, nil
+}
+
 func (auth *jwtAuthProvider) getPermissionsFromClaims(claims jwt.MapClaims) ([]string, error) {
 	if permissions, ok := claims["permissions"]; ok {
 		perms, ok := permissions.([]interface{})

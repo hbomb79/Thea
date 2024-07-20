@@ -392,7 +392,7 @@ func TestWorkflow_Ingestion(t *testing.T) {
 				WithDatabaseName(fmt.Sprintf("workflow_ingestion_%d", i))
 
 			srv := helpers.RequireThea(t, req)
-			_, client := srv.NewClientWithRandomUser(t)
+			user, client := srv.NewClientWithRandomUser(t)
 
 			// Activity stream should see:
 			// - Welcome message (handled already)
@@ -416,7 +416,7 @@ func TestWorkflow_Ingestion(t *testing.T) {
 					chanassert.AtLeastNOfEach(2, helpers.MatchMessageTitle("TRANSCODE_TASK_UPDATE")))
 			}
 
-			exp := srv.ActivityExpecter(t).
+			exp := srv.ActivityExpecter(t, user).
 				Ignore(helpers.MatchMessageTitle("TRANSCODE_TASK_PROGRESS_UPDATE")).
 				Expect(combiners...)
 			exp.Listen()

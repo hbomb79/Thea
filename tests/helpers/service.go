@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -74,14 +75,35 @@ func (service *TestService) GetActivityURL() string {
 	return fmt.Sprintf("%s%s", fmt.Sprintf(ServerBasePathTemplate, "ws", service.Port), ActivityPath)
 }
 
-func (service *TestService) ConnectToActivitySocket(t *testing.T) *websocket.Conn {
+func (service *TestService) ConnectToActivitySocket(t *testing.T, user TestUser) *websocket.Conn {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatalf("failed to connect to activity socket: failed to create cookie jar: %s", err)
 	}
 
+	// Parse URL
+	activityURLString := service.GetActivityURL()
+	activityURL, err := url.Parse(activityURLString)
+	if err != nil {
+		t.Fatalf("failed to connect to activity socket: could not parse activity URL (%s): %v", err, activityURLString)
+	}
+
+	// Replace ws(s) with http(s), otherwise the cookiejar will not
+	// allow us to set cookies
+	switch activityURL.Scheme {
+	case "ws":
+		activityURL.Scheme = "http"
+	case "wss":
+		activityURL.Scheme = "https"
+	}
+
+	// Set cookies for auth
+	jar.SetCookies(activityURL, user.Cookies)
+	assert.NotEmpty(t, jar.Cookies(activityURL), "failed to connect to activity socket: cookie jar empty")
+
+	// Connect..
 	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second, Jar: jar}
-	ws, _, err := dialer.Dial(service.GetActivityURL(), make(map[string][]string))
+	ws, _, err := dialer.Dial(activityURLString, make(map[string][]string))
 	if err != nil {
 		t.Fatalf("failed to connect to activity socket: %s", err)
 	}
@@ -93,8 +115,8 @@ func (service *TestService) ConnectToActivitySocket(t *testing.T) *websocket.Con
 //
 // Tests can add additional layers to the expecter before calling .Listen on it
 // to start the expecter.
-func (service *TestService) ActivityExpecter(t *testing.T) chanassert.Expecter[theaws.SocketMessage] {
-	activityChan := service.ActivityChannel(t)
+func (service *TestService) ActivityExpecter(t *testing.T, user TestUser) chanassert.Expecter[theaws.SocketMessage] {
+	activityChan := service.ActivityChannel(t, user)
 
 	return chanassert.
 		NewChannelExpecter(activityChan).
@@ -105,8 +127,8 @@ func (service *TestService) ActivityExpecter(t *testing.T) chanassert.Expecter[t
 		)
 }
 
-func (service *TestService) ActivityChannel(t *testing.T) chan theaws.SocketMessage {
-	ws := service.ConnectToActivitySocket(t)
+func (service *TestService) ActivityChannel(t *testing.T, user TestUser) chan theaws.SocketMessage {
+	ws := service.ConnectToActivitySocket(t, user)
 	assert.NotNil(t, ws, "expected websocket connection to be non-nil")
 
 	output := make(chan theaws.SocketMessage, 5)
@@ -152,17 +174,17 @@ func (service *TestService) NewClient(t *testing.T) *APIClient {
 	return &APIClient{client}
 }
 
-func (service *TestService) NewClientWithDefaultAdminUser(t *testing.T) *APIClient {
+func (service *TestService) NewClientWithDefaultAdminUser(t *testing.T) (TestUser, *APIClient) {
 	adminUser, client := service.NewClientWithCredentials(t, DefaultAdminUsername, DefaultAdminPassword)
 	assert.Subset(t, adminUser.User.Permissions, permissions.All(), "Default admin user must contain all permissions")
 
-	return &APIClient{client}
+	return adminUser, &APIClient{client}
 }
 
 // NewClientWithUser creates a new test client with the provided user authenticated.
-func (service *TestService) NewClientWithUser(t *testing.T, user TestUser) *APIClient {
-	_, client := service.NewClientWithCredentials(t, user.User.Username, user.Password)
-	return &APIClient{client}
+func (service *TestService) NewClientWithUser(t *testing.T, user TestUser) (TestUser, *APIClient) {
+	user, client := service.NewClientWithCredentials(t, user.User.Username, user.Password)
+	return user, &APIClient{client}
 }
 
 func (service *TestService) NewClientWithCredentials(t *testing.T, username string, password string) (TestUser, *APIClient) {
@@ -185,7 +207,8 @@ func (service *TestService) NewClientWithCredentials(t *testing.T, username stri
 // TODO: add cleanup task to testing context to delete user (t.Cleanup()).
 func (service *TestService) NewClientWithRandomUserPermissions(t *testing.T, permissions []string) (TestUser, *APIClient) {
 	usernameAndPassword := fmt.Sprintf("TestUser%s", random.String(16))
-	createResponse, err := service.NewClientWithDefaultAdminUser(t).CreateUserWithResponse(ctx, gen.CreateUserRequest{
+	_, client := service.NewClientWithDefaultAdminUser(t)
+	createResponse, err := client.CreateUserWithResponse(ctx, gen.CreateUserRequest{
 		Permissions: permissions,
 		Password:    usernameAndPassword,
 		Username:    usernameAndPassword,

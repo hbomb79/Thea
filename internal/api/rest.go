@@ -125,13 +125,39 @@ func NewRestGateway(
 
 	// -- Setup gateway --
 	socket := websocket.New()
+	broadcaster := newBroadcaster(socket, ingestService, transcodeService, store)
+
+	// The activity service endpoint is not documented in the OpenAPI spec, so it
+	// has a unique setup because:
+	// - The code gen does not know about it, and so we must define the endpoint manually
+	// - The JWT authentication cannot be done leveraging the OpenAPI validator, as this request
+	//	 breaches the spec. Therefore, we validate it manually from the request. This is fine
+	//   for this endpoint as we base what information flows through the websocket using the permissions,
+	// 	 so there's no permission specifically-required to access this endpoint (the only requirement is
+	//   that you're authenticated).
 	ec.GET(apiBasePath+"/activity/ws", func(c echo.Context) error {
-		// TODO authentication things here pls
-		socket.UpgradeToSocket(c.Response(), c.Request())
+		user, err := authProvider.ValidateTokenFromRequest(c, c.Request())
+		if err != nil {
+			// TODO: ensure this error doesn't leak information. We may need to log this
+			// error and return a simple HTTP Forbidden.
+			return err
+		}
+
+		socket.UpgradeToSocket(c.Response(), c.Request(), func(client websocket.SocketClient, event websocket.ClientEvent) {
+			//exhaustive:enforce
+			switch event {
+			case websocket.OPENED:
+				broadcaster.RegisterClient(client.ID, user.Permissions)
+			case websocket.CLOSED:
+				broadcaster.DeregisterClient(client.ID)
+			}
+		})
+
 		return nil
 	})
+
 	gateway := &RestGateway{
-		broadcaster: newBroadcaster(socket, ingestService, transcodeService, store),
+		broadcaster: broadcaster,
 		config:      config,
 		ec:          ec,
 		socket:      socket,

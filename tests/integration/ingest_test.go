@@ -29,13 +29,13 @@ func TestIngestion_MetadataFailure(t *testing.T) {
 
 	req := helpers.NewTheaServiceRequest().WithIngestDirectory(tempDir)
 	srv := helpers.RequireThea(t, req)
+	user, client := srv.NewClientWithDefaultAdminUser(t)
 
-	exp := srv.ActivityExpecter(t).Expect(
+	exp := srv.ActivityExpecter(t, user).Expect(
 		chanassert.ExactlyNOf(2, helpers.MatchIngestUpdate(paths[0], ingest.Troubled)),
 	)
 	exp.Listen()
 
-	client := srv.NewClientWithDefaultAdminUser(t)
 	ingest := assertIngestEventually(t, client, func(c *assert.CollectT, ingest gen.Ingest) {
 		assert.Equal(c, gen.IngestStateTROUBLED, ingest.State, "Ingest state never became troubled")
 		if assert.NotNil(c, ingest.Trouble, "expected non-nil trouble") {
@@ -73,13 +73,13 @@ func TestIngestion_TMDB_NoMatches(t *testing.T) {
 
 	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir).RequiresTMDB()
 	srv := helpers.RequireThea(t, req)
+	user, client := srv.NewClientWithDefaultAdminUser(t)
 
-	exp := srv.ActivityExpecter(t).Expect(
+	exp := srv.ActivityExpecter(t, user).Expect(
 		chanassert.OneOf(helpers.MatchIngestUpdate(files[0], ingest.Troubled)),
 	)
 	exp.Listen()
 
-	client := srv.NewClientWithDefaultAdminUser(t)
 	assertIngestEventually(t, client, func(c *assert.CollectT, ingest gen.Ingest) {
 		assert.Equal(c, gen.IngestStateTROUBLED, ingest.State, "Ingest state never became troubled")
 		if assert.NotNil(c, ingest.Trouble, "expected non-nil trouble") {
@@ -108,13 +108,13 @@ func TestIngestion_TMDB_MultipleMatches(t *testing.T) {
 
 	req := helpers.NewTheaServiceRequest().WithIngestDirectory(ingestDir).RequiresTMDB()
 	srv := helpers.RequireThea(t, req)
+	user, client := srv.NewClientWithDefaultAdminUser(t)
 
-	exp := srv.ActivityExpecter(t).Expect(
+	exp := srv.ActivityExpecter(t, user).Expect(
 		chanassert.OneOf(helpers.MatchIngestUpdate(files[0], ingest.Troubled)),
 	)
 	exp.Listen()
 
-	client := srv.NewClientWithDefaultAdminUser(t)
 	assertIngestEventually(t, client, func(c *assert.CollectT, ingest gen.Ingest) {
 		assert.Equal(c, gen.IngestStateTROUBLED, ingest.State, "Ingest state never became troubled")
 		if assert.NotNil(c, ingest.Trouble, "expected non-nil trouble") {

@@ -509,9 +509,10 @@ func TestWorkflow_Ingestion(t *testing.T) {
 				}
 			}
 
+			assert.True(t, seenDirect, "expected direct transcode option to be present")
+
 			// Cancel the transcodes
 			for _, transcode := range client.ListActiveTranscodeTasks(t) {
-				t.Logf("Deleting (cancelling) transcode %v", transcode)
 				resp, err := client.DeleteTranscodeTaskWithResponse(ctx, transcode.Id)
 				assert.NoError(t, err)
 				assert.NotNil(t, resp)

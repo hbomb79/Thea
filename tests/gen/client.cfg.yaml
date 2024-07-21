@@ -1,4 +1,5 @@
 package: gen
 generate:
   client: true
+  embedded-spec: true
 output: client.gen.go

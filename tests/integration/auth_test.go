@@ -2,9 +2,14 @@ package integration_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/hbomb79/Thea/tests/helpers"
 	"github.com/stretchr/testify/assert"
@@ -145,5 +150,115 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 	assertClientState(t, loggedInClient, &testUser)
 	for _, cl := range sameUserClients {
 		assertClientState(t, cl, nil)
+	}
+}
+
+// Test_PermissionsFromSpec uses the embedded Swagger spec in the
+// generated API client to scrape the permission security requirements
+// for each endpoint. Then, we use a raw HTTP client to test
+// different permutations of user/permissions combinations to ensure
+// that only a user with all the permissions specified in the security component
+// of each path is actually able to access the endpoint
+//
+// We don't mock the request body, we simply assert whether we get a 403 or not, as that
+// in sufficient.
+//
+// NOTE: that this test only touches endpoints documented in the OpenAPI spec (except
+// for endpoints tagged with 'Auth', as they are special cases). Endpoints not documented
+// in that spec (e.g. /activity/ws) will not be tested.
+func TestPermissions_SwaggerSpec(t *testing.T) {
+	t.Parallel()
+
+	sw, err := gen.GetSwagger()
+	assert.NoError(t, err)
+
+	pathsToPerms := make(map[string]map[string][]string)
+
+	for k, p := range sw.Paths {
+		ops := p.Operations()
+		pathsToPerms[k] = make(map[string][]string)
+		for method, op := range ops {
+			// Ignore paths which impact authentication, as we have test
+			// coverage for these above (and they'll mess up the tokens
+			// for our clients).
+			if slices.Contains(op.Tags, "Auth") {
+				continue
+			}
+
+			if op.Security == nil || len(*op.Security) == 0 {
+				pathsToPerms[k][method] = []string{}
+			} else {
+				pathsToPerms[k][method] = (*op.Security)[0]["permissionAuth"]
+			}
+		}
+	}
+
+	req := helpers.NewTheaServiceRequest()
+	srv := helpers.RequireThea(t, req)
+	allPermsUser, _ := srv.NewClientWithDefaultAdminUser(t)
+	noPermsUser, _ := srv.NewClientWithRandomUserPermissions(t, []string{})
+
+	// Create HTTP rawClient
+	rawClient := http.Client{}
+	baseURL, err := url.Parse(srv.GetServerBasePath())
+	assert.NoError(t, err)
+
+	assertAccessForUser := func(t *testing.T, user helpers.TestUser, method string, path string, canAccess bool) {
+		// Path might have request parameters inside
+		replacedPath := strings.ReplaceAll(path, "{id}", uuid.New().String())
+		if replacedPath[0] == '/' {
+			replacedPath = "." + replacedPath
+		}
+
+		url, err := baseURL.Parse(replacedPath)
+		assert.NoError(t, err)
+
+		// Build request
+		req, err := http.NewRequest(method, url.String(), nil)
+		assert.NoError(t, err)
+		for _, cookie := range user.Cookies {
+			req.AddCookie(cookie)
+		}
+
+		// Send request
+		resp, err := rawClient.Do(req)
+		assert.NoError(t, err)
+		if canAccess {
+			assert.NotEqualf(t, http.StatusForbidden, resp.StatusCode, "expected to be able to access path (%v)", req.URL)
+		} else {
+			assert.Equalf(t, http.StatusForbidden, resp.StatusCode, "expected to be unable to access path (%v)", req.URL)
+		}
+	}
+
+	for path, methodAndPerms := range pathsToPerms {
+		for method, requiredPermissions := range methodAndPerms {
+			t.Run(fmt.Sprintf("%s%s", method, path), func(t *testing.T) {
+				t.Parallel()
+				t.Logf("Testing [%s] %s (%d perms)", method, path, len(requiredPermissions))
+
+				switch len(requiredPermissions) {
+				case 0:
+					assertAccessForUser(t, allPermsUser, method, path, true)
+					assertAccessForUser(t, noPermsUser, method, path, true)
+				case 1:
+					onlySinglePermUser, _ := srv.NewClientWithRandomUserPermissions(t, requiredPermissions)
+					assertAccessForUser(t, onlySinglePermUser, method, path, true)
+					assertAccessForUser(t, allPermsUser, method, path, true)
+					assertAccessForUser(t, noPermsUser, method, path, false)
+				default:
+					// Ensure that having only a subset of the required permissions does NOT grant
+					// access, the user must have ALL the specified permissions
+					for i := range len(requiredPermissions) - 1 {
+						subsetPermsUser, _ := srv.NewClientWithRandomUserPermissions(t, requiredPermissions[:i])
+						assertAccessForUser(t, subsetPermsUser, method, path, false)
+					}
+
+					reqPermsUser, _ := srv.NewClientWithRandomUserPermissions(t, requiredPermissions)
+					assertAccessForUser(t, reqPermsUser, method, path, true)
+					assertAccessForUser(t, allPermsUser, method, path, true)
+					assertAccessForUser(t, noPermsUser, method, path, false)
+				}
+			})
+		}
 	}
 }

@@ -43,7 +43,6 @@ jobs:
     - name: Run Tests
       uses: robherley/go-test-action@v0.4.1
       env:
-        OUTPUT_THEA_LOGS: 1
         TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         FORMAT_FFMPEG_BINARY_PATH: ${{ steps.setup_ffmpeg.outputs.ffmpeg-path }}/ffmpeg
         FORMAT_FFPROBE_BINARY_PATH: ${{ steps.setup_ffmpeg.outputs.ffmpeg-path }}/ffprobe

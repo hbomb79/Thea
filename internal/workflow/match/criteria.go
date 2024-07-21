@@ -38,9 +38,22 @@ func (criteria *Criteria) ValidateLegal() error {
 	case Matches:
 		fallthrough
 	case DoesNotMatch:
-		// expects regular expression
-		if _, err := regexp.Compile(criteria.Value); err != nil {
-			return fmt.Errorf("match type %s expects a valid regular expression as the value; '%v' is not parseable as a regular expression", criteria.Type, criteria.Value)
+		// expects a non-empty string
+		criteriaStrValue := criteria.Value
+		if criteriaStrValue == "" {
+			return fmt.Errorf("match type %s expects a non-empty string", criteria.Type)
+		}
+
+		// If the string starts and ends with a forward slash,
+		// it is expected to compile as a regular expression.
+		strLen := len(criteriaStrValue)
+		if criteriaStrValue[0] == '/' && criteriaStrValue[strLen-1] == '/' {
+			_, err := regexp.Compile(criteriaStrValue[1 : strLen-1])
+			if err != nil {
+				return fmt.Errorf("match type %s expects a valid regular expression when the value is surrounded by forward slashes; '%v' is not parseable as a regular expression", criteria.Type, criteria.Value)
+			}
+
+			return nil
 		}
 	case LessThan:
 		fallthrough
@@ -69,10 +82,23 @@ func (criteria *Criteria) ValidateLegal() error {
 func (criteria *Criteria) IsMediaAcceptable(m *media.Container) (bool, error) {
 	var valueToCheck any
 	switch criteria.Key {
-	case TitleKey:
+	case MediaTitleKey:
 		valueToCheck = m.Title()
+	case SeasonTitleKey:
+		if m.Season != nil {
+			valueToCheck = m.Season.Title
+		} else {
+			valueToCheck = nil
+		}
+	case SeriesTitleKey:
+		if m.Series != nil {
+			valueToCheck = m.Series.Title
+		} else {
+			valueToCheck = nil
+		}
 	case ResolutionKey:
-		valueToCheck, _ = m.Resolution()
+		w, h := m.Resolution()
+		valueToCheck = fmt.Sprintf("%dx%d", w, h)
 	case EpisodeNumberKey:
 		if m.EpisodeNumber() != -1 {
 			valueToCheck = m.EpisodeNumber()
@@ -176,7 +202,7 @@ func (criteria *Criteria) testStringEquality(valToTest any) (bool, error) {
 
 	strLen := len(criteriaStrValue)
 	if criteriaStrValue[0] == '/' && criteriaStrValue[strLen-1] == '/' {
-		pattern, err := regexp.Compile(criteriaStrValue)
+		pattern, err := regexp.Compile(criteriaStrValue[1 : strLen-1])
 		if err != nil {
 			return false, err
 		}

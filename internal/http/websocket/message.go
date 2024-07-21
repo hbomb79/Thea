@@ -6,10 +6,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type socketMessageType int
+type SocketMessageType int
 
 const (
-	Update socketMessageType = iota
+	Update SocketMessageType = iota
 	Command
 	Response
 	ErrorResponse
@@ -27,7 +27,7 @@ type SocketMessage struct {
 	Title  string                 `json:"title"`
 	Body   map[string]interface{} `json:"arguments"`
 	ID     int                    `json:"id"`
-	Type   socketMessageType      `json:"type"`
+	Type   SocketMessageType      `json:"type"`
 	Origin *uuid.UUID             `json:"-"`
 	Target *uuid.UUID             `json:"-"`
 }
@@ -71,7 +71,7 @@ func (message *SocketMessage) ValidateArguments(required map[string]string) erro
 // return a NEW message that has the same origin/id as
 // the original message, but with a new (caller provided) title,
 // type, and arguments.
-func (message *SocketMessage) FormReply(replyTitle string, replyBody map[string]interface{}, replyType socketMessageType) *SocketMessage {
+func (message *SocketMessage) FormReply(replyTitle string, replyBody map[string]interface{}, replyType SocketMessageType) *SocketMessage {
 	if replyBody != nil {
 		replyBody["command"] = message.Body
 	}

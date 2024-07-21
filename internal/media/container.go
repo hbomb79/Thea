@@ -30,13 +30,16 @@ const (
 	SeriesContainerType
 )
 
-func (cont *Container) Resolution() (int, int) { return 0, 0 }
-func (cont *Container) ID() uuid.UUID          { return cont.model().ID }
-func (cont *Container) Title() string          { return cont.model().Title }
-func (cont *Container) TmdbID() string         { return cont.model().TmdbID }
-func (cont *Container) CreatedAt() time.Time   { return cont.model().CreatedAt }
-func (cont *Container) UpdatedAt() time.Time   { return cont.model().UpdatedAt }
-func (cont *Container) Source() string         { return cont.watchable().SourcePath }
+func (cont *Container) Resolution() (int, int) {
+	res := cont.watchable()
+	return res.Width, res.Height
+}
+func (cont *Container) ID() uuid.UUID        { return cont.model().ID }
+func (cont *Container) Title() string        { return cont.model().Title }
+func (cont *Container) TmdbID() string       { return cont.model().TmdbID }
+func (cont *Container) CreatedAt() time.Time { return cont.model().CreatedAt }
+func (cont *Container) UpdatedAt() time.Time { return cont.model().UpdatedAt }
+func (cont *Container) Source() string       { return cont.watchable().SourcePath }
 
 // EpisodeNumber returns the episode number for the media IF it is an Episode. -1
 // is returned if the container is holding a Movie.
@@ -63,6 +66,7 @@ func (cont *Container) String() string {
 }
 
 func (cont *Container) watchable() *Watchable {
+	//exhaustive:enforce
 	switch cont.Type {
 	case MovieContainerType:
 		return &cont.Movie.Watchable
@@ -76,6 +80,7 @@ func (cont *Container) watchable() *Watchable {
 }
 
 func (cont *Container) model() *Model {
+	//exhaustive:enforce
 	switch cont.Type {
 	case MovieContainerType:
 		return &cont.Movie.Model

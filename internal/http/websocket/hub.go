@@ -19,9 +19,9 @@ type SocketHandler func(*SocketHub, *SocketMessage) error
 type SocketHub struct {
 	handlers           map[string]SocketHandler
 	upgrader           *websocket.Upgrader
-	clients            []*socketClient
-	registerCh         chan *socketClient
-	deregisterCh       chan *socketClient
+	clients            []*SocketClient
+	registerCh         chan *SocketClient
+	deregisterCh       chan *SocketClient
 	sendCh             chan *SocketMessage
 	receiveCh          chan *SocketMessage
 	doneCh             chan int
@@ -65,10 +65,10 @@ func (hub *SocketHub) Start(ctx context.Context) {
 	// Open channels and make clients slice
 	hub.sendCh = make(chan *SocketMessage)
 	hub.receiveCh = make(chan *SocketMessage)
-	hub.registerCh = make(chan *socketClient)
-	hub.deregisterCh = make(chan *socketClient)
+	hub.registerCh = make(chan *SocketClient)
+	hub.deregisterCh = make(chan *SocketClient)
 	hub.doneCh = make(chan int)
-	hub.clients = make([]*socketClient, 0)
+	hub.clients = make([]*SocketClient, 0)
 	hub.running = true
 
 	defer hub.close()
@@ -79,7 +79,7 @@ loop:
 			// Send the message provided - either by broadcasting to all, or
 			// sending to only the client with a UUID matching the message 'target'
 			if message.Target != nil {
-				if _, client := hub.findClient(message.Target); client != nil {
+				if _, client := hub.findClient(*message.Target); client != nil {
 					if err := client.SendMessage(message); err != nil {
 						socketLogger.Emit(logger.ERROR, "Failed to send message to target {%v}: %v\n", message.Target, err)
 					}
@@ -99,7 +99,7 @@ loop:
 		case client := <-hub.registerCh:
 			// Register the client by pushing the received client in to the
 			// 'clients' slice
-			if idx, _ := hub.findClient(client.id); idx > -1 {
+			if idx, _ := hub.findClient(client.ID); idx > -1 {
 				socketLogger.Emit(logger.ERROR, "Attempted to register client that is already registered (duplicate uuid)! Illegal!\n")
 				client.Close()
 
@@ -107,18 +107,18 @@ loop:
 			}
 
 			hub.clients = append(hub.clients, client)
-			socketLogger.Emit(logger.NEW, "Registered new client {%v}\n", client.id)
+			socketLogger.Emit(logger.NEW, "Registered new client {%v}\n", client.ID)
 		case client := <-hub.deregisterCh:
 			// Deregister the client by removing the received client and closing it's sockets
 			// and channels
-			if idx, _ := hub.findClient(client.id); idx != -1 {
+			if idx, _ := hub.findClient(client.ID); idx != -1 {
 				hub.clients = append(hub.clients[:idx], hub.clients[idx+1:]...)
-				socketLogger.Emit(logger.REMOVE, "Deregistered client {%v}\n", client.id)
+				socketLogger.Emit(logger.REMOVE, "Deregistered client {%v}\n", client.ID)
 
 				break
 			}
 
-			socketLogger.Emit(logger.WARNING, "Attempted to deregister unknown client {%v}\n", client.id)
+			socketLogger.Emit(logger.WARNING, "Attempted to deregister unknown client {%v}\n", client.ID)
 		case <-ctx.Done():
 			// Shutdown the socket hub, closing all clients and breaking this select loop
 			socketLogger.Emit(logger.REMOVE, "Shutting down socket hub! Closing all clients.\n")
@@ -140,8 +140,22 @@ func (hub *SocketHub) Send(message *SocketMessage) {
 	hub.sendCh <- message
 }
 
+type ClientEvent int
+
+const (
+	OPENED ClientEvent = iota
+	CLOSED
+)
+
 // UpgradeToSocket upgrades a given HTTP request to a websocket and adds the new clients to the hub.
-func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
+//
+// Optionally, a callback can be provided which will be called with the new
+// client when a successful upgrade has occurred. This is particularly useful when
+// calling code wants to keep track of the client.
+//
+// The callback will be called twice during a normal upgrade; once to indicate the
+// client has successfully opened, and again sometime later when the client deregisters.
+func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request, callback func(client SocketClient, event ClientEvent)) {
 	if !hub.running {
 		socketLogger.Emit(logger.ERROR, "Failed to upgrade incoming HTTP request to a websocket: SocketHub has not been started!\n")
 		return
@@ -162,13 +176,16 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := &socketClient{
-		id:     &id,
+	client := &SocketClient{
+		ID:     id,
 		socket: sock,
 	}
 
 	// Register the client and open the read loop
 	hub.registerCh <- client
+	if callback != nil {
+		callback(*client, OPENED)
+	}
 
 	// Send welcome message to this client with a composed
 	// map of new-client properties.
@@ -195,11 +212,15 @@ func (hub *SocketHub) UpgradeToSocket(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		hub.deregisterCh <- client
 		client.Close()
+
+		if callback != nil {
+			callback(*client, CLOSED)
+		}
 	}()
 
 	// Start the read loop for the client
 	if err := client.Read(hub.receiveCh); err != nil {
-		socketLogger.Emit(logger.WARNING, "Client {%v} closed, error: %v\n", client.id, err)
+		socketLogger.Emit(logger.WARNING, "Client {%v} closed, error: %v\n", client.ID, err)
 	}
 }
 
@@ -259,9 +280,9 @@ func (hub *SocketHub) handleMessage(command *SocketMessage) {
 // findClient returns a socketClient with the matching uuid if
 // one can be found - if not, nil is returned. Additionally, the index
 // of the client inside of the client list is returned as well.
-func (hub *SocketHub) findClient(id *uuid.UUID) (int, *socketClient) {
+func (hub *SocketHub) findClient(id uuid.UUID) (int, *SocketClient) {
 	for idx, client := range hub.clients {
-		if client.id == id {
+		if client.ID == id {
 			return idx, client
 		}
 	}

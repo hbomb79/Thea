@@ -47,7 +47,7 @@ var (
 // - Saves the episode/movie to the database
 // Any of the above can encounter an error - if the error can be cast to the
 // IngestItemTrouble type then it should be raised as a TROUBLE on the item.
-func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper, searcher searcher, data DataStore) error {
+func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper Scraper, searcher Searcher, data DataStore) error {
 	log.Emit(logger.NEW, "Beginning ingestion of item %s\n", item)
 	if item.ScrapedMetadata == nil {
 		log.Emit(logger.DEBUG, "Performing file system scrape of %s\n", item.Path)
@@ -56,7 +56,7 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 		} else if meta == nil {
 			return Trouble{error: errors.New("metadata scrape returned no error, but nil payload received"), tType: MetadataFailure}
 		} else {
-			log.Emit(logger.DEBUG, "Scraped metadata for item %s:\n%#v\n", item, meta)
+			log.Emit(logger.WARNING, "Scraped metadata for item %s:\n%s\n", item, meta)
 			item.ScrapedMetadata = meta
 		}
 	}
@@ -69,7 +69,7 @@ func (item *IngestItem) ingest(eventBus event.EventCoordinator, scraper scraper,
 	}
 }
 
-func (item *IngestItem) ingestEpisode(meta *media.FileMediaMetadata, data DataStore, searcher searcher, eventBus event.EventDispatcher) error {
+func (item *IngestItem) ingestEpisode(meta *media.FileMediaMetadata, data DataStore, searcher Searcher, eventBus event.EventDispatcher) error {
 	var series *tmdb.Series
 	if item.OverrideTmdbID != nil {
 		// This item WAS troubled, but a resolution has provided a new value for the TMDB ID which we should use now.
@@ -120,7 +120,7 @@ func (item *IngestItem) ingestEpisode(meta *media.FileMediaMetadata, data DataSt
 	return nil
 }
 
-func (item *IngestItem) ingestMovie(meta *media.FileMediaMetadata, data DataStore, searcher searcher, eventBus event.EventDispatcher) error {
+func (item *IngestItem) ingestMovie(meta *media.FileMediaMetadata, data DataStore, searcher Searcher, eventBus event.EventDispatcher) error {
 	var movie *tmdb.Movie
 	if item.OverrideTmdbID != nil {
 		// This item WAS troubled, but a resolution has provided a new value for the TMDB ID which we should use now.

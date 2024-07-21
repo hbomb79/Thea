@@ -270,6 +270,14 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 			continue
 		}
 
+		// Set working status as soon as possible. This is to prevent
+		// another thread coming in and detecting the same task
+		// as being pending. This loop is protected by a mutex, however
+		// if this line is placed inside of the goroutine below (used
+		// for starting the task), then another queue change event
+		// can easily see the same task spawned multiple times.
+		task.status = WORKING
+
 		requiredBudget := task.Target().RequiredThreads()
 		availableBudget := service.config.MaximumThreadConsumption - service.consumedThreads
 		if requiredBudget > availableBudget {
@@ -282,12 +290,20 @@ func (service *transcodeService) startWaitingTasks(ctx context.Context) {
 		go func(taskToStart *TranscodeTask, wg *sync.WaitGroup, threadCost int) {
 			defer wg.Done()
 
+			if taskToStart.Status() != WORKING {
+				// Hm... this task should have been set to WORKING earlier, if it's
+				// status has changed then it seems we've reached some sort of
+				// race condition where another thread started working on this task.
+				// Abort!
+				log.Warnf("Task %s status was not 'WAITING' when attempting to start processing [data race warning, *report this*]", taskToStart)
+				return
+			}
+
 			updateHandler := func(prog *ffmpeg.Progress) {
 				taskToStart.lastProgress = prog
 				service.eventBus.Dispatch(event.TranscodeTaskProgressEvent, taskToStart.ID())
 			}
 
-			taskToStart.status = WORKING
 			service.taskChange <- taskToStart.id
 			log.Emit(logger.DEBUG, "Starting task %s, consuming %d threads\n", taskToStart, threadCost)
 			if err := taskToStart.Run(ctx, updateHandler); err != nil {
@@ -354,6 +370,7 @@ func (service *transcodeService) createWorkflowTasksForMedia(mediaID uuid.UUID) 
 	for _, workflow := range workflows {
 		if workflow.IsMediaEligible(media) {
 			for _, target := range workflow.Targets {
+				log.Infof("STARTING TASK FOR MEDIA %s TARGET %s\n", mediaID, target.ID)
 				if err := service.spawnFfmpegTarget(media, target); err != nil {
 					log.Emit(logger.ERROR, "failed to spawn ffmpeg target %s for media %s: %v\n", target, media.ID(), err)
 				}

@@ -3,6 +3,7 @@ package logger
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 )
@@ -139,13 +140,15 @@ func (l *loggerImpl) Errorf(m string, v ...any)   { l.Emit(ERROR, m, v...) }
 func (l *loggerImpl) Fatalf(m string, v ...any)   { l.Emit(FATAL, m, v...) }
 
 var manager = &loggerMgr{
-	offset:   0,
-	minLevel: info,
+	offset:            0,
+	minLevel:          info,
+	includeTimestamps: true,
 }
 
 type loggerMgr struct {
-	offset   int
-	minLevel LogLevel
+	offset            int
+	minLevel          LogLevel
+	includeTimestamps bool
 }
 
 func (l *loggerMgr) GetLogger(name string) *loggerImpl {
@@ -159,9 +162,14 @@ func (l *loggerMgr) Emit(status LogStatus, name string, message string, interpol
 
 	l.setNameOffset(len(name))
 	padding := strings.Repeat(" ", l.offset-len(name))
-	msg := fmt.Sprintf("[%s] %s(%s) %s", name, padding, status, fmt.Sprintf(message, interpolations...))
 
-	_, _ = status.Color().Print(msg)
+	if l.includeTimestamps {
+		msg := fmt.Sprintf("%s [%s] %s(%s) %s", time.Now().Format(time.RFC3339), name, padding, status, strings.TrimSpace(fmt.Sprintf(message, interpolations...))+"\n")
+		_, _ = status.Color().Print(msg)
+	} else {
+		msg := fmt.Sprintf("[%s] %s(%s) %s", name, padding, status, strings.TrimSpace(fmt.Sprintf(message, interpolations...))+"\n")
+		_, _ = status.Color().Print(msg)
+	}
 }
 
 func (l *loggerMgr) setNameOffset(offset int) {
@@ -174,8 +182,16 @@ func (l *loggerMgr) setMinLoggingLevel(level LogLevel) {
 	l.minLevel = level
 }
 
+func (l *loggerMgr) setIncludeTimestamp(include bool) {
+	l.includeTimestamps = include
+}
+
 func Get(name string) *loggerImpl {
 	return manager.GetLogger(name)
+}
+
+func SetIncludeTimestamps(include bool) {
+	manager.setIncludeTimestamp(include)
 }
 
 func SetMinLoggingLevel(level LogLevel) {

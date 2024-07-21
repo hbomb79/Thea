@@ -1,7 +1,9 @@
 package workflow
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,8 +20,13 @@ type (
 		CreatedAt time.Time                             `db:"created_at"`
 		Enabled   bool                                  `db:"enabled"`
 		Label     string                                `db:"label"`
-		Criteria  database.JSONColumn[[]match.Criteria] `db:"criteria"`
+		Criteria  database.JSONColumn[[]criteriaModel]  `db:"criteria"`
 		Targets   database.JSONColumn[[]*ffmpeg.Target] `db:"targets"`
+	}
+
+	criteriaModel struct {
+		match.Criteria
+		Position int `db:"position" json:"position"`
 	}
 
 	workflowTargetAssoc struct {
@@ -46,17 +53,10 @@ func (store *Store) Create(db *sqlx.DB, workflowID uuid.UUID, label string, enab
 			return fail("create workflow row", err)
 		}
 
-		if _, err := tx.NamedExec(`
-			INSERT INTO workflow_transcode_targets(id, workflow_id, transcode_target_id)
-			VALUES(:id, :workflow_id, :target_id)`,
-			buildWorkflowTargetAssocs(workflowID, targetIDs)); err != nil {
+		if err := store.UpdateWorkflowTargetsTx(tx, workflowID, targetIDs); err != nil {
 			return fail("create workflow target associations", err)
 		}
-
-		if _, err := tx.NamedExec(`
-			INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_value, match_combine_type, workflow_id)
-			VALUES (:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_value, :match_combine_type, '`+workflowID.String()+`')`,
-			criteria); err != nil {
+		if err := store.UpdateWorkflowCriteriaTx(tx, workflowID, criteria); err != nil {
 			return fail("create workflow criteria associations", err)
 		}
 
@@ -98,20 +98,27 @@ func (store *Store) UpdateWorkflowTx(tx *sqlx.Tx, workflowID uuid.UUID, newLabel
 // NOTE: This action is intended to be used as part of an over-arching transaction; user-story
 // for updating a workflow should consider all related data too.
 func (store *Store) UpdateWorkflowCriteriaTx(tx *sqlx.Tx, workflowID uuid.UUID, criteria []match.Criteria) error {
+	type orderedCriteria struct {
+		match.Criteria
+		Position int `db:"position"`
+	}
+
 	criteriaIDs := make([]uuid.UUID, len(criteria))
+	toInsert := make([]orderedCriteria, 0, len(criteria))
 	for i, v := range criteria {
 		criteriaIDs[i] = v.ID
+		toInsert = append(toInsert, orderedCriteria{v, i})
 	}
 
 	// Insert workflow criteria, updating existing criteria
 	if len(criteria) > 0 {
 		if _, err := tx.NamedExec(`
-			INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_combine_type, match_value, workflow_id)
-			VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, '`+workflowID.String()+`')
+			INSERT INTO workflow_criteria(id, created_at, updated_at, match_key, match_type, match_combine_type, match_value, workflow_id, position)
+			VALUES(:id, current_timestamp, current_timestamp, :match_key, :match_type, :match_combine_type, :match_value, '`+workflowID.String()+`', :position)
 			ON CONFLICT(id) DO UPDATE
-				SET (updated_at, match_key, match_type, match_combine_type, match_value) =
-					(current_timestamp, EXCLUDED.match_key, EXCLUDED.match_type, EXCLUDED.match_combine_type, EXCLUDED.match_value)
-		`, criteria); err != nil {
+				SET (updated_at, match_key, match_type, match_combine_type, match_value, position) =
+					(current_timestamp, EXCLUDED.match_key, EXCLUDED.match_type, EXCLUDED.match_combine_type, EXCLUDED.match_value, EXCLUDED.position)
+		`, toInsert); err != nil {
 			return err
 		}
 
@@ -168,7 +175,7 @@ func (store *Store) Get(db database.Queryable, id uuid.UUID) *Workflow {
 		return nil
 	}
 
-	return &Workflow{dest.ID, dest.Enabled, dest.Label, *dest.Criteria.Get(), *dest.Targets.Get()}
+	return &Workflow{dest.ID, dest.Enabled, dest.Label, processCriteriaModels(*dest.Criteria.Get()), *dest.Targets.Get()}
 }
 
 // GetAll queries the database for all workflows, and all the related information.
@@ -184,7 +191,7 @@ func (store *Store) GetAll(db database.Queryable) []*Workflow {
 
 	output := make([]*Workflow, len(dest))
 	for i, v := range dest {
-		output[i] = &Workflow{v.ID, v.Enabled, v.Label, *v.Criteria.Get(), *v.Targets.Get()}
+		output[i] = &Workflow{v.ID, v.Enabled, v.Label, processCriteriaModels(*v.Criteria.Get()), *v.Targets.Get()}
 	}
 	return output
 }
@@ -224,4 +231,21 @@ func buildWorkflowTargetAssocs(workflowID uuid.UUID, targetIDs []uuid.UUID) []wo
 	}
 
 	return assocs
+}
+
+func processCriteriaModels(models []criteriaModel) []match.Criteria {
+	slices.SortFunc(models, func(a, b criteriaModel) int { return cmp.Compare(a.Position, b.Position) })
+
+	out := make([]match.Criteria, len(models))
+	for i, v := range models {
+		out[i] = match.Criteria{
+			ID:          v.ID,
+			Key:         v.Key,
+			Type:        v.Type,
+			Value:       v.Value,
+			CombineType: v.CombineType,
+		}
+	}
+
+	return out
 }

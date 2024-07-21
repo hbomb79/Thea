@@ -2,6 +2,7 @@ package media
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -17,9 +18,9 @@ type (
 		SeasonNumber  int
 		EpisodeNumber int
 		Runtime       string
-		Year          *int
-		FrameW        *int
-		FrameH        *int
+		Year          int
+		FrameW        int
+		FrameH        int
 		Path          string
 	}
 
@@ -83,7 +84,7 @@ func (scraper *MetadataScraper) extractTitleInformation(title string, output *Fi
 		output.SeasonNumber = convertToInt(seasonGroups[2])
 		output.EpisodeNumber = convertToInt(seasonGroups[3])
 		year := convertToInt(seasonGroups[4])
-		output.Year = &year
+		output.Year = year
 
 		return nil
 	}
@@ -95,7 +96,7 @@ func (scraper *MetadataScraper) extractTitleInformation(title string, output *Fi
 		output.SeasonNumber = -1
 		output.EpisodeNumber = -1
 		year := convertToInt(movieGroups[2])
-		output.Year = &year
+		output.Year = year
 
 		return nil
 	}
@@ -119,8 +120,8 @@ func (scraper *MetadataScraper) extractFfprobeInformation(path string, output *F
 	width := stream.GetWidth()
 	height := stream.GetHeight()
 
-	output.FrameW = &width
-	output.FrameH = &height
+	output.FrameW = width
+	output.FrameH = height
 	output.Runtime = metadata.GetFormat().GetDuration()
 
 	return nil
@@ -136,4 +137,15 @@ func convertToInt(input string) int {
 	}
 
 	return v
+}
+
+func (m FileMediaMetadata) String() string {
+	return fmt.Sprintf(`FileMediaMetadata {
+		Title = %s,
+		Episodic? = %v (season = %+v, episode = %+v),
+		Runtime = %v,
+		Year = %+v,
+		Resolution = %+v x %+v,
+		Path = %s,
+	}`, m.Title, m.Episodic, m.SeasonNumber, m.EpisodeNumber, m.Runtime, m.Year, m.FrameW, m.FrameH, m.Path)
 }

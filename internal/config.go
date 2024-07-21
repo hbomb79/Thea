@@ -21,7 +21,7 @@ type TheaConfig struct {
 	Services      DockerConfig            `toml:"docker"`
 	Database      database.DatabaseConfig `toml:"database"`
 	RestConfig    api.RestConfig          `toml:"api"`
-	OmdbKey       string                  `toml:"omdb_api_key" env:"OMDB_API_KEY" env-required:"true"`
+	TmdbKey       string                  `toml:"tmdb_api_key" env:"TMDB_API_KEY" env-required:"true"`
 	CacheDirPath  string                  `toml:"cache_dir" env:"CACHE_DIR"`
 	ConfigDirPath string                  `toml:"config_dir" env:"CONFIG_DIR"`
 }

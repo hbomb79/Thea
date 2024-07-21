@@ -48,6 +48,10 @@ paths:
             Set-Cookie:
               schema:
                 type: string
+        # "401":
+        #   $ref: "#/components/responses/Unauthorized"
+        # "403":
+        #   $ref: "#/components/responses/Forbidden"
   /auth/current-user:
     get:
       summary: Current User
@@ -123,6 +127,26 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/User"
+    post:
+      summary: Create New User
+      description: Creates a new user
+      operationId: createUser
+      tags:
+        - Users
+      security:
+        - permissionAuth: [user:access, user:modify, user:create]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "200":
+          description: User DTO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
   /users/{id}:
     get:
       summary: Get Users
@@ -573,7 +597,11 @@ paths:
               $ref: "#/components/schemas/CreateWorkflowRequest"
       responses:
         "201":
-          description: Creation successful
+          description: The created workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
   /transcode-workflows/{id}:
     get:
       summary: Get Workflow
@@ -737,6 +765,19 @@ components:
       in: cookie
       name: auth-token
 
+  # responses:
+  #   Forbidden:
+  #     description: The specified resource was not found
+  #     content:
+  #       application/json:
+  #         schema:
+  #           $ref: '#/components/schemas/Error'
+  #   Unauthorized:
+  #     description: Unauthorized
+  #     content:
+  #       application/json:
+  #         schema:
+  #           $ref: '#/components/schemas/Error'
   parameters:
     ID:
       in: path
@@ -747,6 +788,18 @@ components:
         format: uuid
 
   schemas:
+    # # Re-usable error DTO
+    # Error:
+    #   type: object
+    #   required:
+    #     - message
+    #     - code
+    #   properties:
+    #     message:
+    #       type: string
+    #     code:
+    #       type: string
+
     # Auth Controller DTOs
     LoginRequest:
       type: object
@@ -767,6 +820,22 @@ components:
       required:
         - permissions
       properties:
+        permissions:
+          type: array
+          items:
+            type: string
+
+    CreateUserRequest:
+      type: object
+      required:
+        - username
+        - password
+        - permissions
+      properties:
+        username:
+          type: string
+        password:
+          type: string
         permissions:
           type: array
           items:
@@ -1133,7 +1202,7 @@ components:
       properties:
         key:
           type: string
-          enum: ['TITLE', 'RESOLUTION', 'SEASON_NUMBER', 'EPISODE_NUMBER', 'SOURCE_PATH', 'SOURCE_NAME', 'SOURCE_EXTENSION']
+          enum: ['MEDIA_TITLE', 'SEASON_TITLE', 'SERIES_TITLE', 'RESOLUTION', 'SEASON_NUMBER', 'EPISODE_NUMBER', 'SOURCE_PATH', 'SOURCE_NAME', 'SOURCE_EXTENSION']
         type:
           type: string
           enum: ['EQUALS', 'NOT_EQUALS', 'MATCHES', 'DOES_NOT_MATCH', 'LESS_THAN', 'GREATER_THAN', 'IS_PRESENT', 'IS_NOT_PRESENT']
@@ -1148,8 +1217,6 @@ components:
       required:
         - label
         - enabled
-        - target_ids
-        - criteria
       properties:
         label:
           type: string
@@ -1160,14 +1227,14 @@ components:
         target_ids:
           type: array
           x-oapi-codegen-extra-tags:
-            validate: required,min=1
+            validate: omitempty,min=1
           items:
             type: string
             format: uuid
         criteria:
           type: array
           x-oapi-codegen-extra-tags:
-            validate: required
+            validate: omitempty,min=1
           items:
             $ref: "#/components/schemas/WorkflowCriteria"
 
@@ -1177,11 +1244,13 @@ components:
         label:
           type: string
           x-oapi-codegen-extra-tags:
-            validate: required,alphaNumericWhitespaceTrimmed
+            validate: omitempty,alphaNumericWhitespaceTrimmed
         enabled:
           type: boolean
         target_ids:
           type: array
+          x-oapi-codegen-extra-tags:
+            validate: omitempty,min=1
           items:
             type: string
             format: uuid
@@ -1243,8 +1312,12 @@ components:
       properties:
         label:
           type: string
+          x-oapi-codegen-extra-tags:
+            validate: required,alphaNumericWhitespaceTrimmed
         extension:
           type: string
+          x-oapi-codegen-extra-tags:
+            validate: required,alphaNumericWhitespaceTrimmed
         ffmpeg_options:
           type: object
 
@@ -1253,7 +1326,11 @@ components:
       properties:
         label:
           type: string
+          x-oapi-codegen-extra-tags:
+            validate: omitempty,alphaNumericWhitespaceTrimmed
         extension:
           type: string
+          x-oapi-codegen-extra-tags:
+            validate: omitempty,alphaNumericWhitespaceTrimmed
         ffmpeg_options:
           type: object

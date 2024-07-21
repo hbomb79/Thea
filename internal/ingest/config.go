@@ -17,7 +17,7 @@ type Config struct {
 
 	// The path to the directory the service should monitor
 	// for new files
-	IngestPath string `toml:"dir_path" env-required:"true"`
+	IngestPath string `toml:"dir_path" env:"INGEST_DIR" env-required:"true"`
 
 	// An array of regular expressions that can be used to RESTRICT
 	// the files processed by this service. If any expression match
@@ -28,7 +28,7 @@ type Config struct {
 	// download using an external software. As we cannot KNOW when the
 	// download is complete, we instead wait for the 'modtime' of
 	// the item to be at least this long in the past before processing
-	RequiredModTimeAgeSeconds int `toml:"modtime_threshold_seconds" env-default:"120"`
+	RequiredModTimeAgeSeconds int `toml:"modtime_threshold_seconds" env:"INGEST_MODTIME_THRESHOLD_SECONDS" env-default:"120"`
 
 	// Controls the number of workers that can perform ingestions. Reducing
 	// to 1 means one ingestion at a time.

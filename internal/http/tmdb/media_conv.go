@@ -9,7 +9,7 @@ func TmdbEpisodeToMedia(ep *Episode, isSeasonAdult bool, metadata *media.FileMed
 	return &media.Episode{
 		Model: media.Model{ID: uuid.New(), TmdbID: ep.ID.String(), Title: ep.Name},
 		Watchable: media.Watchable{
-			MediaResolution: media.MediaResolution{Width: *metadata.FrameW, Height: *metadata.FrameH},
+			MediaResolution: media.MediaResolution{Width: metadata.FrameW, Height: metadata.FrameH},
 			SourcePath:      metadata.Path,
 			Adult:           isSeasonAdult,
 		},
@@ -44,7 +44,7 @@ func TmdbMovieToMedia(movie *Movie, metadata *media.FileMediaMetadata) *media.Mo
 		Model:  media.Model{ID: uuid.New(), TmdbID: movie.ID.String(), Title: movie.Name},
 		Genres: TmdbGenresToMedia(movie.Genres),
 		Watchable: media.Watchable{
-			MediaResolution: media.MediaResolution{Width: *metadata.FrameW, Height: *metadata.FrameH},
+			MediaResolution: media.MediaResolution{Width: metadata.FrameW, Height: metadata.FrameH},
 			SourcePath:      metadata.Path,
 			Adult:           movie.Adult,
 		},

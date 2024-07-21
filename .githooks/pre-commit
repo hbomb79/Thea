@@ -1,0 +1,4 @@
+#!/bin/sh
+
+echo "Running pre-commit linting..."
+make pre-commit

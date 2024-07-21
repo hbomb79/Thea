@@ -33,6 +33,8 @@ CREATE TABLE media(
     title TEXT NOT NULL,
     adult BOOLEAN NOT NULL,
     source_path TEXT NOT NULL,
+    frame_width INT NOT NULL,
+    frame_height INT NOT NULL,
 
     -- Nullable columns which must be specified if the media t is episode
     episode_number INT CHECK (episode_number IS NULL OR episode_number >= 0),
@@ -102,6 +104,7 @@ CREATE TABLE workflow_criteria(
     match_combine_type INT NOT NULL,
     match_value TEXT NOT NULL,
     workflow_id UUID NOT NULL,
+    position INT NOT NULL,
 
     CONSTRAINT workflow_criteria_fk_workflow_id FOREIGN KEY(workflow_id) REFERENCES workflow(id) ON DELETE CASCADE
 );

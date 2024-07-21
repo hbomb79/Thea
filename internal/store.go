@@ -27,25 +27,23 @@ var (
 	ErrWorkflowTargetIDMissing = errors.New("one or more of the targets provided cannot be found")
 )
 
-type (
-	// storeOrchestrator is responsible for managing all of Thea's resources,
-	// especially highly-relational data. You can think of all
-	// the data stores below this layer being 'dumb', and this store
-	// linking them together and providing the database instance
-	//
-	// If consumers need to be able to access data stores directly, they're
-	// welcome to do so - however caution should be taken as stores have no
-	// obligation to take care of relational data (which is the orchestrator's job).
-	storeOrchestrator struct {
-		db             database.Manager
-		ev             event.EventDispatcher
-		mediaStore     *media.Store
-		transcodeStore *transcode.Store
-		workflowStore  *workflow.Store
-		targetStore    *ffmpeg.Store
-		userStore      *user.Store
-	}
-)
+// storeOrchestrator is responsible for managing all of Thea's resources,
+// especially highly-relational data. You can think of all
+// the data stores below this layer being 'dumb', and this store
+// linking them together and providing the database instance
+//
+// If consumers need to be able to access data stores directly, they're
+// welcome to do so - however caution should be taken as stores have no
+// obligation to take care of relational data (which is the orchestrator's job).
+type storeOrchestrator struct {
+	db             database.Manager
+	ev             event.EventDispatcher
+	mediaStore     *media.Store
+	transcodeStore *transcode.Store
+	workflowStore  *workflow.Store
+	targetStore    *ffmpeg.Store
+	userStore      *user.Store
+}
 
 func newStoreOrchestrator(db database.Manager, eventBus event.EventDispatcher) (*storeOrchestrator, error) {
 	if db.GetSqlxDB() == nil {

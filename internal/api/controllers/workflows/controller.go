@@ -29,12 +29,18 @@ func New(store Store) *WorkflowController {
 }
 
 func (controller *WorkflowController) CreateWorkflow(ec echo.Context, request gen.CreateWorkflowRequestObject) (gen.CreateWorkflowResponseObject, error) {
-	criteria := util.ApplyConversion(request.Body.Criteria, criteriaToModel)
-	if _, err := controller.store.CreateWorkflow(uuid.New(), request.Body.Label, criteria, request.Body.TargetIds, request.Body.Enabled); err != nil {
+	workflow, err := controller.store.CreateWorkflow(
+		uuid.New(),
+		request.Body.Label,
+		util.ApplyConversion(util.NotNilOrDefault(request.Body.Criteria, []gen.WorkflowCriteria{}), criteriaToModel),
+		util.NotNilOrDefault(request.Body.TargetIds, []uuid.UUID{}),
+		request.Body.Enabled,
+	)
+	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create new workflow: %v", err))
 	}
 
-	return gen.CreateWorkflow201Response{}, nil
+	return gen.CreateWorkflow201JSONResponse(workflowToDto(workflow)), nil
 }
 
 func (controller *WorkflowController) ListWorkflows(ec echo.Context, request gen.ListWorkflowsRequestObject) (gen.ListWorkflowsResponseObject, error) {
@@ -53,17 +59,18 @@ func (controller *WorkflowController) GetWorkflow(ec echo.Context, request gen.G
 }
 
 func (controller *WorkflowController) UpdateWorkflow(ec echo.Context, request gen.UpdateWorkflowRequestObject) (gen.UpdateWorkflowResponseObject, error) {
-	var criteriaToUpdate *[]match.Criteria = nil
-	if request.Body.Criteria != nil {
-		criteria := util.ApplyConversion(*request.Body.Criteria, criteriaToModel)
-		criteriaToUpdate = &criteria
+	model, err := controller.store.UpdateWorkflow(
+		request.Id,
+		request.Body.Label,
+		util.ApplyOptionalConversion(request.Body.Criteria, criteriaToModel),
+		request.Body.TargetIds,
+		request.Body.Enabled,
+	)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to update workflow: %v", err))
 	}
 
-	if model, err := controller.store.UpdateWorkflow(request.Id, request.Body.Label, criteriaToUpdate, request.Body.TargetIds, request.Body.Enabled); err != nil {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to update workflow: %v", err))
-	} else {
-		return gen.UpdateWorkflow200JSONResponse(workflowToDto(model)), nil
-	}
+	return gen.UpdateWorkflow200JSONResponse(workflowToDto(model)), nil
 }
 
 func (controller *WorkflowController) DeleteWorkflow(ec echo.Context, request gen.DeleteWorkflowRequestObject) (gen.DeleteWorkflowResponseObject, error) {

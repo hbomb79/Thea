@@ -1,17 +1,17 @@
 name: Go
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4.1.1
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5.0.0
       with:
-        go-version: '1.21.6'
+        go-version: '1.22.5'
 
     - name: Verify Go Mod
       run: go mod verify
@@ -26,7 +26,7 @@ jobs:
       run: go run honnef.co/go/tools/cmd/staticcheck@latest -f stylish -checks=all,-ST1000,-U1000 ./...
      
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v3.7.0
+      uses: golangci/golangci-lint-action@v4.0.0
       with:
         # during the golangci-lint execution, many files are extracted
         # which conflict with those which are cached by the go setup
@@ -36,6 +36,13 @@ jobs:
         # https://github.com/golangci/golangci-lint-action/issues/807
         skip-cache: true
 
-    # - name: Test
-    #   run: go test -v ./...
-    
+    - name: Setup FFmpeg
+      id: setup_ffmpeg
+      uses: federicocarboni/setup-ffmpeg@v3.1
+
+    - name: Run Tests
+      uses: robherley/go-test-action@v0.4.1
+      env:
+        TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        FORMAT_FFMPEG_BINARY_PATH: ${{ steps.setup_ffmpeg.outputs.ffmpeg-path }}/ffmpeg
+        FORMAT_FFPROBE_BINARY_PATH: ${{ steps.setup_ffmpeg.outputs.ffmpeg-path }}/ffprobe

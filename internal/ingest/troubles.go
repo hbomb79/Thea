@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/hbomb79/Thea/internal/http/tmdb"
+	"github.com/hbomb79/Thea/pkg/logger"
 )
 
 type (
@@ -48,21 +49,22 @@ var allowedResolutionTypes = map[TroubleType][]ResolutionType{
 }
 
 func newTrouble(err error) Trouble {
-	var noResultError tmdb.NoResultError
+	var noResultError *tmdb.NoResultError
 	if errors.As(err, &noResultError) {
 		return Trouble{error: err, tType: TmdbFailureNoResults}
 	}
 
-	var multipleResultError tmdb.MultipleResultError
+	var multipleResultError *tmdb.MultipleResultError
 	if errors.As(err, &multipleResultError) {
 		return Trouble{error: err, tType: TmdbFailureMultipleResults, choices: multipleResultError.Choices()}
 	}
 
-	var illegalRequestError tmdb.IllegalRequestError
+	var illegalRequestError *tmdb.IllegalRequestError
 	if errors.As(err, &illegalRequestError) {
 		return Trouble{error: err, tType: TmdbFailureUnknown}
 	}
 
+	log.Emit(logger.WARNING, "Attempted to process unknown error (%s) [%T] as ingestion trouble\n", err, err)
 	return Trouble{error: err, tType: UnknownFailure}
 }
 

@@ -29,17 +29,17 @@ func New(store Store) *TargetController {
 }
 
 func (controller *TargetController) CreateTarget(ec echo.Context, request gen.CreateTargetRequestObject) (gen.CreateTargetResponseObject, error) {
-	var decoded ffmpeg.Opts
-	if err := mapstructure.Decode(request.Body.FfmpegOptions, &decoded); err != nil {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("provided ffmpeg_options malformed: %s", err))
+	decoded, err := ffmpegOptsToModel(request.Body.FfmpegOptions)
+	if err != nil {
+		return nil, err
 	}
 
-	newTarget := ffmpeg.Target{ID: uuid.New(), Label: request.Body.Label, FfmpegOptions: &decoded, Ext: request.Body.Extension}
+	newTarget := ffmpeg.Target{ID: uuid.New(), Label: request.Body.Label, FfmpegOptions: decoded, Ext: request.Body.Extension}
 	if err := controller.store.SaveTarget(&newTarget); err != nil {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: %v", err))
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to create target: %v", err))
 	}
 
-	return gen.CreateTarget201JSONResponse{}, nil
+	return gen.CreateTarget201JSONResponse(NewDto(&newTarget)), nil
 }
 
 func (controller *TargetController) ListTargets(ec echo.Context, request gen.ListTargetsRequestObject) (gen.ListTargetsResponseObject, error) {
@@ -66,10 +66,10 @@ func (controller *TargetController) UpdateTarget(ec echo.Context, request gen.Up
 		model.Label = *request.Body.Label
 	}
 	if request.Body.FfmpegOptions != nil {
-		if opts, err := ffmpegOptsToModel(*request.Body.FfmpegOptions); err != nil {
+		if opts, err := ffmpegOptsToModel(*request.Body.FfmpegOptions); err == nil {
 			model.FfmpegOptions = opts
 		} else {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, err)
+			return nil, err
 		}
 	}
 
@@ -87,12 +87,17 @@ func (controller *TargetController) DeleteTarget(ec echo.Context, request gen.De
 }
 
 func ffmpegOptsToModel(opts map[string]interface{}) (*ffmpeg.Opts, error) {
-	var model ffmpeg.Opts
-	if err := mapstructure.Decode(opts, &model); err != nil {
-		return nil, fmt.Errorf("failed to decode provided ffmpeg options: %w", err)
+	var decoded ffmpeg.Opts
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{ErrorUnused: true, Result: &decoded})
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to create map decoder: %s", err))
 	}
 
-	return &model, nil
+	if err := decoder.Decode(opts); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Failed to save target: ffmpeg_options malformed: %s", err))
+	}
+
+	return &decoded, nil
 }
 
 func ffmpegOptsToDto(opts *ffmpeg.Opts) map[string]interface{} {

@@ -1,0 +1,23 @@
+tmdb_api_key = "redacted"
+
+[database]
+username = "postgres"
+password = "postgres"
+
+[transcode]
+default_output_dir = "/output"
+ffmpeg_binary_path = "/usr/bin/ffmpeg"
+ffprobe_binary_path = "/usr/bin/ffprobe"
+max_thread_consumption = 8
+
+[ingestion]
+dir_path = "/ingests"
+force_sync_seconds = 200
+blacklist = ["hello", "world"]
+modtime_threshold_seconds = 0
+parallelism = 4
+
+[docker]
+enable_postgres = false
+enable_pg_admin = false
+enable_frontend = false

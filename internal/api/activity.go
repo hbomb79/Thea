@@ -48,7 +48,7 @@ const (
 
 var scopePerms = map[authScope][]string{
 	mediaScope:     {permissions.AccessMediaPermission},
-	transcodeScope: {permissions.AccessTargetPermission},
+	transcodeScope: {permissions.AccessTranscodePermission},
 	ingestScope:    {permissions.AccessIngestsPermission},
 }
 

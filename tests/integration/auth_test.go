@@ -8,10 +8,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/hbomb79/Thea/internal/http/websocket"
+	"github.com/hbomb79/Thea/internal/user/permissions"
 	"github.com/hbomb79/Thea/tests/gen"
 	"github.com/hbomb79/Thea/tests/helpers"
+	"github.com/hbomb79/go-chanassert"
+	"github.com/labstack/gommon/random"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -150,6 +155,108 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 	assertClientState(t, loggedInClient, &testUser)
 	for _, cl := range sameUserClients {
 		assertClientState(t, cl, nil)
+	}
+}
+
+// makeActivityListener builds a chanassert Expecter using the bools
+// provided to conditionally add combiners pertaining to events for those
+// resource types.
+//
+// For example, a listener with all bools as false, will expect only the 'welcome' message.
+// Conversely, a listener with all bools as true will expect to see at least 1 message for media,
+// ingests, and transcode updates (in addition to the welcome message).
+func makeActivityListener(
+	t *testing.T,
+	service *helpers.TestService,
+	user helpers.TestUser,
+	media, ingests, transcodes bool,
+) chanassert.Expecter[websocket.SocketMessage] {
+	expecter := service.ActivityExpecter(t, user)
+	combiners := make([]chanassert.Combiner[websocket.SocketMessage], 0)
+	if media {
+		combiners = append(combiners, chanassert.AtLeastNOf(1, helpers.MatchMessageTitle("MEDIA_UPDATE")))
+	}
+
+	if ingests {
+		combiners = append(combiners, chanassert.AtLeastNOf(1, helpers.MatchMessageTitle("INGEST_UPDATE")))
+	}
+
+	if transcodes {
+		combiners = append(combiners, chanassert.AtLeastNOfEach(1,
+			helpers.MatchMessageTitle("TRANSCODE_TASK_UPDATE"),
+			helpers.MatchMessageTitle("TRANSCODE_TASK_PROGRESS_UPDATE"),
+		))
+	}
+
+	if len(combiners) == 0 {
+		return expecter
+	}
+
+	return expecter.Expect(combiners...)
+}
+
+// TestPermissions_ActivityStream connects to Thea using multiple
+// different users/permission sets, and ensures that activity streams
+// only send information regarding a particular resource to clients which
+// have sufficient permissions to access those resource(s).
+func TestPermissions_ActivityStream(t *testing.T) {
+	ingestDir, _ := helpers.TempDirWithFiles(t, map[string]string{
+		"./testdata/validmedia/short-sample.mkv": "Shaun.of.the.Dead.2004.mkv",
+	})
+
+	req := helpers.NewTheaServiceRequest().
+		WithIngestDirectory(ingestDir).
+		RequiresTMDB().
+		// Ensure the threshold here is long enough for all test permutations
+		// to connect and start their channel expecter. This includes the time
+		// we spend bootstrapping the target/workflow.
+		WithEnvironmentVariable("INGEST_MODTIME_THRESHOLD_SECONDS", "5").
+		WithEnvironmentVariable("FORMAT_DEFAULT_OUTPUT_DIR", t.TempDir())
+
+	srv := helpers.RequireThea(t, req)
+
+	_, client := srv.NewClientWithDefaultAdminUser(t)
+	targets := client.CreateRandomTargets(t, 1)
+	targetIDs := targets.IDs()
+
+	// Create an enabled workflow with no criteria (which matches everything).
+	_ = client.CreateWorkflow(t, nil, true, random.String(16, random.Alphanumeric), &targetIDs)
+
+	// Permute the possible configurations, and create a user and expecter
+	// for each.
+	for _, media := range []bool{true, false} {
+		for _, ingest := range []bool{true, false} {
+			for _, transcode := range []bool{true, false} {
+				t.Run(fmt.Sprintf("permutation_%v_%v_%v", media, ingest, transcode), func(t *testing.T) {
+					// Create a user based on these permission requirements.
+					perms := make([]string, 0)
+					if ingest {
+						perms = append(perms, permissions.AccessIngestsPermission)
+					}
+					if transcode {
+						perms = append(perms, permissions.AccessTranscodePermission)
+					}
+					if media {
+						perms = append(perms, permissions.AccessMediaPermission)
+					}
+
+					u, _ := srv.NewClientWithRandomUserPermissions(t, perms)
+					exp := makeActivityListener(t, srv, u, media, ingest, transcode)
+
+					// Listen and wait immediately as this test is in it's own goroutine.
+					exp.Listen()
+
+					// CAUTION: the positioning of this parallel call is intentional. When
+					// called, the test is likely to be parked. If parked BEFORE connecting
+					// to the websocket, then by the time it's resumed, it may have missed events
+					// which are required for the test to pass. We parallelise it here
+					// because we're just playing the waiting game now and need to let the
+					// other permutations start too.
+					t.Parallel()
+					exp.AssertSatisfied(t, 10*time.Second)
+				})
+			}
+		}
 	}
 }
 

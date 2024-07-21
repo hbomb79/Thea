@@ -166,9 +166,9 @@ func TestLogoutAll_BlacklistsAllTokens(t *testing.T) {
 // NOTE: that this test only touches endpoints documented in the OpenAPI spec (except
 // for endpoints tagged with 'Auth', as they are special cases). Endpoints not documented
 // in that spec (e.g. /activity/ws) will not be tested.
+//
+//nolint:gocognit
 func TestPermissions_SwaggerSpec(t *testing.T) {
-	t.Parallel()
-
 	sw, err := gen.GetSwagger()
 	assert.NoError(t, err)
 
@@ -208,6 +208,10 @@ func TestPermissions_SwaggerSpec(t *testing.T) {
 		replacedPath := strings.ReplaceAll(path, "{id}", uuid.New().String())
 		if replacedPath[0] == '/' {
 			replacedPath = "." + replacedPath
+		}
+
+		if strings.Contains(replacedPath, "{") {
+			t.Fatalf("replaced path (%s) still contains a placeholder", replacedPath)
 		}
 
 		url, err := baseURL.Parse(replacedPath)

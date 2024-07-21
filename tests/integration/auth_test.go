@@ -225,6 +225,7 @@ func TestPermissions_SwaggerSpec(t *testing.T) {
 		assert.NoError(t, err)
 		if canAccess {
 			assert.NotEqualf(t, http.StatusForbidden, resp.StatusCode, "expected to be able to access path (%v)", req.URL)
+			assert.NotEqualf(t, http.StatusUnauthorized, resp.StatusCode, "expected to be able to access path (%v)", req.URL)
 		} else {
 			assert.Equalf(t, http.StatusForbidden, resp.StatusCode, "expected to be unable to access path (%v)", req.URL)
 		}
